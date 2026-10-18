@@ -1,0 +1,92 @@
+name: Deploy reviewed release
+run-name: Deploy ${{ inputs.environment }} at ${{ github.sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+      DB_SSL: 'true'
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require staging proof for the identical commit
+        if: inputs.environment == 'production'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts" --paginate --jq ".artifacts[] | select(.name == \"staging-pass-$GITHUB_SHA\" and .expired == false) | .id")
+          test -n "$artifact_id" || { echo "Run and pass this exact commit in staging first."; exit 1; }
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Apply additive migrations before API rollout
+        run: npm run db:migrate && npm run db:verify
+      - name: Trigger Render API and worker
+        env:
+          API_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
+          WORKER_HOOK: ${{ secrets.RENDER_WORKER_DEPLOY_HOOK }}
+        run: |
+          curl --fail --silent --show-error -X POST "$API_HOOK" > /dev/null
+          curl --fail --silent --show-error -X POST "$WORKER_HOOK" > /dev/null
+      - name: Wait for operator-confirmed API release
+        env:
+          API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "$API_URL/health/ready" | jq -e --arg sha "$GITHUB_SHA" '(.status == "ok") and (.release == $sha)' > /dev/null; then exit 0; fi
+            sleep 10
+          done
+          exit 1
+      - name: Firebase credentials
+        env:
+          FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          printf '%s' "$FIREBASE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+      - name: Deploy Firebase Hosting
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: npx firebase-tools@14 deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
+      - name: Staging authenticated browser gate
+        if: inputs.environment == 'staging'
+        env:
+          E2E_BASE_URL: ${{ vars.STAGING_WEB_URL }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          REQUIRE_LIVE_E2E: 'true'
+          PLAYWRIGHT_CHANNEL: chromium
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test tests/e2e/live.spec.ts
+      - name: Record successful staging commit
+        if: inputs.environment == 'staging'
+        run: printf '%s' "$GITHUB_SHA" > "$RUNNER_TEMP/staging-pass.txt"
+      - uses: actions/upload-artifact@v4
+        if: inputs.environment == 'staging'
+        with:
+          name: staging-pass-${{ github.sha }}
+          path: ${{ runner.temp }}/staging-pass.txt
+          retention-days: 14
+      - name: Remove temporary credential
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"

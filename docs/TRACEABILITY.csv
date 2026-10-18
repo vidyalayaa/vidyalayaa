@@ -1,0 +1,161 @@
+requirement_id,implementation_or_plan,evidence_location,verification_status
+API-REQ-001,apps/api; packages/contracts; docs/api/openapi.json,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+API-REQ-002,apps/api; packages/contracts; docs/api/openapi.json,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+API-REQ-003,apps/api; packages/contracts; docs/api/openapi.json,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+API-REQ-004,apps/api; packages/contracts; docs/api/openapi.json,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+API-REQ-005,apps/api; packages/contracts; docs/api/openapi.json,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+API-REQ-006,apps/api; packages/contracts; docs/api/openapi.json,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-001,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-002,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-003,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-004,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-005,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-006,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-007,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-008,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-009,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ARCH-REQ-010,apps/api; apps/worker; packages/contracts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-001,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-002,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-003,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-004,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-005,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-006,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-007,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-008,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-009,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-010,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-011,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-012,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-013,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-014,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-015,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+ATT-REQ-016,apps/api/src/modules/attendance; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-001,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-002,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-003,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-004,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-005,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-006,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-007,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-008,db/migrations; db/tests/verify.sql,docs/READINESS.md,External vendor/legal/restore acceptance pending
+DB-REQ-009,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-010,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-011,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DB-REQ-012,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-001,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-002,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-003,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-004,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-005,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-006,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-007,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-008,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-009,apps/api/src/modules/devices; firmware,docs/READINESS.md,Prototype example; production hardware/OTA acceptance pending
+DEV-REQ-010,apps/api/src/modules/devices; firmware,docs/READINESS.md,Prototype example; production hardware/OTA acceptance pending
+DEV-REQ-011,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-012,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-013,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-014,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-015,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+FE-REQ-001,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+FE-REQ-002,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+FE-REQ-003,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+FE-REQ-004,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+FE-REQ-005,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+FE-REQ-006,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-001,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-002,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-003,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-004,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-005,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-006,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+NOT-REQ-007,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-001,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-002,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-003,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,External vendor/legal/restore acceptance pending
+OPS-REQ-004,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-005,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,External vendor/legal/restore acceptance pending
+OPS-REQ-006,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-007,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+PERF-REQ-001,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-002,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-003,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-004,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-005,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-006,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-007,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+PERF-REQ-008,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
+SEC-REQ-001,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-002,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-003,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-004,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-005,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-006,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-007,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-008,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-009,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,External vendor/legal/restore acceptance pending
+SEC-REQ-010,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-011,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,External vendor/legal/restore acceptance pending
+SEC-REQ-012,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,External vendor/legal/restore acceptance pending
+SEC-REQ-013,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-014,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-015,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-016,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SUB-REQ-001,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SUB-REQ-002,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SUB-REQ-003,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SUB-REQ-004,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SUB-REQ-005,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-001,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-002,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-003,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-004,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-005,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-006,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEN-REQ-007,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+TEST-REQ-001,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-002,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-003,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-004,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-005,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-006,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-007,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-008,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-009,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-010,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-011,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-012,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-013,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-014,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-015,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-016,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-017,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-018,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-019,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-020,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-021,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-022,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-023,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-024,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-025,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-026,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-027,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-028,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-029,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-030,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-031,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-032,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-033,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-034,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-035,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-036,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-037,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-038,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-039,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-040,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-041,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-042,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-043,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-044,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-045,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed

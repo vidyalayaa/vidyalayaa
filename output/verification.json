@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-17",
+  "builds": {
+    "contracts": "passed",
+    "api": "passed",
+    "worker": "passed",
+    "web": "passed",
+    "firmware_esp32dev": "passed"
+  },
+  "local_tests": {
+    "files": 8,
+    "passed": 63
+  },
+  "browser_tests": {
+    "passed": 8,
+    "viewports": [
+      "desktop",
+      "mobile"
+    ],
+    "core_axe_serious_critical": 0
+  },
+  "production_dependency_audit": {
+    "vulnerabilities": 0
+  },
+  "secret_scan": "passed",
+  "deployment_pdf_pages": 10,
+  "not_executed": [
+    "full native PostgreSQL concurrency suite",
+    "live Supabase/Auth/Storage journeys",
+    "container image execution",
+    "external provider delivery",
+    "hardware power-loss and secure OTA",
+    "production load and restore drill",
+    "cloud deployment"
+  ],
+  "configuration_syntax": "JSON, YAML and TOML parsed successfully"
+}

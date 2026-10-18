@@ -1,0 +1,402 @@
+import { Router, json } from 'express';
+import rateLimit from 'express-rate-limit';
+import type pg from 'pg';
+import { z } from 'zod';
+import {
+  batchSchema,
+  heartbeatSchema,
+  syncAckSchema,
+  otaSchema,
+  uuid,
+  type EventResult,
+} from '@vidyalayaa/contracts';
+import { deviceAuth, permission } from '../../middleware/auth.js';
+import { transaction, audit } from '../../lib/db.js';
+import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
+import { equalHash } from '../../lib/crypto.js';
+import { processEvent } from '../attendance/service.js';
+import { requireWrite } from '../school/router.js';
+function throttle(limit: number) {
+  return rateLimit({
+    windowMs: 60000,
+    limit,
+    keyGenerator: (_req, res) => res.locals.device.id,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) =>
+      res.status(429).json({
+        error: { code: 'RATE_LIMITED', message: 'Retry after the indicated delay.' },
+        server_time: new Date().toISOString(),
+      }),
+  });
+}
+function mismatch(expected: string, actual: string) {
+  if (expected !== actual)
+    throw new ApiError(403, 'DEVICE_MISMATCH', 'Payload device_id must match X-Device-Id.');
+}
+export function deviceRouter(pool: pg.Pool) {
+  const r = Router();
+  r.use(deviceAuth(pool));
+  r.post(
+    '/events/batch',
+    throttle(30),
+    json({ limit: '256kb' }),
+    asyncRoute(async (req, res) => {
+      const b = batchSchema.parse(req.body),
+        d = res.locals.device;
+      mismatch(d.code, b.device_id);
+      b.events.forEach((e) => mismatch(d.code, e.device_id));
+      const results: EventResult[] = [];
+      for (const e of b.events) {
+        try {
+          results.push(await processEvent(pool, d, e, res.locals.requestId));
+        } catch {
+          results.push({
+            event_id: e.event_id,
+            status: 'RETRY_LATER',
+            notification_queued: false,
+            device_action: 'RETAIN_AND_RETRY',
+          });
+        }
+      }
+      const cfg = await transaction(
+        pool,
+        { schoolId: d.schoolId, actorType: 'DEVICE' },
+        async (tx) =>
+          (
+            await tx.query(
+              'UPDATE devices SET last_seen_at=now(),last_sync_at=now(),firmware_version=$2 WHERE id=$1 RETURNING config_version',
+              [d.id, b.firmware_version],
+            )
+          ).rows[0],
+      );
+      let ack = b.events[0].sequence_number - 1;
+      for (let i = 0; i < results.length && results[i].device_action === 'DELETE'; i++) {
+        if (b.events[i].sequence_number !== ack + 1) break;
+        ack = b.events[i].sequence_number;
+      }
+      res.json({
+        batch_id: b.batch_id,
+        server_time: new Date().toISOString(),
+        config_version: cfg.config_version,
+        results,
+        summary: {
+          received: results.length,
+          recorded: results.filter((x) => x.status === 'RECORDED').length,
+          duplicate: results.filter((x) => x.status === 'DUPLICATE_EVENT').length,
+          rejected: results.filter((x) => x.status === 'REJECTED').length,
+          retry_later: results.filter((x) => x.status === 'RETRY_LATER').length,
+        },
+        ack_through_sequence: ack,
+      });
+    }),
+  );
+  r.post(
+    '/heartbeat',
+    throttle(6),
+    json({ limit: '16kb' }),
+    asyncRoute(async (req, res) => {
+      const b = heartbeatSchema.parse(req.body),
+        d = res.locals.device;
+      mismatch(d.code, b.device_id);
+      const now = new Date(),
+        skew = new Date(b.device_time).getTime() - now.getTime();
+      const row = await transaction(
+        pool,
+        { schoolId: d.schoolId, actorType: 'DEVICE' },
+        async (tx) => {
+          const prev = (
+            await tx.query(
+              'SELECT * FROM device_heartbeats WHERE device_id=$1 ORDER BY received_at DESC LIMIT 1',
+              [d.id],
+            )
+          ).rows[0];
+          if (
+            !prev ||
+            now.getTime() - prev.received_at.getTime() > 300000 ||
+            prev.boot_id !== b.boot_id ||
+            prev.reader_status !== b.reader_status ||
+            prev.rtc_status !== b.rtc_status ||
+            prev.pending_events !== b.pending_events
+          )
+            await tx.query(
+              'INSERT INTO device_heartbeats(school_id,device_id,device_time,skew_ms,boot_id,uptime_ms,firmware_version,pending_events,storage_used_pct,wifi_rssi_dbm,reader_status,rtc_status,boot_reference_time) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+              [
+                d.schoolId,
+                d.id,
+                b.device_time,
+                skew,
+                b.boot_id,
+                b.uptime_ms,
+                b.firmware_version,
+                b.pending_events,
+                b.storage_used_pct,
+                b.wifi_rssi_dbm,
+                b.reader_status,
+                b.rtc_status,
+                new Date(now.getTime() - b.uptime_ms),
+              ],
+            );
+          for (const l of b.logs)
+            await tx.query(
+              'INSERT INTO device_logs(school_id,device_id,device_ts,level,code,detail) VALUES($1,$2,$3,$4,$5,$6)',
+              [d.schoolId, d.id, l.ts, l.level, l.code, l.detail || {}],
+            );
+          return (
+            await tx.query(
+              'UPDATE devices SET last_seen_at=now(),pending_event_count=$2,reader_status=$3,rtc_status=$4,wifi_rssi_dbm=$5,storage_used_pct=$6,firmware_version=$7 WHERE id=$1 RETURNING config_version',
+              [
+                d.id,
+                b.pending_events,
+                b.reader_status,
+                Math.abs(skew) > 120000 ? 'DRIFT' : b.rtc_status,
+                b.wifi_rssi_dbm,
+                b.storage_used_pct,
+                b.firmware_version,
+              ],
+            )
+          ).rows[0];
+        },
+      );
+      res.json({
+        server_time: now.toISOString(),
+        skew_ms: skew,
+        config_version: row.config_version,
+        ota: { available: false },
+        alerts: [
+          ...(Math.abs(skew) > 120000 ? ['RTC_DRIFT'] : []),
+          ...(b.storage_used_pct >= 80 ? ['STORAGE_WARNING'] : []),
+        ],
+      });
+    }),
+  );
+  r.get(
+    '/config',
+    throttle(6),
+    asyncRoute(async (req, res) => {
+      const d = res.locals.device,
+        c = await transaction(
+          pool,
+          { schoolId: d.schoolId, actorType: 'DEVICE' },
+          async (tx) =>
+            (
+              await tx.query(
+                'SELECT d.config_version,d.config,l.name,l.location_type FROM devices d LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.id=$1',
+                [d.id],
+              )
+            ).rows[0],
+          true,
+        );
+      const etag = `"${c.config_version}"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('X-Server-Time', new Date().toISOString());
+      if (req.header('If-None-Match') === etag) {
+        res.status(304).end();
+        return;
+      }
+      res.json({
+        server_time: new Date().toISOString(),
+        config_version: c.config_version,
+        heartbeat_interval_s: 60,
+        batch_max_events: 50,
+        batch_max_bytes: 100000,
+        tap_debounce_ms: 1500,
+        time_sync_interval_h: 6,
+        storage_warn_pct: 80,
+        feedback: { led_brightness: 60, buzzer: true, show_result_on_oled: false },
+        ...c.config,
+        location: { name: c.name, type: c.location_type },
+        ota: { channel: 'stable', available: false },
+      });
+    }),
+  );
+  r.post(
+    '/sync-ack',
+    throttle(30),
+    json({ limit: '4kb' }),
+    asyncRoute(async (req, res) => {
+      const b = syncAckSchema.parse(req.body),
+        d = res.locals.device;
+      mismatch(d.code, b.device_id);
+      const result = await transaction(
+        pool,
+        { schoolId: d.schoolId, actorType: 'DEVICE' },
+        async (tx) => {
+          const device = (
+            await tx.query('SELECT last_purged_sequence FROM devices WHERE id=$1 FOR UPDATE', [
+              d.id,
+            ])
+          ).rows[0];
+          const old = Number(device.last_purged_sequence),
+            end = b.purged_through_sequence;
+          const count = Number(
+            (
+              await tx.query(
+                "SELECT count(*) FROM attendance_events WHERE device_id=$1 AND sequence_number>$2 AND sequence_number<=$3 AND status IN ('RECORDED','REJECTED')",
+                [d.id, old, end],
+              )
+            ).rows[0].count,
+          );
+          const gap = end > old && count !== end - old;
+          if (!gap)
+            await tx.query(
+              'UPDATE devices SET last_purged_sequence=greatest(last_purged_sequence,$2),pending_event_count=$3 WHERE id=$1',
+              [d.id, end, b.pending_events],
+            );
+          if (gap || b.queue_corruption_count > 0)
+            await tx.query(
+              "INSERT INTO device_logs(school_id,device_id,level,code,detail) VALUES($1,$2,'ERROR','SEQUENCE_GAP',$3)",
+              [
+                d.schoolId,
+                d.id,
+                { previous: old, purged: end, queue_corruption_count: b.queue_corruption_count },
+              ],
+            );
+          return {
+            gap_detected: gap,
+            next_expected_sequence: (gap ? old : Math.max(old, end)) + 1,
+          };
+        },
+      );
+      res.json({ server_time: new Date().toISOString(), ...result });
+    }),
+  );
+  r.post(
+    '/ota/status',
+    throttle(12),
+    json({ limit: '4kb' }),
+    asyncRoute(async (req, res) => {
+      const b = otaSchema.parse(req.body),
+        d = res.locals.device;
+      mismatch(d.code, b.device_id);
+      await transaction(pool, { schoolId: d.schoolId, actorType: 'DEVICE' }, (tx) =>
+        tx.query(
+          'INSERT INTO device_ota_status(school_id,device_id,target_version,state,detail) VALUES($1,$2,$3,$4,$5) ON CONFLICT(school_id,device_id,target_version) DO UPDATE SET state=EXCLUDED.state,detail=EXCLUDED.detail',
+          [d.schoolId, d.id, b.target_version, b.state, b.detail],
+        ),
+      );
+      res.setHeader('X-Server-Time', new Date().toISOString());
+      res.status(204).end();
+    }),
+  );
+  return r;
+}
+export function managementRouter(pool: pg.Pool) {
+  const r = Router();
+  r.use((_req, res, next) => {
+    if (!res.locals.actor.features.nfc_attendance)
+      return next(
+        new ApiError(
+          403,
+          'SUBSCRIPTION_FEATURE_UNAVAILABLE',
+          'Your current plan does not include NFC management.',
+        ),
+      );
+    next();
+  });
+  r.get(
+    '/',
+    permission('devices.read'),
+    asyncRoute(async (_req, res) => {
+      const a = res.locals.actor;
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => ({
+            data: (
+              await tx.query(
+                "SELECT d.id,d.device_code,d.name,d.location_id,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,d.storage_used_pct,d.wifi_rssi_dbm,d.config_version,l.name AS location_name,l.location_type,(d.status='ACTIVE' AND d.last_seen_at>now()-interval '3 minutes') AS online FROM devices d LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.school_id=$1 ORDER BY d.name",
+                [a.context.schoolId],
+              )
+            ).rows,
+          }),
+          true,
+        ),
+      );
+    }),
+  );
+  r.post(
+    '/claim',
+    permission('devices.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        b = z
+          .object({
+            device_code: z.string().max(64),
+            claim_code: z.string().min(16).max(256),
+            name: z.string().min(1).max(100),
+            location_id: uuid,
+          })
+          .strict()
+          .parse(req.body);
+      res.json(
+        await transaction(pool, a.context, async (tx) => {
+          await requireWrite(tx, a, 'nfc_attendance');
+          const d = (
+            await tx.query(
+              "SELECT * FROM devices WHERE school_id=$1 AND device_code=$2 AND status='PROVISIONED' FOR UPDATE",
+              [a.context.schoolId, b.device_code],
+            )
+          ).rows[0];
+          if (!d?.claim_code_hash || !equalHash(b.claim_code, d.claim_code_hash)) throw notFound();
+          return (
+            await tx.query(
+              "UPDATE devices SET name=$2,location_id=$3,status='ACTIVE',claim_code_hash=NULL,config_version=config_version+1 WHERE id=$1 RETURNING id,name,status",
+              [d.id, b.name, b.location_id],
+            )
+          ).rows[0];
+        }),
+      );
+    }),
+  );
+  r.patch(
+    '/:id',
+    permission('devices.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            name: z.string().min(1).max(100),
+            location_id: uuid,
+            status: z.enum(['ACTIVE', 'DISABLED', 'REVOKED']),
+            reason: z.string().min(5).max(1000),
+            config: z
+              .object({
+                heartbeat_interval_s: z.number().int().min(30).max(300),
+                tap_debounce_ms: z.number().int().min(500).max(10000),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .parse(req.body);
+      res.json(
+        await transaction(pool, a.context, async (tx) => {
+          await requireWrite(tx, a, 'nfc_attendance');
+          const d = (
+            await tx.query('SELECT * FROM devices WHERE school_id=$1 AND id=$2 FOR UPDATE', [
+              a.context.schoolId,
+              id,
+            ])
+          ).rows[0];
+          if (!d) throw notFound();
+          if (d.status === 'REVOKED')
+            throw new ApiError(
+              409,
+              'DEVICE_REVOKED',
+              'A revoked device requires platform reprovisioning.',
+            );
+          return (
+            await tx.query(
+              "UPDATE devices SET name=$2,location_id=$3,status=$4,revoked_reason=$5,revoked_at=CASE WHEN $4='REVOKED' THEN now() ELSE NULL END,config=coalesce($6,config),config_version=config_version+1 WHERE id=$1 RETURNING id,name,status",
+              [id, b.name, b.location_id, b.status, b.reason, b.config || null],
+            )
+          ).rows[0];
+        }),
+      );
+    }),
+  );
+  return r;
+}

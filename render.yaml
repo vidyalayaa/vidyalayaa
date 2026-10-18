@@ -1,0 +1,62 @@
+services:
+  - type: web
+    name: vidyalayaa-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node apps/api/dist/apps/api/src/server.js
+    healthCheckPath: /health/ready
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false
+      - key: DEVICE_DATABASE_URL
+        sync: false
+      - key: PLATFORM_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WEB_ORIGINS
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: DB_SSL
+        value: 'true'
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+  - type: worker
+    name: vidyalayaa-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node apps/worker/dist/apps/worker/src/index.js
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: DB_SSL
+        value: 'true'
+      - key: DB_POOL_SIZE
+        value: '5'
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: PUBLIC_WEB_URL
+        sync: false

@@ -1,0 +1,3 @@
+include/provisioning.h
+.pio/
+*.bin

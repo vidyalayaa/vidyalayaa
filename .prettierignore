@@ -1,0 +1,10 @@
+node_modules
+**/dist
+tmp
+output
+docs/source
+docs/api/openapi.json
+package-lock.json
+test-results
+playwright-report
+firmware
