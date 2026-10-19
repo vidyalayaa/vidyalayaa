@@ -23,6 +23,7 @@ export async function deliver(
     circuits.delete(channel);
     return result;
   } catch (e) {
+    if (e instanceof DeliveryError && e.permanent) throw e;
     const n = (state?.failures || 0) + 1;
     circuits.set(channel, { failures: n, until: n >= 5 ? Date.now() + 60000 : 0 });
     throw e;

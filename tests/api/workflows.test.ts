@@ -59,6 +59,74 @@ function call(method: 'get' | 'post' | 'patch', path: string, role = 'admin') {
     .set('X-School-Id', f.schoolA);
 }
 describe('identity, RBAC and scope', () => {
+  it('keeps audit cursor pages stable while new events arrive and validates cursors', async () => {
+    for (let i = 0; i < 3; i++)
+      await db.query(
+        "INSERT INTO audit_logs(school_id,actor_type,actor_id,action,entity_type) VALUES($1,'USER',$2,'cursor.fixture','students')",
+        [f.schoolA, f.admin],
+      );
+    const first = await call('get', '/audit?cursor=1&page_size=1');
+    expect(first.status).toBe(200);
+    expect(first.body.next_cursor).toBeTruthy();
+    await db.query(
+      "INSERT INTO audit_logs(school_id,actor_type,actor_id,action,entity_type) VALUES($1,'USER',$2,'cursor.new','students')",
+      [f.schoolA, f.admin],
+    );
+    const next = await call(
+      'get',
+      `/audit?cursor=1&page=2&page_size=1&after=${first.body.next_cursor}`,
+    );
+    expect(next.status).toBe(200);
+    expect(next.body.data[0].id).not.toBe(first.body.data[0].id);
+    expect(next.body.data[0].action).toBe('cursor.fixture');
+    expect((await call('get', '/audit?cursor=1&after=invalid')).status).toBe(422);
+    expect((await call('get', '/audit?cursor=1', 'teacher')).status).toBe(403);
+    const corrections = await call('get', '/corrections?cursor=1', 'teacher');
+    expect(corrections.status).toBe(200);
+    expect(corrections.body.data).toEqual([]);
+  });
+  it('hides a child’s notification history immediately when a parent link is revoked', async () => {
+    const outbox = crypto.randomUUID();
+    await db.query(
+      "INSERT INTO notification_outbox(id,school_id,kind,student_id,dedupe_key,payload) VALUES($1,$2,'STUDENT_ARRIVED',$3,'scope-notification','{}')",
+      [outbox, f.schoolA, f.student],
+    );
+    await db.query(
+      "INSERT INTO notification_deliveries(school_id,outbox_id,parent_id,channel,status) VALUES($1,$2,$3,'EMAIL','SENT')",
+      [f.schoolA, outbox, f.parentId],
+    );
+    expect((await call('get', '/notifications?cursor=1', 'parent')).body.data).toHaveLength(1);
+    await db.query(
+      "UPDATE student_parents SET status='REVOKED' WHERE school_id=$1 AND parent_id=$2",
+      [f.schoolA, f.parentId],
+    );
+    expect((await call('get', '/notifications?cursor=1', 'parent')).body.data).toEqual([]);
+    await db.query(
+      "UPDATE student_parents SET status='ACTIVE' WHERE school_id=$1 AND parent_id=$2",
+      [f.schoolA, f.parentId],
+    );
+    await db.query('DELETE FROM notification_deliveries WHERE outbox_id=$1', [outbox]);
+    await db.query('DELETE FROM notification_outbox WHERE id=$1', [outbox]);
+  });
+  it('offers only active accounts in the requested school role to membership managers', async () => {
+    const list = await call('get', '/lookups/accounts?role=teacher&page_size=100');
+    expect(list.status).toBe(200);
+    expect(list.body.data.map((x: { id: string }) => x.id)).toEqual([f.teacher]);
+    expect((await call('get', '/lookups/accounts?role=teacher', 'teacher')).status).toBe(403);
+    expect((await call('get', '/lookups/accounts?role=SUPER_ADMIN')).status).toBe(422);
+    expect(
+      (await call('get', '/lookups/accounts?role=teacher').set('X-School-Id', f.schoolB)).status,
+    ).toBe(404);
+  });
+  it('resolves relation names on scoped records without broadening family access', async () => {
+    const own = await call('get', '/resources/enrollments', 'parent');
+    expect(own.status).toBe(200);
+    expect(own.body.data[0].student_label).toContain('Test learner');
+    expect(own.body.data[0].class_label).toBe('8 A');
+    expect((await call('get', `/resources/students/${f.foreignStudent}`, 'parent')).status).toBe(
+      404,
+    );
+  });
   it('rejects anonymous and forged identities', async () => {
     expect((await request(app).get('/api/v1/me')).status).toBe(401);
     expect((await call('get', '/me', 'forged')).status).toBe(401);
@@ -112,6 +180,104 @@ describe('identity, RBAC and scope', () => {
   });
 });
 describe('atomic writes and school workflows', () => {
+  it('returns structured bulk mark row errors and saves none of a partly invalid upload', async () => {
+    const exam = crypto.randomUUID(),
+      subject = crypto.randomUUID();
+    await db.query(
+      "INSERT INTO exams(id,school_id,class_id,name,exam_type,max_score,status) VALUES($1,$2,$3,'Bulk validation','UNIT',100,'OPEN')",
+      [exam, f.schoolA, f.classId],
+    );
+    await db.query(
+      "INSERT INTO subjects(id,school_id,code,name) VALUES($1,$2,'BULK','Bulk subject')",
+      [subject, f.schoolA],
+    );
+    const response = await call('post', '/marks/bulk').send({
+      exam_id: exam,
+      entries: [
+        { student_id: f.student, subject_id: f.subject, score: 80 },
+        { student_id: f.student, subject_id: subject, score: 120 },
+      ],
+    });
+    expect(response.status).toBe(422);
+    expect(response.body.error.details[0]).toMatchObject({ path: ['entries', 1, 'score'] });
+    expect((await db.query('SELECT * FROM marks WHERE exam_id=$1', [exam])).rows).toEqual([]);
+    const valid = {
+      exam_id: exam,
+      entries: [
+        { student_id: f.student, subject_id: f.subject, score: 80 },
+        { student_id: f.student, subject_id: subject, score: 90 },
+      ],
+    };
+    expect((await call('post', '/marks/bulk', 'teacher').send(valid)).status).toBe(404);
+    const key = crypto.randomUUID();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const saved = await call('post', '/marks/bulk').set('Idempotency-Key', key).send(valid);
+      expect(saved.status).toBe(200);
+      expect(saved.body.saved).toBe(2);
+    }
+    expect((await db.query('SELECT * FROM marks WHERE exam_id=$1', [exam])).rows).toHaveLength(2);
+  });
+  it('requires School Admin approval and a policy reference before enabling retention', async () => {
+    const body = {
+      policy_ref: 'SCHOOL-APPROVED-2026',
+      report_days: 180,
+      notification_days: 365,
+      approved: true,
+    };
+    expect((await call('get', '/school/retention', 'parent')).status).toBe(403);
+    expect(
+      (
+        await request(app)
+          .put('/api/v1/school/retention')
+          .set('Authorization', 'Bearer admin')
+          .set('X-School-Id', f.schoolA)
+          .send({ ...body, approved: false })
+      ).status,
+    ).toBe(422);
+    const response = await request(app)
+      .put('/api/v1/school/retention')
+      .set('Authorization', 'Bearer admin')
+      .set('X-School-Id', f.schoolA)
+      .send(body);
+    expect(response.status).toBe(200);
+    expect(response.body.policy.approved_by).toBe(f.admin);
+    expect((await call('get', '/school/retention')).body.policy.policy_ref).toBe(body.policy_ref);
+    expect(
+      (
+        await request(app)
+          .delete('/api/v1/school/retention')
+          .set('Authorization', 'Bearer admin')
+          .set('X-School-Id', f.schoolA)
+      ).status,
+    ).toBe(204);
+    expect((await call('get', '/school/retention')).body.policy).toBeNull();
+  });
+  it('retains versioned device settings without dropping omitted tuning fields', async () => {
+    const device = (await db.query('SELECT * FROM devices WHERE id=$1', [f.deviceA])).rows[0];
+    const body = {
+      name: device.name,
+      location_id: device.location_id,
+      status: 'ACTIVE',
+      reason: 'Adjust heartbeat interval',
+      config: { heartbeat_interval_s: 90 },
+    };
+    expect((await call('patch', `/devices/${f.deviceA}`).send(body)).status).toBe(200);
+    expect(
+      (
+        await call('patch', `/devices/${f.deviceA}`).send({
+          ...body,
+          config: { tap_debounce_ms: 1500 },
+        })
+      ).status,
+    ).toBe(200);
+    const history = await call('get', `/devices/${f.deviceA}/configurations`);
+    expect(history.status).toBe(200);
+    expect(history.body.total).toBe(2);
+    expect(history.body.data[0].config.heartbeat_interval_s).toBe(90);
+    expect(history.body.data[0].config.tap_debounce_ms).toBe(1500);
+    expect((await call('get', `/devices/${crypto.randomUUID()}/configurations`)).status).toBe(404);
+    expect((await call('get', `/devices/${f.deviceA}/configurations`, 'parent')).status).toBe(403);
+  });
   it('retries an idempotent create without duplication', async () => {
     const key = crypto.randomUUID(),
       body = { student_code: 'S2', first_name: 'Second' };

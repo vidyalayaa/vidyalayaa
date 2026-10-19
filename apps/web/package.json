@@ -9,33 +9,36 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@vidyalayaa/contracts": "1.0.0",
+    "@firebase/app": "^0.16.2",
+    "@firebase/messaging": "^0.13.3",
+    "@hookform/resolvers": "^3.10.0",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-slot": "^1.2.3",
     "@supabase/supabase-js": "^2.80.0",
     "@tanstack/react-query": "^5.90.5",
-    "@hookform/resolvers": "^3.10.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.5",
-    "react-hook-form": "^7.66.0",
-    "zod": "^3.25.76",
-    "lucide-react": "^0.548.0",
-    "recharts": "^3.3.0",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-slot": "^1.2.3",
-    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@types/qrcode": "^1.5.6",
+    "@vidyalayaa/contracts": "1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "firebase": "^13.0.0",
+    "lucide-react": "^0.548.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-hook-form": "^7.66.0",
+    "react-router-dom": "^7.9.5",
+    "recharts": "^3.3.0",
     "tailwind-merge": "^3.3.1",
-    "@firebase/app": "^0.16.2",
-    "@firebase/messaging": "^0.13.3"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
-    "vite": "^7.1.12",
-    "tailwindcss": "^3.4.18",
     "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6"
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "vite": "^7.1.12"
   }
 }

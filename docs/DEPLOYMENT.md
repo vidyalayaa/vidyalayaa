@@ -1,6 +1,6 @@
 # Vidyalayaa deployment and operations guide
 
-Version 1.0 | 17 October 2026 | Architecture specification v1.0
+Version 1.2 | 19 October 2026 | Architecture specification v1.0
 
 ## 1. Deployment model and boundaries
 
@@ -52,6 +52,8 @@ npm run db:verify
 
 The migration runner takes an advisory migration lock, applies each SQL file transactionally, and records its checksum in app.schema_migrations. A changed checksum for an applied file stops deployment. Do not edit an already applied migration. SQL lives in db/migrations; generator scripts are maintenance aids, not a deployment step.
 
+This release has nine ordered migrations. Upgrading an existing five-migration installation applies 006 school invitations and first-admin bootstrap, 007 invitation activation guards, 008 worker operations/push targets/provider quotas/device snapshots, and 009 opt-in retention. Run the same migration and verification commands before deploying the matching API and worker. Migration 009 does not enable cleanup for any school: a School Admin must approve a policy first. Verify the checksum ledger, forced RLS, role grants and invitation guards with db:verify and the database tests; verify both empty-database and five-to-nine upgrade paths in staging. An old API image predating invitation acceptance must not manage memberships after this upgrade; keep the compatible image or disable those writes during rollback.
+
 The migrations create non-login, non-superuser, non-BYPASSRLS group roles app_api, app_device, app_worker and app_platform. Provision distinct login accounts with unique random passwords. Place the four DB_API_PASSWORD, DB_DEVICE_PASSWORD, DB_WORKER_PASSWORD and DB_PLATFORM_PASSWORD values in your local provisioning environment or approved secret injection process, then:
 
 ```powershell
@@ -99,13 +101,21 @@ npx tsx scripts/onboard.ts platform VERIFIED_AUTH_USER_UUID
 
 Sign in, enroll and verify the authenticator in Settings, then use the platform console. Register a school with its unique code, name, IANA timezone, plan and trial end. Add academic sessions, classes, subjects and an approved rule version in the school workspace. Rule examples are never installed automatically as a school's approved policy.
 
-Create/verify the first School Admin identity through Auth and grant its verified UUID to that school:
+In the Super Admin console, open Schools and choose Invite School Admin on the unstaffed school's row. Enter the administrator's name and email. The platform can bootstrap only this first School Admin; routine membership management belongs to the school. An already staffed school shows School Admin assigned. Reopening a pending invitation provides resend and cancellation controls. Sending a setup email is a real external action, so use an intended recipient rather than a live test account.
 
-```powershell
-npx tsx scripts/onboard.ts member USER_UUID SCHOOL_UUID school_admin
-```
+For a new identity, Supabase sends a setup link. The recipient opens it at /auth/callback, verifies the address and chooses a separate Vidyalayaa password. The page verifies the provider session before changing the password, supports invite/recovery token fragments and PKCE codes, and removes sensitive callback parameters from browser history. Keep the local web server running when using a localhost callback. Expired/used links require a new invitation.
 
-Subsequent administrators can invite school_admin, principal, teacher, parent or student accounts. Link teachers to their classes/subjects; link parents to students; link student accounts through students.user_id. An invited identity is not a class assignment or parent-child link. Existing accounts belonging to another school need a deliberately verified membership grant using the onboarding script; do not create a duplicate identity or change a role claim in the browser.
+The recipient must accept the school invitation before its INVITED membership becomes ACTIVE. An existing verified identity receives a pending invitation in Settings and can accept it with its current password; no duplicate Auth account or membership script is needed. The same person may belong to multiple schools with different roles. Invitations default to seven days; mail dispatch has a two-minute retry lease. Provider failures remain visible and can be retried. Cancelling or declining prevents acceptance. A database trigger prevents activating an unaccepted invitation through a status detour.
+
+The School Admin then opens Members & invitations, chooses Invite member, and selects Principal, Teacher, Parent, Student or another School Admin. All users sign in at /login with email/password or Continue with Google. The application routes School Admins to /admin, Principals to /principal, teachers to /teacher, parents to /parent and students to /student. The Super Admin starts at /platform; platform subpages have direct URLs such as /platform/schools and /platform/health. Permissions and row scopes remain server-enforced; typing a different portal URL does not change access.
+
+For Google login, create a Web application OAuth client in Google Auth Platform with only openid, email and profile scopes. Choose the External audience for multiple schools and add test users while the Google app is in Testing. Set the Google client's authorized redirect URI to the exact Supabase Auth callback shown in the Google provider settings, normally https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback. Enable Google in Supabase Authentication and save its Client ID and Client Secret there. Never put that secret into a browser environment variable.
+
+In Supabase URL Configuration, allow the website callbacks http://localhost:5173/auth/google/callback and http://127.0.0.1:5173/auth/google/callback for local development, plus the actual deployed HTTPS origin followed by /auth/google/callback. Preserve the separate /auth/callback entries for invitations/recovery. Keep the same browser and origin throughout the PKCE redirect. Enable Auth signups if unregistered Google identities may sign in; they receive no school access until accepting an invitation. The local Supabase template defaults to invitation-only identity creation.
+
+Both login methods prompt for an enrolled authenticator. The API rejects authenticated data requests below aal2 when the verified identity has an enrolled factor; platform endpoints always require aal2. No Google email/profile claim assigns privileges. Supabase can link identities with the same verified email, preserving the existing account's membership. Full setup, provider error troubleshooting and acceptance commands are in docs/GOOGLE_SIGN_IN.md. A real Google login remains a deployment acceptance step until its external credentials are configured.
+
+After acceptance, create the relevant teacher/parent/student profile using the named account selector. Assign teachers to classes/subjects, link parents to students, and enroll students in the correct session/class. Invitation acceptance alone does not create a teaching assignment or parent-child link. The last active School Admin cannot be removed or demoted until another administrator is active. The owner-only onboarding script remains a controlled bootstrap/recovery tool, not the normal website workflow.
 
 ## 7. Web application and Firebase Hosting
 
@@ -137,7 +147,14 @@ docker run --rm --env-file apps/api/.env -p 4000:4000 vidyalayaa:local
 docker run --rm --env-file apps/worker/.env vidyalayaa:local node apps/worker/dist/apps/worker/src/index.js
 ```
 
-Use the exact entrypoints above on Render. Health checks target /health/ready; /health/live only confirms the process. Ensure Render's deployed commit matches the approved release; an old healthy instance is not evidence that a new deploy finished. Verify the worker's actual Render deployment status and recent completed job_runs after rollout. Configure log drains and on-call alerts outside the application source.
+Use the exact entrypoints above on Render. API health checks target /health/ready; /health/live only confirms the process. The worker exposes no public HTTP port. Its private worker_instances heartbeat records liveness, last successful cycle and a safe error code. Platform Health displays this metadata. After building, private command-line checks are:
+
+```powershell
+npm run health:live -w @vidyalayaa/worker
+npm run health:ready -w @vidyalayaa/worker
+```
+
+Liveness requires a heartbeat within 90 seconds; readiness also requires RUNNING state and a successful cycle within five minutes. These are fleet checks over the private worker connection. Set a distinct WORKER_INSTANCE_ID UUID only when assigning stable identities to individual instances. Ensure Render's deployed commit matches the approved release; an old healthy instance is not evidence that a new deploy finished. Verify the worker's actual Render deployment status and recent completed job_runs after rollout. Configure log drains and on-call alerts outside the application source.
 
 ## 9. Storage and private reports
 
@@ -145,7 +162,9 @@ The migrations create private school-documents and firmware buckets. school-docu
 
 Reports queue in report_documents and are generated by the worker under current membership and row scope. The worker writes a PDF to school_id/reports/report_uuid.pdf. The browser receives a 60-second application-signed URL bound to user, school and report; fetching it also requires the same valid JWT and current scope. The server streams the private object. Copying a link to another account does not authorize it. Large reports above 10,000 selected rows fail explicitly; request a narrower period/scope.
 
-Back up object storage separately from PostgreSQL. Database backups do not imply that object bytes are recoverable. Apply approved storage retention to old generated reports and orphaned material uploads only after legal/contract review. Do not implement automatic deletion of child records without an approved retention policy.
+Academic reports include per-student/per-exam totals, weighted percentages and subject remarks. Their period uses the examination date, with school-timezone mark creation date only when the exam has no date. Family exports contain only published results. Missing marks are not silently treated as zero and no grading rubric is invented.
+
+Back up object storage separately from PostgreSQL. Database backups do not imply that object bytes are recoverable. Automatic report/notification cleanup is inactive until a School Admin saves an approved policy reference in Settings. Report age is capped by the effective plan report_retention_days; completed notification history uses the approved notification period. Cleanup expires generated PDF metadata only after Storage deletion succeeds and purges completed delivery/attempt/outbox records in bounded batches. Pending and dead work, student records, fee records, raw attendance and append-only audit history remain. Stop future cleanup removes the policy for the next worker cycle; already removed content needs backup restoration. Orphaned materials and legal child-data deletion remain separate reviewed operations.
 
 ## 10. Notifications and providers
 
@@ -155,7 +174,9 @@ Email: the supplied Resend adapter requires RESEND_API_KEY and a verified EMAIL_
 
 SMS: select a provider and implement/configure an HTTPS adapter accepting `{to,message,template,idempotency_key}` and returning `{message_id}`. Set SMS_ADAPTER_URL, SMS_ADAPTER_TOKEN and SMS_TEMPLATE_ID. Verify current sender/template/operator registration requirements with that provider before enabling real sending. No real SMS provider is claimed by this source until selected and tested.
 
-Unconfigured adapters fail visibly with PROVIDER_UNCONFIGURED; they never report a fake successful delivery. Preferences default push/email on and SMS off, with independent records for every linked parent and channel. Quiet hours, stale messages, plan gating and daily caps are applied. The worker records retries and dead letters with a durable lease and SKIP LOCKED claims. Review DEAD jobs and provider errors daily.
+Unconfigured adapters fail visibly with PROVIDER_UNCONFIGURED; they never report a fake successful delivery. Preferences default push/email on and SMS off, with independent records for every linked parent and channel. Quiet hours, stale messages, plan gating and daily caps are applied. Each push token has an independent durable target result: an invalid token is disabled individually, other devices still receive the message, and successful targets are skipped on a transient retry. A provider acceptance followed by a crash can still duplicate a message. Shared database token buckets throttle provider calls across worker instances; configure PUSH/EMAIL/SMS_RATE_PER_SECOND and corresponding _BURST values for actual provider quotas. Recipient-specific permanent errors do not trip the provider outage circuit. Review DEAD jobs and provider errors daily.
+
+School profile notification locale can be en-IN or hi-IN. Templates are keyed by notification kind and locale; current messages omit child names from lock-screen text. Provider sender/template registration must match the configured language and approved message content.
 
 External delivery is at least once. Resend receives a stable idempotency key. Push/SMS providers may deliver twice if the process dies after provider acceptance but before database recording; a database transaction cannot make an external provider exactly once. Confirm provider idempotency or client-side dedupe where required. Never tell a parent that a provider acceptance ID proves the notification was read.
 
@@ -164,6 +185,8 @@ External delivery is at least once. Resend receives a stable idempotency key. Pu
 Platform staff register each physical device to one school. Registration returns its random secret and claim code once; store them in a controlled provisioning system. Only their SHA-256 hashes persist server-side. The School Admin claims it into an active ENTRY, EXIT, BIDIRECTIONAL or CLASSROOM location. Devices have no authority to choose school/student IDs.
 
 Review docs/DEVICE_API.md with the embedded team. Build the PlatformIO example, initialize an empty queue only on a new unused device, inject only that unit's credential and real API root CA, then flash it. Green feedback means the raw tap was durably stored locally, not that the server classified attendance. Block/replace lost cards using lifecycle records; do not reuse an active UID across students.
+
+The selected family is ESP32 Dev Module with Wi-Fi and BLE (PlatformIO esp32dev). No board is connected yet, so chip revision and actual flash capacity remain unverified. Inspect those read-only when the board is connected, record the module marking and partition capacity, and approve a matching secure production layout before flashing or setting irreversible security fuses. The current example must not be treated as that production image.
 
 The included firmware is a prototype example with explicit production limitations in firmware/README.md. Its blocking network upload and file-per-event queue must be replaced/validated for a busy gate. Production units require secure boot, flash encryption, encrypted NVS, signed A/B OTA, anti-rollback, watchdogs, queue capacity/wear/power-loss evidence and the actual board's security configuration. API OTA status inventory exists, but remote installation is disabled until signed production firmware is implemented and tested. Never enable unsigned updates to meet a rollout date.
 
@@ -179,7 +202,29 @@ Lifecycle defaults follow the SAS proposal: expired ACTIVE/TRIALING becomes PAST
 
 ## 13. CI/CD and release procedure
 
+Platform operations in this release: edit plan feature flags and numeric limits in Plans, with a reason recorded in append-only audit history. Subscription edits have named controls and explicit school overrides; omitted API override/grace fields are preserved. Health shows aggregate usage, queue gaps, quarantines, notification/report backlog and private worker heartbeat state. No student directory is exposed to the platform role.
+
+To inspect school records for support, request only the needed scope and ticket duration. The school approves the request in Support access. Open approved access from the platform grant row; the read-only view hides data after expiry or a failed/revoked refresh. The server revalidates and locks the live grant in the same transaction that reads and audits each returned record. A school notice lists active support access and provides revocation controls. General membership management does not become available through a support grant.
+
+School resource details are readable by authorized roles even when they cannot edit. Homework materials download through fresh authorized URLs. Account/student/class selectors use names and scoped server searches. Attendance has class/date filtering, pagination and correction buttons on each daily record. Resource drafts are held in memory for up to one hour, scoped to user/school, cleared on logout/account or school change, and not written to browser storage. Dates are displayed and entered in the school timezone; ambiguous or nonexistent daylight-saving times are rejected. Notification/audit feeds support cursor pagination so new records do not shift a later page. Losing network connectivity displays an offline notice; it does not queue school-data writes in browser storage.
+
+If an API session expires, the client tries one forced refresh. On failure it keeps an inaccessible in-memory draft checkpoint while returning to sign-in. Signing back in as the same identity restores the draft and selected school/return path; a different identity or explicit sign-out discards it. Reloading the browser discards all memory-only drafts. MFA sign-in also preserves the return path. Do not use browser storage as a workaround for sensitive draft recovery.
+
 ci.yml runs TypeScript checks, local PostgreSQL/WASM API tests, schema assertions, real PostgreSQL five-device concurrency tests, generated-contract drift checks, production builds, secret scans and browser/accessibility tests. Require these checks on pull requests. Configure GitHub environments named staging and production; production requires a named reviewer and protected branch/tag policy.
+
+Run the local source checks before releasing:
+
+```powershell
+npm run typecheck
+npm test
+npm run build
+npm run contracts
+npm run check:secrets
+npm audit --omit=dev --audit-level=high
+npx playwright test tests/e2e/workspace.spec.ts tests/e2e/mfa.spec.ts tests/e2e/auth-callback.spec.ts tests/e2e/google-login.spec.ts tests/e2e/onboarding.spec.ts tests/e2e/school-workflows.spec.ts tests/e2e/platform.spec.ts --workers=2
+```
+
+These browser suites launch isolated fixture servers, ignore local service credentials and never send real invitations. They exercise desktop/mobile role entry, invitations, MFA, password setup, plans, expiring support, record drafts, attendance and private homework access. The separate live.spec.ts release test needs E2E_BASE_URL, E2E_EMAIL and E2E_PASSWORD for the intended staging account; set REQUIRE_LIVE_E2E=true to make missing credentials fail the release. See output/verification.json for the checks actually executed in this delivery. Fixture tests do not establish production provider or hardware acceptance.
 
 Configure environment-scoped secrets: MIGRATION_DATABASE_URL, RENDER_API_DEPLOY_HOOK, RENDER_WORKER_DEPLOY_HOOK, FIREBASE_SERVICE_ACCOUNT_JSON, and staging E2E_EMAIL/E2E_PASSWORD. Set environment variables VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL, FIREBASE_PROJECT_ID and STAGING_WEB_URL. Provider/database runtime secrets stay in Render, not the browser or GitHub public variables.
 
@@ -208,6 +253,8 @@ Monitor API readiness/error rate/latency, pool use, lock waits, disk growth, pen
 Logs use request IDs and stable error codes; tokens, full card UIDs and child data are not included in request logs. Application audit logs contain authorized business-change evidence and must be access controlled. Query plans should be reviewed on realistic staging volumes: school/date attendance register, student-day replay, parent fanout, teacher class scope and outbox claims. School/foreign-key indexes support these query paths; remove redundant indexes only after EXPLAIN evidence.
 
 Sign-in loop: verify public project URL/key, Auth callback allowlist, account status and membership. A valid Auth account without an active membership is intentionally unable to view school data. Platform 403 MFA_REQUIRED means complete the verified authenticator challenge; never disable the middleware.
+
+Broken MFA QR: the UI renders Supabase's SVG data URI directly, with a manual secret only during active enrollment. Reopening setup rechecks factors and restarts only the app's unverified stale enrollment; it preserves verified factors and unrelated authenticators. If cleanup fails, fix the provider error and retry rather than deleting verified factors. A localhost connection-refused invitation page means the development web server is stopped; start it and request a fresh setup link if the old link was consumed or expired. Keep production Auth callbacks on the deployed HTTPS origin.
 
 Database connection failure: verify runtime login, role membership, pooler project suffix/mode, TLS CA, provider network rules and total connections. Do not use the migration owner as a workaround. RLS returning no rows: check the verified membership, X-School-Id selection and transaction-local context; never disable RLS.
 

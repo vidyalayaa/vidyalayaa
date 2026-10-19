@@ -1,4 +1,30 @@
 import { z } from 'zod';
+export const retentionPolicySchema = z
+  .object({
+    policy_ref: z.string().trim().min(5).max(200),
+    report_days: z.number().int().min(7).max(3650),
+    notification_days: z.number().int().min(7).max(3650),
+    approved: z.literal(true),
+  })
+  .strict();
+export const deviceTuningSchema = z
+  .object({
+    heartbeat_interval_s: z.number().int().min(30).max(300),
+    batch_max_events: z.number().int().min(1).max(50),
+    batch_max_bytes: z.number().int().min(1000).max(256000),
+    tap_debounce_ms: z.number().int().min(500).max(10000),
+    time_sync_interval_h: z.number().int().min(1).max(24),
+    storage_warn_pct: z.number().int().min(50).max(95),
+    feedback: z
+      .object({
+        led_brightness: z.number().int().min(0).max(100),
+        buzzer: z.boolean(),
+        show_result_on_oled: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict()
+  .partial();
 export const uuid = z.string().uuid();
 export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const text = z.string().trim().min(1).max(500);
@@ -163,6 +189,7 @@ export interface Membership {
   permissions: string[];
 }
 export interface Me {
+  locale?: 'en-IN' | 'hi-IN';
   id: string;
   full_name: string;
   email: string;
@@ -174,6 +201,7 @@ export interface Me {
   subscription_status: string | null;
 }
 export interface Page<T = Record<string, unknown>> {
+  next_cursor?: string | null;
   data: T[];
   page: number;
   page_size: number;
@@ -388,8 +416,44 @@ export const reportSchema = z
   .strict()
   .refine((x) => x.to >= x.from, 'End date must follow start date');
 export const inviteSchema = z
-  .object({ email: z.string().email(), full_name: text, role: z.enum(roles) })
+  .object({
+    email: z
+      .string()
+      .trim()
+      .email()
+      .max(254)
+      .transform((v) => v.toLowerCase()),
+    full_name: text,
+    role: z.enum(roles),
+  })
   .strict();
+export const firstAdminSchema = inviteSchema
+  .pick({ email: true, full_name: true })
+  .extend({ resend: z.boolean().optional() })
+  .strict();
+export interface SchoolInvitation {
+  id: string;
+  school_id: string;
+  school_name?: string;
+  email?: string;
+  full_name?: string;
+  role_code: Role;
+  status?: 'SENDING' | 'SENT' | 'READY' | 'ACCEPTED' | 'REVOKED' | 'FAILED';
+  expires_at: string;
+}
+export interface InvitationResult {
+  id: string;
+  status: string;
+  email?: string;
+  email_sent?: boolean;
+}
+export interface AdminOnboarding {
+  state: 'missing' | 'invited' | 'assigned';
+  invitation_id?: string;
+  email?: string;
+  full_name?: string;
+  status?: string;
+}
 export const manualSchema = z
   .object({
     student_id: uuid,

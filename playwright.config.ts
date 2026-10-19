@@ -14,11 +14,4 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },
   ],
-  webServer: process.env.E2E_BASE_URL
-    ? undefined
-    : {
-        command: 'npm run dev -w @vidyalayaa/web',
-        url: 'http://127.0.0.1:5173',
-        reuseExistingServer: !process.env.CI,
-      },
 });

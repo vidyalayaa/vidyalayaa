@@ -1,41 +1,37 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ArrowUpRight,
-  ShieldCheck,
-  Layers3,
-  KeyRound,
-  Check,
-  Settings2,
-  BookOpen,
-  Users,
-} from 'lucide-react';
+import { ArrowUpRight, Layers3 } from 'lucide-react';
 import { enablePush } from '../../lib/push';
-import { configured, useAuth, supabase } from '../../lib/auth';
+import { configured, useAuth } from '../../lib/auth';
 import { resourceInfo } from '../resources/metadata';
 import { Button } from '../../components/ui/button';
 import { PageHeading, Panel, Badge } from '../../components/common';
 import { ActionDialog } from '../../components/ActionDialog';
+import AuthenticatorSetup from '../auth/AuthenticatorSetup';
+import PendingInvitations from '../auth/PendingInvitations';
+import RetentionPanel from './RetentionPanel';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../../lib/auth';
+import { label, display } from '../../lib/utils';
+import { Loading, ErrorState } from '../../components/common';
 export default function Settings() {
   const a = useAuth(),
-    [qr, setQr] = useState(''),
-    [factor, setFactor] = useState(''),
     [error, setError] = useState(''),
     [success, setSuccess] = useState(''),
-    [profile, setProfile] = useState(false);
-  async function enroll() {
-    if (!supabase) return;
-    const r = await supabase.auth.mfa.enroll({
-      factorType: 'totp',
-      friendlyName: 'Vidyalayaa authenticator',
+    [profile, setProfile] = useState(false),
+    plan = useQuery({
+      queryKey: [a.school, 'subscription'],
+      queryFn: () =>
+        api<{
+          plan_name: string;
+          subscription_status: string;
+          features: Record<string, boolean>;
+          limits: Record<string, number>;
+          current_period_end: string | null;
+          grace_ends_at: string | null;
+        }>('/subscription'),
+      enabled: configured && !!a.me?.school?.permissions.includes('subscription.read'),
     });
-    if (r.error) {
-      setError(r.error.message);
-      return;
-    }
-    setQr(r.data.totp.qr_code);
-    setFactor(r.data.id);
-  }
   return (
     <>
       <PageHeading
@@ -105,59 +101,6 @@ export default function Settings() {
                 </Button>
               )}
             </div>
-          </div>
-        </Panel>
-        <Panel title="Account security" subtitle="A little extra protection goes a long way.">
-          <div className="settings-body">
-            <div className="security-heading">
-              <span>
-                <ShieldCheck size={25} />
-              </span>
-              <div>
-                <h3>Multi-factor authentication</h3>
-                <p>Protect your account with an authenticator app.</p>
-              </div>
-            </div>
-            <Button variant="outline" disabled={!a.session} onClick={enroll}>
-              <KeyRound size={15} />
-              Set up authenticator
-            </Button>
-            {qr && (
-              <div className="mt-5">
-                <img
-                  alt="Scan this QR code with your authenticator app"
-                  src={`data:image/svg+xml,${encodeURIComponent(qr)}`}
-                  width={180}
-                  height={180}
-                />
-                <form
-                  className="mt-4 flex gap-2"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const code = String(new FormData(e.currentTarget).get('code'));
-                    const r = await supabase!.auth.mfa.challengeAndVerify({
-                      factorId: factor,
-                      code,
-                    });
-                    if (r.error) setError(r.error.message);
-                    else {
-                      setSuccess('Authenticator enabled.');
-                      setQr('');
-                    }
-                  }}
-                >
-                  <input
-                    name="code"
-                    aria-label="Authenticator code"
-                    className="input"
-                    pattern="[0-9]{6}"
-                    inputMode="numeric"
-                    required
-                  />
-                  <Button variant="lime">Verify</Button>
-                </form>
-              </div>
-            )}
             {error && (
               <p className="field-error mt-3" role="alert">
                 {error}
@@ -170,7 +113,61 @@ export default function Settings() {
             )}
           </div>
         </Panel>
+        <Panel title="Account security" subtitle="A little extra protection goes a long way.">
+          <AuthenticatorSetup />
+        </Panel>
       </div>
+      <PendingInvitations />
+      {a.me?.school?.permissions.includes('school.manage') && <RetentionPanel />}
+      {a.me?.school?.permissions.includes('subscription.read') && (
+        <Panel
+          title="Your school plan"
+          subtitle="Included features and the limits applied to this school."
+        >
+          <div className="settings-body">
+            {plan.isLoading ? (
+              <Loading />
+            ) : plan.error ? (
+              <ErrorState error={plan.error} retry={() => plan.refetch()} />
+            ) : (
+              plan.data && (
+                <>
+                  <div className="setting-line">
+                    <strong>{plan.data.plan_name}</strong>
+                    <Badge>{plan.data.subscription_status}</Badge>
+                  </div>
+                  {plan.data.current_period_end && (
+                    <div className="setting-line">
+                      <span>Current period ends</span>
+                      <span>{display(plan.data.current_period_end, a.me?.school?.timezone)}</span>
+                    </div>
+                  )}
+                  <div className="grid gap-8 py-5 sm:grid-cols-2">
+                    <div>
+                      <h3 className="mb-3 font-semibold">Features</h3>
+                      {Object.entries(plan.data.features).map(([key, value]) => (
+                        <div className="setting-line" key={key}>
+                          <span>{label(key)}</span>
+                          <span>{value ? 'Included' : 'Unavailable'}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <h3 className="mb-3 font-semibold">Limits</h3>
+                      {Object.entries(plan.data.limits).map(([key, value]) => (
+                        <div className="setting-line" key={key}>
+                          <span>{label(key)}</span>
+                          <strong>{String(value)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )
+            )}
+          </div>
+        </Panel>
+      )}
       <Panel
         title="Explore your workspace"
         subtitle="Find the tools for every part of the school day."
@@ -201,6 +198,7 @@ export default function Settings() {
         fields={[
           { key: 'name', default: a.me?.school?.school_name },
           { key: 'timezone', default: a.me?.school?.timezone },
+          { key: 'locale', options: ['en-IN', 'hi-IN'], default: a.me?.locale || 'en-IN' },
         ]}
       />
     </>

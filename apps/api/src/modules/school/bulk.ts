@@ -49,6 +49,12 @@ export function bulkRouter(pool: pg.Pool) {
                   .slice(0, 20)
                   .map((x) => x.row)
                   .join(', ')}.`,
+                invalid.map(({ row, entry }) => ({
+                  path: ['entries', row - 1, !valid.has(entry.student_id) ? 'student_id' : 'score'],
+                  message: !valid.has(entry.student_id)
+                    ? 'The student is not actively enrolled in this exam’s class.'
+                    : `Score exceeds the exam maximum of ${ex.max_score}.`,
+                })),
               );
             const saved = await tx.query(
               'INSERT INTO marks(school_id,exam_id,student_id,subject_id,score,remarks,entered_by) SELECT $1,$2,x.student_id,x.subject_id,x.score,x.remarks,$3 FROM jsonb_to_recordset($4::jsonb) x(student_id uuid,subject_id uuid,score numeric,remarks text) ON CONFLICT(school_id,exam_id,student_id,subject_id) DO UPDATE SET score=EXCLUDED.score,remarks=EXCLUDED.remarks,entered_by=EXCLUDED.entered_by RETURNING id',

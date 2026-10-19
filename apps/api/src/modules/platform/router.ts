@@ -1,27 +1,90 @@
 import { Router } from 'express';
 import type pg from 'pg';
 import { z } from 'zod';
-import { uuid } from '@vidyalayaa/contracts';
+import { uuid, firstAdminSchema } from '@vidyalayaa/contracts';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Config } from '../../lib/config.js';
+import { inviteMember, invitationError } from '../identity/invitations.js';
 import { platformTx, transaction, audit } from '../../lib/db.js';
 import { platformOnly, permission } from '../../middleware/auth.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import { secret, hash } from '../../lib/crypto.js';
-export function platformRouter(platform: pg.Pool, api: pg.Pool) {
+import { paged } from '../../lib/pagination.js';
+export function platformRouter(
+  platform: pg.Pool,
+  api: pg.Pool,
+  auth: SupabaseClient,
+  config: Config,
+) {
   const r = Router();
   r.use(platformOnly);
   r.get(
-    '/schools',
+    '/operations',
     asyncRoute(async (_req, res) =>
       res.json(
         await platformTx(platform, res.locals.actor.id, async (tx) => ({
-          data: (
+          metrics: (await tx.query('SELECT app.platform_operations() AS metrics')).rows[0].metrics,
+          workers: (
             await tx.query(
-              'SELECT s.*,p.name AS plan,sub.status AS subscription_status,sub.current_period_end,sub.grace_ends_at FROM schools s LEFT JOIN LATERAL(SELECT * FROM subscriptions WHERE school_id=s.id ORDER BY created_at DESC LIMIT 1) sub ON true LEFT JOIN subscription_plans p ON p.id=sub.plan_id ORDER BY s.name',
+              "SELECT id,last_seen_at,last_success_at,state,last_error_code,last_seen_at>now()-interval '90 seconds' AS alive,last_success_at>now()-interval '5 minutes' AS ready FROM worker_instances ORDER BY last_seen_at DESC LIMIT 20",
             )
           ).rows,
+          server_time: new Date().toISOString(),
         })),
       ),
     ),
+  );
+  r.get(
+    '/schools',
+    asyncRoute(async (req, res) =>
+      res.json(
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT s.*,app.platform_bootstrap_status(s.id) AS admin_onboarding,p.name AS plan,p.code AS plan_code,sub.plan_id,sub.status AS subscription_status,sub.current_period_end,sub.grace_ends_at,sub.limit_overrides FROM schools s LEFT JOIN LATERAL(SELECT * FROM subscriptions WHERE school_id=s.id ORDER BY created_at DESC LIMIT 1) sub ON true LEFT JOIN subscription_plans p ON p.id=sub.plan_id WHERE s.name ILIKE $1 OR s.school_code ILIKE $1 ORDER BY s.name,s.id',
+            [`%${typeof req.query.search === 'string' ? req.query.search : ''}%`],
+            req.query,
+          ),
+        ),
+      ),
+    ),
+  );
+  r.post(
+    '/schools/:id/administrator-invitation',
+    asyncRoute(async (req, res) => {
+      const school_id = uuid.parse(req.params.id),
+        input = firstAdminSchema.parse(req.body);
+      res
+        .status(201)
+        .json(
+          await inviteMember(
+            platform,
+            res.locals.actor.context,
+            auth,
+            { school_id, email: input.email, full_name: input.full_name, role: 'school_admin' },
+            config.WEB_ORIGINS.split(',')[0].trim() + '/auth/callback',
+            input.resend,
+          ),
+        );
+    }),
+  );
+  r.post(
+    '/schools/:id/administrator-invitation/:invitation/cancel',
+    asyncRoute(async (req, res) => {
+      const sid = uuid.parse(req.params.id),
+        iid = uuid.parse(req.params.invitation);
+      try {
+        await platformTx(platform, res.locals.actor.id, async (tx) => {
+          const state = (await tx.query('SELECT app.platform_bootstrap_status($1) AS state', [sid]))
+            .rows[0].state;
+          if (state.invitation_id !== iid) throw notFound();
+          await tx.query('SELECT app.cancel_school_invitation($1)', [iid]);
+        });
+      } catch (error) {
+        invitationError(error);
+      }
+      res.status(204).end();
+    }),
   );
   r.post(
     '/schools',
@@ -44,6 +107,14 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
       }
       res.status(201).json(
         await platformTx(platform, a.id, async (tx) => {
+          const plan = (
+            await tx.query(
+              'SELECT id FROM subscription_plans WHERE code=$1 AND is_active FOR SHARE',
+              [b.plan_code],
+            )
+          ).rows[0];
+          if (!plan)
+            throw new ApiError(422, 'PLAN_UNAVAILABLE', 'Choose an available subscription plan.');
           const school = (
             await tx.query(
               "INSERT INTO schools(school_code,name,timezone,status) VALUES($1,$2,$3,'ACTIVE') RETURNING *",
@@ -51,8 +122,8 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
             )
           ).rows[0];
           await tx.query(
-            "INSERT INTO subscriptions(school_id,plan_id,status,current_period_end) SELECT $1,id,'TRIALING',$3 FROM subscription_plans WHERE code=$2",
-            [school.id, b.plan_code, b.trial_ends_at],
+            "INSERT INTO subscriptions(school_id,plan_id,status,current_period_end) VALUES($1,$2,'TRIALING',$3)",
+            [school.id, plan.id, b.trial_ends_at],
           );
           return school;
         }),
@@ -68,6 +139,57 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
         })),
       ),
     ),
+  );
+  r.patch(
+    '/plans/:id',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            name: z.string().trim().min(2).max(100),
+            features: z.record(z.boolean()),
+            limits: z.record(z.number().int().min(0).max(100000000)),
+            is_active: z.boolean(),
+            reason: z.string().min(5).max(1000),
+          })
+          .strict()
+          .parse(req.body);
+      res.json(
+        await platformTx(platform, res.locals.actor.id, async (tx) => {
+          const old = (
+            await tx.query('SELECT * FROM subscription_plans WHERE id=$1 FOR UPDATE', [id])
+          ).rows[0];
+          if (!old) throw notFound();
+          if (
+            Object.keys(b.features).some((k) => !(k in old.features)) ||
+            Object.keys(b.limits).some((k) => !(k in old.limits)) ||
+            Object.keys(old.features).some((k) => !(k in b.features)) ||
+            Object.keys(old.limits).some((k) => !(k in b.limits))
+          )
+            throw new ApiError(
+              422,
+              'PLAN_KEYS_REQUIRED',
+              'Keep the defined feature and limit keys.',
+            );
+          const row = (
+            await tx.query(
+              'UPDATE subscription_plans SET name=$2,features=$3,limits=$4,is_active=$5 WHERE id=$1 RETURNING *',
+              [id, b.name, JSON.stringify(b.features), JSON.stringify(b.limits), b.is_active],
+            )
+          ).rows[0];
+          await tx.query(
+            "INSERT INTO audit_logs(actor_type,actor_id,action,entity_type,entity_id,before,after) VALUES('USER',$1,'plan.update','subscription_plans',$2,$3,$4)",
+            [
+              res.locals.actor.id,
+              id,
+              JSON.stringify({ features: old.features, limits: old.limits }),
+              JSON.stringify({ reason: b.reason, features: b.features, limits: b.limits }),
+            ],
+          );
+          return row;
+        }),
+      );
+    }),
   );
   r.patch(
     '/schools/:id/subscription',
@@ -89,7 +211,7 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
             ]),
             current_period_end: z.string().datetime(),
             grace_ends_at: z.string().datetime().nullable().optional(),
-            limit_overrides: z.record(z.number().int().nonnegative()).optional(),
+            limit_overrides: z.record(z.number().int().min(0).max(100000000)).optional(),
             reason: z.string().min(5).max(1000),
           })
           .strict()
@@ -97,30 +219,50 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
           .parse(req.body);
       res.json(
         await platformTx(platform, a.id, async (tx) => {
+          // Serialize first-time setup on the school: there may be no subscription
+          // row yet for SELECT FOR UPDATE to lock. RLS still scopes platform access.
+          const school = (await tx.query('SELECT id FROM schools WHERE id=$1 FOR UPDATE', [id]))
+            .rows[0];
+          if (!school) throw notFound();
           const sub = (
             await tx.query(
               'SELECT * FROM subscriptions WHERE school_id=$1 ORDER BY created_at DESC LIMIT 1 FOR UPDATE',
               [id],
             )
           ).rows[0];
-          if (!sub) throw notFound();
+          const plan = (
+            await tx.query(
+              'SELECT id,limits,is_active FROM subscription_plans WHERE ($1::uuid IS NOT NULL AND id=$1) OR ($1::uuid IS NULL AND code=$2) FOR SHARE',
+              [b.plan_id || null, b.plan_code || null],
+            )
+          ).rows[0];
+          if (!plan || (!plan.is_active && plan.id !== sub?.plan_id))
+            throw new ApiError(422, 'PLAN_UNAVAILABLE', 'Choose an available subscription plan.');
+          if (
+            b.limit_overrides &&
+            Object.keys(b.limit_overrides).some((key) => !(key in plan.limits))
+          )
+            throw new ApiError(422, 'INVALID_LIMIT', 'Choose a limit defined by this plan.');
           const row = (
             await tx.query(
-              'UPDATE subscriptions SET plan_id=coalesce($2::uuid,(SELECT id FROM subscription_plans WHERE code=$7)),status=$3,current_period_end=$4,grace_ends_at=$5,limit_overrides=$6 WHERE id=$1 RETURNING *',
+              sub
+                ? 'UPDATE subscriptions SET plan_id=$2,status=$3,current_period_end=$4,grace_ends_at=$5,limit_overrides=$6 WHERE id=$1 RETURNING *'
+                : 'INSERT INTO subscriptions(school_id,plan_id,status,current_period_end,grace_ends_at,limit_overrides) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
               [
-                sub.id,
-                b.plan_id || null,
+                sub?.id || school.id,
+                plan.id,
                 b.status,
                 b.current_period_end,
-                b.grace_ends_at || null,
-                b.limit_overrides || null,
-                b.plan_code || null,
+                b.grace_ends_at === undefined ? (sub?.grace_ends_at ?? null) : b.grace_ends_at,
+                b.limit_overrides === undefined
+                  ? (sub?.limit_overrides ?? null)
+                  : JSON.stringify(b.limit_overrides),
               ],
             )
           ).rows[0];
           await tx.query(
             'INSERT INTO subscription_events(school_id,subscription_id,previous_status,new_status,reason,actor_id) VALUES($1,$2,$3,$4,$5,$6)',
-            [id, sub.id, sub.status, b.status, b.reason, a.id],
+            [id, row.id, sub?.status ?? null, b.status, b.reason, a.id],
           );
           return row;
         }),
@@ -129,15 +271,16 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
   );
   r.get(
     '/devices',
-    asyncRoute(async (_req, res) =>
+    asyncRoute(async (req, res) =>
       res.json(
-        await platformTx(platform, res.locals.actor.id, async (tx) => ({
-          data: (
-            await tx.query(
-              'SELECT d.id,d.school_id,d.device_code,d.name,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,s.name AS school_name FROM devices d JOIN schools s ON s.id=d.school_id ORDER BY d.created_at DESC',
-            )
-          ).rows,
-        })),
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT d.id,d.school_id,d.device_code,d.name,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,s.name AS school_name FROM devices d JOIN schools s ON s.id=d.school_id ORDER BY d.created_at DESC,d.id',
+            [],
+            req.query,
+          ),
+        ),
       ),
     ),
   );
@@ -267,13 +410,16 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
   );
   r.get(
     '/support-grants',
-    asyncRoute(async (_req, res) =>
+    asyncRoute(async (req, res) =>
       res.json(
-        await platformTx(platform, res.locals.actor.id, async (tx) => ({
-          data: (
-            await tx.query('SELECT * FROM support_access_grants ORDER BY created_at DESC LIMIT 100')
-          ).rows,
-        })),
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT g.*,s.name AS school_label FROM support_access_grants g JOIN schools s ON s.id=g.school_id ORDER BY g.created_at DESC,g.id',
+            [],
+            req.query,
+          ),
+        ),
       ),
     ),
   );
@@ -332,30 +478,42 @@ export function platformRouter(platform: pg.Pool, api: pg.Pool) {
         marks: 'marks',
         fees: 'fee_records',
       }[feature];
-      const data = await transaction(
-        api,
-        { schoolId: grant.school_id, userId: a.id, actorType: 'SUPPORT' },
-        async (tx) =>
-          (
-            await tx.query(
-              `SELECT * FROM ${table} WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100`,
-              [grant.school_id],
-            )
-          ).rows,
-        true,
-      );
-      await transaction(
+      const result = await transaction(
         api,
         { schoolId: grant.school_id, userId: a.id, actorType: 'SUPPORT' },
         async (tx) => {
-          for (const record of data)
+          // Lock and revalidate inside the data transaction. Concurrent revocation
+          // takes effect before any subsequent read; audit and data commit together.
+          const live = (
+            await tx.query(
+              'SELECT scope FROM support_access_grants WHERE school_id=$1 AND id=$2 AND staff_user_id=$3 AND approved_by IS NOT NULL AND starts_at<=now() AND expires_at>now() AND revoked_at IS NULL FOR SHARE',
+              [grant.school_id, id, a.id],
+            )
+          ).rows[0];
+          if (!live?.scope.includes(feature)) throw notFound();
+          const page = await paged(
+            tx,
+            `SELECT * FROM ${table} WHERE school_id=$1 ORDER BY created_at DESC,id`,
+            [grant.school_id],
+            req.query,
+          );
+          for (const record of page.data)
             await tx.query(
               "INSERT INTO audit_logs(school_id,actor_type,actor_id,support_grant_id,action,entity_type,entity_id) VALUES($1,'SUPPORT',$2,$3,'support.read',$4,$5)",
               [grant.school_id, a.id, id, table, record.id],
             );
+          return page;
         },
       );
-      res.json({ data });
+      res.json({
+        ...result,
+        grant: {
+          id,
+          ticket_ref: grant.ticket_ref,
+          expires_at: grant.expires_at,
+          scope: grant.scope,
+        },
+      });
     }),
   );
   return r;
@@ -365,20 +523,19 @@ export function supportApprovalRouter(pool: pg.Pool) {
   r.use(permission('users.manage'));
   r.get(
     '/',
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                'SELECT id,reason,ticket_ref,scope,starts_at,expires_at,approved_by,revoked_at FROM support_access_grants WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100',
-                [a.context.schoolId],
-              )
-            ).rows,
-          }),
+          (tx) =>
+            paged(
+              tx,
+              'SELECT id,reason,ticket_ref,scope,starts_at,expires_at,approved_by,revoked_at FROM support_access_grants WHERE school_id=$1 ORDER BY created_at DESC,id',
+              [a.context.schoolId],
+              req.query,
+            ),
           true,
         ),
       );

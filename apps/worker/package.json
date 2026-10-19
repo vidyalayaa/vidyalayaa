@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/apps/worker/src/index.js"
+    "start": "node dist/apps/worker/src/index.js",
+    "health:live":"node --env-file-if-exists=.env dist/apps/worker/src/healthcheck.js",
+    "health:ready":"node --env-file-if-exists=.env dist/apps/worker/src/healthcheck.js --ready"
   },
   "dependencies": {
     "@vidyalayaa/api": "1.0.0",

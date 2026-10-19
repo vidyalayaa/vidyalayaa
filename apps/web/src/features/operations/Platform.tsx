@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ShieldCheck, Layers3 } from 'lucide-react';
-import type { Page } from '@vidyalayaa/contracts';
+import type { Page, AdminOnboarding } from '@vidyalayaa/contracts';
+import FirstAdministratorDialog from './FirstAdministratorDialog';
+import { PlanEditor, PlatformHealth, SupportData, SubscriptionEditor } from './PlatformPanels';
 import { api, useAuth } from '../../lib/auth';
 import { toDateTimeLocal } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -22,7 +25,7 @@ const actions: Record<string, { endpoint: string; fields: ActionField[] }> = {
   device: {
     endpoint: '/platform/devices',
     fields: [
-      { key: 'school_id' },
+      { key: 'school_id', lookup: '/platform/schools' },
       { key: 'device_code' },
       { key: 'name' },
       { key: 'hardware_serial' },
@@ -31,26 +34,42 @@ const actions: Record<string, { endpoint: string; fields: ActionField[] }> = {
   grant: {
     endpoint: '/platform/support-grants',
     fields: [
-      { key: 'school_id' },
+      { key: 'school_id', lookup: '/platform/schools' },
       { key: 'reason', type: 'textarea' },
       { key: 'ticket_ref' },
-      { key: 'scope', type: 'json', default: '["students"]' },
+      { key: 'scope', type: 'multiselect',options:['students','attendance','marks','fees'], default: '["students"]' },
       { key: 'minutes', type: 'number', default: '60' },
     ],
   },
 };
 export default function Platform() {
+  const navigate = useNavigate(),
+    params = useParams();
   const a = useAuth(),
     qc = useQueryClient(),
     [tab, setTab] = useState('schools'),
+    [page, setPage] = useState(1),
+    [search, setSearch] = useState(''),
+    [plan, setPlan] = useState<Record<string, unknown> | null>(null),
+    [support, setSupport] = useState<Record<string, unknown> | null>(null),
     [action, setAction] = useState(''),
     [result, setResult] = useState<Record<string, unknown> | null>(null),
     [selected, setSelected] = useState<Record<string, unknown> | null>(null),
+    [onboarding, setOnboarding] = useState<Record<string, unknown> | null>(null),
     query = useQuery({
-      queryKey: [a.school, 'platform', tab],
-      queryFn: () => api<Page>(`/platform/${tab}`),
-      enabled: !!a.session,
+      queryKey: [a.school, 'platform', tab, page, search],
+      queryFn: () =>
+        api<Page>(`/platform/${tab}?page=${page}&search=${encodeURIComponent(search)}`),
+      enabled: !!a.session && tab !== 'health',
     });
+  useEffect(() => {
+    const current = params['*'] || 'schools';
+    if (['schools', 'devices', 'plans', 'support-grants', 'health'].includes(current)) {
+      setTab(current);
+      setPage(1);
+      setSearch('');
+    }
+  }, [params['*']]);
   return (
     <>
       <PageHeading
@@ -75,44 +94,150 @@ export default function Platform() {
         grant.
       </div>
       <div className="tabs">
-        {['schools', 'devices', 'plans', 'support-grants'].map((t) => (
-          <button key={t} className={tab === t ? 'tab-active' : ''} onClick={() => setTab(t)}>
+        {['schools', 'devices', 'plans', 'support-grants', 'health'].map((t) => (
+          <button
+            key={t}
+            className={tab === t ? 'tab-active' : ''}
+            onClick={() => {
+              setTab(t);
+              navigate(`/platform/${t}`);
+              setPage(1);
+              setSearch('');
+            }}
+          >
             {t.replaceAll('-', ' ')}
           </button>
         ))}
       </div>
-      <Panel
-        title={tab.replaceAll('-', ' ')}
-        action={
-          tab === 'support-grants' && (
-            <Button variant="outline" size="sm" onClick={() => setAction('grant')}>
-              Request access
-            </Button>
-          )
-        }
-      >
-        {query.isLoading ? (
-          <Loading />
-        ) : query.error ? (
-          <ErrorState error={query.error} retry={() => query.refetch()} />
-        ) : query.data?.data.length ? (
-          <DataTable
-            rows={query.data.data}
-            onEdit={tab === 'schools' ? setSelected : undefined}
-            columns={
-              tab === 'schools'
-                ? ['school_code', 'name', 'timezone', 'plan', 'subscription_status']
-                : tab === 'devices'
-                  ? ['device_code', 'name', 'school_name', 'status', 'last_seen_at']
+      {tab === 'health' ? (
+        <PlatformHealth />
+      ) : (
+        <Panel
+          title={tab.replaceAll('-', ' ')}
+          action={
+            tab === 'support-grants' && (
+              <Button variant="outline" size="sm" onClick={() => setAction('grant')}>
+                Request access
+              </Button>
+            )
+          }
+        >
+          {tab === 'schools' && (
+            <div className="table-toolbar">
+              <input
+                className="input max-w-sm"
+                aria-label="Find school"
+                placeholder="Find by name or school code…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+          )}
+          {query.isLoading ? (
+            <Loading />
+          ) : query.error ? (
+            <ErrorState error={query.error} retry={() => query.refetch()} />
+          ) : query.data?.data.length ? (
+            <DataTable
+              rows={query.data.data}
+              actions={
+                tab === 'schools'
+                  ? (row) => (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => setSelected(row)}>
+                          Subscription
+                        </Button>
+                        {(row.admin_onboarding as AdminOnboarding | undefined)?.state ===
+                        'assigned' ? (
+                          <span className="text-xs text-stone-600">School Admin assigned</span>
+                        ) : (
+                          <Button size="sm" variant="lime" onClick={() => setOnboarding(row)}>
+                            {(row.admin_onboarding as AdminOnboarding | undefined)?.state ===
+                            'invited'
+                              ? 'Manage invitation'
+                              : 'Invite School Admin'}
+                          </Button>
+                        )}
+                      </>
+                    )
                   : tab === 'plans'
-                    ? ['code', 'name', 'features', 'limits']
-                    : ['school_id', 'ticket_ref', 'reason', 'expires_at', 'approved_by']
-            }
-          />
-        ) : (
-          <Empty />
-        )}
-      </Panel>
+                    ? (row) => (
+                        <Button size="sm" variant="outline" onClick={() => setPlan(row)}>
+                          Edit plan
+                        </Button>
+                      )
+                    : tab === 'support-grants'
+                      ? (row) => (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              !row.approved_by ||
+                              !!row.revoked_at ||
+                              Date.now() >= new Date(String(row.expires_at)).getTime()
+                            }
+                            onClick={() => setSupport(row)}
+                          >
+                            Open approved access
+                          </Button>
+                        )
+                      : undefined
+              }
+              columns={
+                tab === 'schools'
+                  ? ['school_code', 'name', 'timezone', 'plan', 'subscription_status']
+                  : tab === 'devices'
+                    ? ['device_code', 'name', 'school_name', 'status', 'last_seen_at']
+                    : tab === 'plans'
+                      ? ['code', 'name', 'features', 'limits']
+                      : ['school_id', 'ticket_ref', 'reason', 'expires_at', 'approved_by']
+              }
+            />
+          ) : (
+            <Empty />
+          )}
+          {query.data?.total !== undefined && (
+            <div className="pagination">
+              <span>
+                Page {page} · {query.data.total} records
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page * query.data.page_size >= query.data.total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </Panel>
+      )}
+      {plan && <PlanEditor plan={plan} close={() => setPlan(null)} />}
+      {support && <SupportData grant={support} close={() => setSupport(null)} />}
+      {onboarding && (
+        <FirstAdministratorDialog
+          school={{
+            id: String(onboarding.id),
+            name: String(onboarding.name),
+            admin_onboarding: onboarding.admin_onboarding as AdminOnboarding,
+          }}
+          close={() => setOnboarding(null)}
+        />
+      )}
       {actions[action] && (
         <ActionDialog
           open={true}
@@ -126,48 +251,7 @@ export default function Platform() {
           }}
         />
       )}
-      {selected && (
-        <ActionDialog
-          open={true}
-          close={() => setSelected(null)}
-          title={`Subscription for ${selected.name}`}
-          endpoint={`/platform/schools/${selected.id}/subscription`}
-          method="PATCH"
-          fields={[
-            {
-              key: 'plan_code',
-              options: ['BASIC', 'PROFESSIONAL', 'ENTERPRISE'],
-              default: String(selected.plan || 'BASIC').toUpperCase(),
-            },
-            {
-              key: 'status',
-              options: [
-                'TRIALING',
-                'ACTIVE',
-                'PAST_DUE',
-                'SUSPENDED_READONLY',
-                'SUSPENDED',
-                'CANCELLED',
-                'EXPIRED',
-              ],
-              default: String(selected.subscription_status),
-            },
-            {
-              key: 'current_period_end',
-              type: 'datetime-local',
-              default: toDateTimeLocal(selected.current_period_end),
-            },
-            {
-              key: 'grace_ends_at',
-              type: 'datetime-local',
-              optional: true,
-              default: toDateTimeLocal(selected.grace_ends_at),
-            },
-            { key: 'reason', type: 'textarea' },
-          ]}
-          onResult={() => qc.invalidateQueries({ queryKey: [a.school, 'platform'] })}
-        />
-      )}
+      {selected && <SubscriptionEditor school={selected} close={() => setSelected(null)} />}
       <Dialog
         open={!!result}
         onOpenChange={(v) => {

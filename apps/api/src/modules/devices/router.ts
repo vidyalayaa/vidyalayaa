@@ -8,6 +8,7 @@ import {
   syncAckSchema,
   otaSchema,
   uuid,
+  deviceTuningSchema,
   type EventResult,
 } from '@vidyalayaa/contracts';
 import { deviceAuth, permission } from '../../middleware/auth.js';
@@ -16,6 +17,7 @@ import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
 import { equalHash } from '../../lib/crypto.js';
 import { processEvent } from '../attendance/service.js';
 import { requireWrite } from '../school/router.js';
+import { paged } from '../../lib/pagination.js';
 function throttle(limit: number) {
   return rateLimit({
     windowMs: 60000,
@@ -203,8 +205,13 @@ export function deviceRouter(pool: pg.Pool) {
         tap_debounce_ms: 1500,
         time_sync_interval_h: 6,
         storage_warn_pct: 80,
-        feedback: { led_brightness: 60, buzzer: true, show_result_on_oled: false },
         ...c.config,
+        feedback: {
+          led_brightness: 60,
+          buzzer: true,
+          show_result_on_oled: false,
+          ...c.config.feedback,
+        },
         location: { name: c.name, type: c.location_type },
         ota: { channel: 'stable', available: false },
       });
@@ -297,20 +304,51 @@ export function managementRouter(pool: pg.Pool) {
   r.get(
     '/',
     permission('devices.read'),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                "SELECT d.id,d.device_code,d.name,d.location_id,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,d.storage_used_pct,d.wifi_rssi_dbm,d.config_version,l.name AS location_name,l.location_type,(d.status='ACTIVE' AND d.last_seen_at>now()-interval '3 minutes') AS online FROM devices d LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.school_id=$1 ORDER BY d.name",
-                [a.context.schoolId],
-              )
-            ).rows,
-          }),
+          (tx) =>
+            paged(
+              tx,
+              "SELECT d.id,d.device_code,d.name,d.location_id,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,d.storage_used_pct,d.wifi_rssi_dbm,d.config_version,d.config,l.name AS location_name,l.location_type,(d.status='ACTIVE' AND d.last_seen_at>now()-interval '3 minutes') AS online FROM devices d LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.school_id=$1 ORDER BY d.name,d.id",
+              [a.context.schoolId],
+              req.query,
+            ),
+          true,
+        ),
+      );
+    }),
+  );
+  r.get(
+    '/:id/configurations',
+    permission('devices.read'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => {
+            if (
+              !(
+                await tx.query('SELECT id FROM devices WHERE school_id=$1 AND id=$2', [
+                  a.context.schoolId,
+                  id,
+                ])
+              ).rowCount
+            )
+              throw notFound();
+            return paged(
+              tx,
+              'SELECT h.id,h.version,h.config,h.created_at,u.full_name AS editor FROM device_configurations h LEFT JOIN users u ON u.id=h.created_by WHERE h.school_id=$1 AND h.device_id=$2 ORDER BY h.version DESC',
+              [a.context.schoolId, id],
+              req.query,
+            );
+          },
           true,
         ),
       );
@@ -362,13 +400,7 @@ export function managementRouter(pool: pg.Pool) {
             location_id: uuid,
             status: z.enum(['ACTIVE', 'DISABLED', 'REVOKED']),
             reason: z.string().min(5).max(1000),
-            config: z
-              .object({
-                heartbeat_interval_s: z.number().int().min(30).max(300),
-                tap_debounce_ms: z.number().int().min(500).max(10000),
-              })
-              .strict()
-              .optional(),
+            config: deviceTuningSchema.optional(),
           })
           .strict()
           .parse(req.body);
@@ -390,7 +422,7 @@ export function managementRouter(pool: pg.Pool) {
             );
           return (
             await tx.query(
-              "UPDATE devices SET name=$2,location_id=$3,status=$4,revoked_reason=$5,revoked_at=CASE WHEN $4='REVOKED' THEN now() ELSE NULL END,config=coalesce($6,config),config_version=config_version+1 WHERE id=$1 RETURNING id,name,status",
+              "UPDATE devices SET name=$2,location_id=$3,status=$4,revoked_reason=$5,revoked_at=CASE WHEN $4='REVOKED' THEN now() ELSE NULL END,config=config||coalesce($6::jsonb,'{}'),config_version=config_version+1 WHERE id=$1 RETURNING id,name,status",
               [id, b.name, b.location_id, b.status, b.reason, b.config || null],
             )
           ).rows[0];

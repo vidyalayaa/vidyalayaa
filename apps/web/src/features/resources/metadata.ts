@@ -1,10 +1,11 @@
-import type { Resource } from '@vidyalayaa/contracts';
+import type { Resource, Role } from '@vidyalayaa/contracts';
 export interface Field {
   key: string;
   type?: 'text' | 'date' | 'datetime-local' | 'number' | 'checkbox' | 'textarea' | 'select';
   options?: string[];
   ref?: Resource;
   optional?: boolean;
+  accountRole?: Role;
 }
 const ref = (key: string, resource: Resource, optional = false): Field => ({
   key,
@@ -18,20 +19,20 @@ export const fields: Record<Resource, Field[]> = {
     { key: 'first_name' },
     { key: 'last_name', optional: true },
     { key: 'date_of_birth', type: 'date', optional: true },
-    { key: 'user_id', optional: true },
+    { key: 'user_id', accountRole: 'student', optional: true },
     select('status', ['ACTIVE', 'TRANSFERRED', 'GRADUATED', 'WITHDRAWN']),
   ],
   parents: [
     { key: 'full_name' },
     { key: 'email', optional: true },
     { key: 'phone', optional: true },
-    { key: 'user_id', optional: true },
+    { key: 'user_id', accountRole: 'parent', optional: true },
     select('status', ['ACTIVE', 'INACTIVE']),
   ],
   teachers: [
     { key: 'staff_code' },
     { key: 'full_name' },
-    { key: 'user_id', optional: true },
+    { key: 'user_id', accountRole: 'teacher', optional: true },
     select('status', ['ACTIVE', 'INACTIVE']),
   ],
   academic_sessions: [

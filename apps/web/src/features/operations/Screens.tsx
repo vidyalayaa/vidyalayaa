@@ -27,14 +27,22 @@ import {
 } from '../../components/common';
 import { ActionDialog, type ActionField } from '../../components/ActionDialog';
 import { Dialog } from '../../components/ui/dialog';
-function useRows(endpoint: string) {
-  const a = useAuth();
-  return useQuery({
-    queryKey: [a.school, endpoint],
-    queryFn: () => api<Page>(endpoint),
-    enabled: configured && !!a.me?.school,
-    refetchInterval: endpoint === '/reports' ? 10000 : 30000,
-  });
+import MemberInvitations from '../auth/MemberInvitations';
+import RecordSelect from '../../components/RecordSelect';
+import { display, label } from '../../lib/utils';
+import { useRows } from '../../lib/use-records';
+import Pagination from '../../components/Pagination';
+import DeviceConfiguration from './DeviceConfiguration';
+function Pages({ query }: { query: ReturnType<typeof useRows> }) {
+  return query.automatic ? (
+    <Pagination
+      total={query.data?.total}
+      page={query.page}
+      pageSize={query.data?.page_size}
+      onPage={query.setPage}
+      hasNext={query.hasNext}
+    />
+  ) : null;
 }
 function Rows({ query, columns }: { query: ReturnType<typeof useRows>; columns: string[] }) {
   return query.isLoading ? (
@@ -42,7 +50,10 @@ function Rows({ query, columns }: { query: ReturnType<typeof useRows>; columns: 
   ) : query.error ? (
     <ErrorState error={query.error} retry={() => query.refetch()} />
   ) : query.data?.data.length ? (
-    <DataTable rows={query.data.data} columns={columns} />
+    <>
+      <DataTable rows={query.data.data} columns={columns} />
+      <Pages query={query} />
+    </>
   ) : (
     <Empty />
   );
@@ -54,8 +65,13 @@ export function Attendance() {
         timeZone: a.me?.school?.timezone || 'Asia/Kolkata',
       }).format(new Date()),
     ),
-    query = useRows(`/attendance?date=${date}`),
-    [action, setAction] = useState('');
+    [page, setPage] = useState(1),
+    [classId, setClassId] = useState(''),
+    query = useRows(
+      `/attendance?date=${date}&page=${page}${classId ? `&class_id=${classId}` : ''}`,
+    ),
+    [action, setAction] = useState(''),
+    [correction, setCorrection] = useState<Record<string, unknown> | null>(null);
   return (
     <>
       <PageHeading
@@ -96,23 +112,81 @@ export function Attendance() {
             className="input w-auto"
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              setDate(e.target.value);
+              setPage(1);
+            }}
           />
         }
       >
-        <Rows
-          query={query}
-          columns={[
-            'student_code',
-            'first_name',
-            'last_name',
-            'attendance_status',
-            'movement_status',
-            'first_arrival_at',
-            'last_departure_at',
-            'needs_review',
-          ]}
-        />
+        <div className="table-toolbar">
+          <div className="w-full max-w-sm">
+            <label className="field-label" htmlFor="attendance-class">
+              Class
+            </label>
+            <RecordSelect
+              name="class_id"
+              id="attendance-class"
+              endpoint="/resources/classes"
+              value={classId}
+              onChange={(v) => {
+                setClassId(v);
+                setPage(1);
+              }}
+              optional
+              label="class"
+            />
+          </div>
+        </div>
+        {query.data?.data.length ? (
+          <DataTable
+            rows={query.data.data}
+            columns={[
+              'student_code',
+              'first_name',
+              'last_name',
+              'attendance_status',
+              'movement_status',
+              'first_arrival_at',
+              'last_departure_at',
+              'needs_review',
+            ]}
+            actions={
+              a.me?.school?.permissions.includes('attendance.correct_request')
+                ? (row) => (
+                    <Button size="sm" variant="outline" onClick={() => setCorrection(row)}>
+                      Request correction
+                    </Button>
+                  )
+                : undefined
+            }
+          />
+        ) : (
+          <Rows query={query} columns={['student_code', 'attendance_status']} />
+        )}
+        <div className="pagination">
+          <span>
+            Page {page} · {query.data?.total || 0} records
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page === 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!query.data || page * query.data.page_size >= query.data.total}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </Panel>
       <ActionDialog
         open={action === 'manual'}
@@ -120,13 +194,30 @@ export function Attendance() {
         title="Mark classroom attendance"
         endpoint="/attendance/manual"
         fields={[
-          { key: 'student_id' },
+          { key: 'student_id', lookup: '/resources/students' },
           { key: 'date', type: 'date', default: date },
           { key: 'status', options: ['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED'] },
           { key: 'reason', type: 'textarea' },
           { key: 'expected_version', type: 'number', optional: true },
         ]}
       />
+      {correction && (
+        <ActionDialog
+          open
+          close={() => setCorrection(null)}
+          title={`Correct ${correction.first_name}'s attendance`}
+          endpoint="/corrections"
+          fields={[
+            { key: 'daily_attendance_id', type: 'hidden', default: String(correction.id) },
+            {
+              key: 'requested_status',
+              options: ['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED'],
+              default: String(correction.attendance_status),
+            },
+            { key: 'reason', type: 'textarea' },
+          ]}
+        />
+      )}
     </>
   );
 }
@@ -134,6 +225,7 @@ export function Devices() {
   const a = useAuth(),
     query = useRows('/devices'),
     [claim, setClaim] = useState(false),
+    [configuration, setConfiguration] = useState<Record<string, unknown> | null>(null),
     [edit, setEdit] = useState<Record<string, unknown> | null>(null);
   return (
     <>
@@ -177,7 +269,7 @@ export function Devices() {
               <div>
                 <dt>Last seen</dt>
                 <dd>
-                  {d.last_seen_at ? new Date(String(d.last_seen_at)).toLocaleString() : 'Never'}
+                  {d.last_seen_at ? display(d.last_seen_at, a.me?.school?.timezone) : 'Never'}
                 </dd>
               </div>
               <div>
@@ -203,9 +295,21 @@ export function Devices() {
             >
               Manage device <ArrowUpRight size={15} />
             </Button>
+            {a.me?.school?.permissions.includes('devices.manage') && (
+              <Button
+                className="mt-2 w-full"
+                variant="outline"
+                size="sm"
+                disabled={d.status === 'REVOKED' || !d.location_id}
+                onClick={() => setConfiguration(d)}
+              >
+                Reader settings & history
+              </Button>
+            )}
           </article>
         ))}
       </div>
+      {query.data?.data.length ? <Pages query={query} /> : null}
       {!query.data?.data.length && (
         <Panel title="NFC devices">
           <Rows query={query} columns={['device_code', 'name', 'status']} />
@@ -224,9 +328,12 @@ export function Devices() {
           { key: 'device_code' },
           { key: 'claim_code', type: 'password' },
           { key: 'name' },
-          { key: 'location_id' },
+          { key: 'location_id', lookup: '/resources/device_locations' },
         ]}
       />
+      {configuration && (
+        <DeviceConfiguration device={configuration} close={() => setConfiguration(null)} />
+      )}
       {edit && (
         <ActionDialog
           open={true}
@@ -236,7 +343,11 @@ export function Devices() {
           method="PATCH"
           fields={[
             { key: 'name', default: String(edit.name) },
-            { key: 'location_id', default: String(edit.location_id || '') },
+            {
+              key: 'location_id',
+              lookup: '/resources/device_locations',
+              default: String(edit.location_id || ''),
+            },
             {
               key: 'status',
               options: ['ACTIVE', 'DISABLED', 'REVOKED'],
@@ -253,7 +364,6 @@ export function Corrections() {
   const a = useAuth(),
     qc = useQueryClient(),
     query = useRows('/corrections'),
-    [open, setOpen] = useState(false),
     [error, setError] = useState('');
   async function decide(id: unknown, approve: boolean) {
     try {
@@ -274,11 +384,13 @@ export function Corrections() {
         actions={
           <Button
             variant="lime"
-            onClick={() => setOpen(true)}
+            asChild
             disabled={!a.me?.school?.permissions.includes('attendance.correct_request')}
           >
-            <Plus size={16} />
-            Request correction
+            <Link to="/attendance">
+              <Plus size={16} />
+              Request from daily register
+            </Link>
           </Button>
         }
       />
@@ -319,21 +431,8 @@ export function Corrections() {
         ) : (
           <Rows query={query} columns={['status']} />
         )}
+        {!!query.data?.data.length && <Pages query={query} />}
       </Panel>
-      <ActionDialog
-        open={open}
-        close={() => setOpen(false)}
-        title="Request attendance correction"
-        endpoint="/corrections"
-        fields={[
-          { key: 'daily_attendance_id' },
-          {
-            key: 'requested_status',
-            options: ['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED'],
-          },
-          { key: 'reason', type: 'textarea' },
-        ]}
-      />
     </>
   );
 }
@@ -341,6 +440,7 @@ export function Reports() {
   const a = useAuth(),
     query = useRows('/reports'),
     [open, setOpen] = useState(false),
+    [kind, setKind] = useState('ATTENDANCE'),
     [error, setError] = useState('');
   async function download(id: unknown) {
     try {
@@ -388,7 +488,10 @@ export function Reports() {
                 variant="ghost"
                 size="sm"
                 disabled={!configured}
-                onClick={() => setOpen(true)}
+                onClick={() => {
+                  setKind(kind);
+                  setOpen(true);
+                }}
               >
                 Create report <ArrowUpRight size={14} />
               </Button>
@@ -406,7 +509,7 @@ export function Reports() {
                 <div>
                   <h3>{String(r.kind)} report</h3>
                   <p>
-                    {new Date(String(r.created_at)).toLocaleString()}{' '}
+                    {display(r.created_at, a.me?.school?.timezone)}{' '}
                     <Badge>{String(r.status)}</Badge>
                   </p>
                   {Boolean(r.error_code) && <p className="field-error">{String(r.error_code)}</p>}
@@ -426,6 +529,7 @@ export function Reports() {
         ) : (
           <Rows query={query} columns={['kind', 'status']} />
         )}
+        {!!query.data?.data.length && <Pages query={query} />}
       </Panel>
       <ActionDialog
         open={open}
@@ -435,6 +539,7 @@ export function Reports() {
         fields={[
           {
             key: 'kind',
+            default: kind,
             options: [
               'ATTENDANCE',
               'ACADEMIC',
@@ -443,9 +548,12 @@ export function Reports() {
           },
           {
             key: 'student_id',
+            lookup: '/resources/students',
             optional: !['parent', 'student'].includes(a.me?.school?.role || ''),
           },
-          { key: 'class_id', optional: true },
+          ...(!['parent', 'student'].includes(a.me?.school?.role || '')
+            ? [{ key: 'class_id', optional: true, lookup: '/resources/classes' }]
+            : []),
           { key: 'from', type: 'date' },
           { key: 'to', type: 'date' },
         ]}
@@ -470,10 +578,37 @@ export function Notifications() {
         }
       />
       <Panel title="Notification history">
-        <Rows
-          query={query}
-          columns={['kind', 'channel', 'status', 'created_at', 'sent_at', 'last_error']}
-        />
+        {query.data?.data.length ? (
+          query.data.data.map((n) => (
+            <article key={String(n.id)} className="review-row">
+              <div>
+                <h3>{label(String(n.kind))}</h3>
+                {Boolean(n.payload) && typeof n.payload === 'object' && (
+                  <dl className="mt-2 space-y-1">
+                    {Object.entries(n.payload as Record<string, unknown>)
+                      .filter(([key]) => !key.endsWith('_id'))
+                      .map(([key, value]) => (
+                        <div key={key}>
+                          <dt className="inline text-xs text-stone-500">{label(key)}: </dt>
+                          <dd className="inline text-sm">
+                            {display(value, a.me?.school?.timezone)}
+                          </dd>
+                        </div>
+                      ))}
+                  </dl>
+                )}
+                <p>
+                  {display(n.created_at, a.me?.school?.timezone)} · {label(String(n.channel))}
+                </p>
+                {Boolean(n.last_error) && <p className="field-error">{String(n.last_error)}</p>}
+              </div>
+              <Badge>{String(n.status)}</Badge>
+            </article>
+          ))
+        ) : (
+          <Rows query={query} columns={['kind', 'status']} />
+        )}
+        {!!query.data?.data.length && <Pages query={query} />}
       </Panel>
     </>
   );
@@ -482,6 +617,7 @@ export function Members() {
   const a = useAuth(),
     query = useRows('/memberships'),
     [open, setOpen] = useState(false),
+    [invitationMessage, setInvitationMessage] = useState(''),
     [edit, setEdit] = useState<Record<string, unknown> | null>(null);
   return (
     <>
@@ -500,21 +636,47 @@ export function Members() {
           <DataTable
             rows={query.data.data}
             columns={['full_name', 'email', 'role', 'status']}
-            onEdit={setEdit}
+            actions={(row) =>
+              row.status === 'INVITED' ? (
+                <span className="text-xs text-stone-600">Awaiting acceptance</span>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setEdit(row)}>
+                  Edit membership
+                </Button>
+              )
+            }
           />
         ) : (
           <Rows query={query} columns={['full_name', 'email', 'role', 'status']} />
         )}
+        {!!query.data?.data.length && <Pages query={query} />}
       </Panel>
+      {invitationMessage && (
+        <p className="notice" role="status">
+          {invitationMessage}
+        </p>
+      )}
+      <MemberInvitations />
       <ActionDialog
         open={open}
         close={() => setOpen(false)}
         title="Invite a school member"
+        onResult={(result) =>
+          setInvitationMessage(
+            result.status === 'READY'
+              ? 'This account already exists. The person can sign in and accept the school invitation in Settings.'
+              : 'The setup email has been sent. The person will choose a password and accept the school invitation.',
+          )
+        }
         endpoint="/invitations"
         fields={[
           { key: 'full_name' },
           { key: 'email', type: 'email' },
-          { key: 'role', options: ['school_admin', 'principal', 'teacher', 'parent', 'student'] },
+          {
+            key: 'role',
+            options: ['school_admin', 'principal', 'teacher', 'parent', 'student'],
+            default: 'teacher',
+          },
         ]}
       />
       {edit && (
@@ -589,7 +751,7 @@ export function SupportGrants() {
                 <h3>{String(g.ticket_ref)}</h3>
                 <p>{String(g.reason)}</p>
                 <small>
-                  Expires {new Date(String(g.expires_at)).toLocaleString()} ·{' '}
+                  Expires {display(g.expires_at, a.me?.school?.timezone)} ·{' '}
                   {g.revoked_at ? 'Revoked' : g.approved_by ? 'Approved' : 'Awaiting approval'}
                 </small>
               </div>
@@ -608,6 +770,7 @@ export function SupportGrants() {
         ) : (
           <Rows query={q} columns={['reason']} />
         )}
+        {!!q.data?.data.length && <Pages query={q} />}
       </Panel>
     </>
   );

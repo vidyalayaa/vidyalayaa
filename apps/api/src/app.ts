@@ -16,6 +16,7 @@ import { schoolRouter, schoolAccess } from './modules/school/router.js';
 import { deviceRouter, managementRouter } from './modules/devices/router.js';
 import { billingRouter } from './modules/platform/billing.js';
 import { platformRouter, supportApprovalRouter } from './modules/platform/router.js';
+import { recipientInvitationRouter } from './modules/identity/invitations.js';
 export interface Dependencies {
   api: pg.Pool;
   device: pg.Pool;
@@ -56,9 +57,13 @@ export function createApp(config: Config, deps: Dependencies) {
   );
   app.use(helmet());
   const origins = config.WEB_ORIGINS.split(',').map((x) => x.trim());
+  const isDevOrigin = (origin?: string) => {
+    if (!origin || config.NODE_ENV !== 'development') return false;
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  };
   app.use(
     cors({
-      origin: (origin, cb) => cb(null, !origin || origins.includes(origin)),
+      origin: (origin, cb) => cb(null, !origin || origins.includes(origin) || isDevOrigin(origin)),
       allowedHeaders: [
         'Authorization',
         'Content-Type',
@@ -111,7 +116,8 @@ export function createApp(config: Config, deps: Dependencies) {
       res.json({ ...me, ...e, school: active });
     }),
   );
-  app.use('/api/v1/platform', platformRouter(deps.platform, deps.api));
+  app.use('/api/v1/invitations', recipientInvitationRouter(deps.api));
+  app.use('/api/v1/platform', platformRouter(deps.platform, deps.api, deps.supabase, config));
   app.use('/api/v1', requireSchool, schoolAccess(deps.api));
   app.use('/api/v1', bulkRouter(deps.api));
   app.use('/api/v1/devices', managementRouter(deps.api));

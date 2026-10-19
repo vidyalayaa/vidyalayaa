@@ -42,6 +42,8 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
     } catch {
       /* no step-up */
     }
+    if (!aal2 && data.user.factors?.some((factor) => factor.status === 'verified'))
+      throw new ApiError(403, 'MFA_REQUIRED', 'Complete multi-factor authentication to continue.');
     const selected = req.header('X-School-Id');
     const active = selected
       ? me.memberships.find((x) => x.school_id === selected)
@@ -115,11 +117,15 @@ export async function loadEntitlements(pool: pg.Pool, a: Actor) {
     a.context,
     async (tx) => {
       const { rows } = await tx.query(
-        'SELECT s.status,s.current_period_end,s.grace_ends_at,p.features,p.limits,s.limit_overrides FROM subscriptions s JOIN subscription_plans p ON p.id=s.plan_id WHERE school_id=$1 ORDER BY s.created_at DESC LIMIT 1',
+        "SELECT s.status,s.current_period_end,s.grace_ends_at,p.name as plan_name,p.features,p.limits,s.limit_overrides,sch.settings->>'locale' AS locale FROM subscriptions s JOIN subscription_plans p ON p.id=s.plan_id JOIN schools sch ON sch.id=s.school_id WHERE school_id=$1 ORDER BY s.created_at DESC LIMIT 1",
         [a.context.schoolId],
       );
       const s = rows[0];
       return {
+        plan_name: s?.plan_name || 'Unconfigured',
+        locale: s?.locale || 'en-IN',
+        current_period_end: s?.current_period_end || null,
+        grace_ends_at: s?.grace_ends_at || null,
         features: s?.features || {},
         limits: { ...s?.limits, ...s?.limit_overrides },
         subscription_status: s?.status || 'UNCONFIGURED',

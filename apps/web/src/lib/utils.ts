@@ -6,17 +6,17 @@ export function cn(...inputs: ClassValue[]) {
 export function label(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (x) => x.toUpperCase());
 }
-export function display(value: unknown) {
+export function display(value: unknown, timeZone = 'Asia/Kolkata') {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') return JSON.stringify(value);
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value))
-    return new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    return new Date(value).toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone,
+    });
   return String(value);
 }
 
-export function toDateTimeLocal(value: unknown) {
-  if (!value) return '';
-  const d = new Date(String(value));
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-}
+export { toDateTimeLocal, fromDateTimeLocal } from './date-time';

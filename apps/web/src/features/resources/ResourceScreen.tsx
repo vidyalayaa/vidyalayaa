@@ -1,5 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import BulkMarksDialog from './BulkMarksDialog';
+import RecordSelect from '../../components/RecordSelect';
+import ResourceDetails from './ResourceDetails';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,7 +16,9 @@ import {
   LockKeyhole,
 } from 'lucide-react';
 import { api, configured, useAuth, supabase } from '../../lib/auth';
-import { label, display, toDateTimeLocal } from '../../lib/utils';
+import { label, display, toDateTimeLocal, fromDateTimeLocal } from '../../lib/utils';
+import { readDraft, saveDraft, deleteDraft } from '../../lib/drafts';
+import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
 import { fields, resourceInfo, sampleRule, type Field } from './metadata';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
@@ -24,6 +28,8 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
   const a = useAuth(),
     qc = useQueryClient(),
     [bulk, setBulk] = useState(false),
+    [dirty, setDirty] = useState(false),
+    [view, setView] = useState<string | null>(null),
     [search, setSearch] = useState(params.get('search') || ''),
     [page, setPage] = useState(1),
     [editing, setEditing] = useState<Record<string, unknown> | null | undefined>(undefined),
@@ -34,7 +40,18 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
     setPage(1);
     setSearch(params.get('search') || '');
     setEditing(undefined);
-  }, [resource, params]);
+    setView(null);
+    setDirty(false);
+  }, [resource, params, a.school]);
+  const closeForm = () => {
+    if (
+      !dirty ||
+      window.confirm('Close this form with unsaved changes? The draft remains only in this tab.')
+    ) {
+      setEditing(undefined);
+      setDirty(false);
+    }
+  };
   const query = useQuery({
     queryKey: [a.school, resource, search, page],
     queryFn: () =>
@@ -53,10 +70,16 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
                 Import CSV
               </Button>
             )}
-            <Button variant="lime" onClick={() => setEditing(null)} disabled={!canWrite || locked}>
-              <Plus size={17} />
-              Add {resource === 'students' ? 'student' : 'record'}
-            </Button>
+            {(!configured || canWrite) && (
+              <Button
+                variant="lime"
+                onClick={() => setEditing(null)}
+                disabled={!canWrite || locked}
+              >
+                <Plus size={17} />
+                Add {resource === 'students' ? 'student' : 'record'}
+              </Button>
+            )}
           </>
         }
       />
@@ -104,6 +127,7 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
             <DataTable
               rows={query.data.data}
               columns={info.columns}
+              onView={(row) => setView(String(row.id))}
               onEdit={canWrite && resource !== 'attendance_rule_versions' ? setEditing : undefined}
             />
           ) : (
@@ -152,10 +176,11 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
         </Panel>
       )}
       {bulk && <BulkMarksDialog open={bulk} close={() => setBulk(false)} />}
+      {view && <ResourceDetails resource={resource} id={view} close={() => setView(null)} />}
       <Dialog
         open={editing !== undefined}
         onOpenChange={(open) => {
-          if (!open) setEditing(undefined);
+          if (!open) closeForm();
         }}
         title={`${editing ? 'Edit' : 'Add'} ${info.title.toLowerCase()}`}
       >
@@ -163,7 +188,10 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           key={`${resource}-${String(editing?.id || 'new')}`}
           resource={resource}
           initial={editing || undefined}
+          onDirtyChange={setDirty}
+          cancel={closeForm}
           done={() => {
+            setDirty(false);
             setEditing(undefined);
             qc.invalidateQueries({ queryKey: [a.school] });
           }}
@@ -233,23 +261,23 @@ export function ResourceForm({
   resource,
   initial,
   done,
+  cancel,
+  onDirtyChange,
 }: {
   resource: Resource;
   initial?: Record<string, unknown>;
   done: () => void;
+  cancel?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const a = useAuth(),
     [error, setError] = useState(''),
     [statusMessage, setStatusMessage] = useState(''),
     [uploading, setUploading] = useState(false),
     draftKey = `vidyalayaa.draft.${a.me?.id}.${a.school}.${resource}.${initial?.id || 'new'}`;
+  const [restored,setRestored]=useState(()=>Object.keys(readDraft(draftKey)).length>0);
   const defaults = useMemo(() => {
-    let saved: Record<string, unknown> = {};
-    try {
-      saved = JSON.parse(sessionStorage.getItem(draftKey) || '{}');
-    } catch {
-      /* fresh draft */
-    }
+    const saved = readDraft(draftKey);
     return Object.fromEntries(
       fields[resource].map((f) => {
         let value =
@@ -257,13 +285,28 @@ export function ResourceForm({
           initial?.[f.key] ??
           (f.type === 'checkbox' ? false : (f.options?.[0] ?? (f.optional ? null : '')));
         if (f.key === 'rules' && typeof value === 'object') value = JSON.stringify(value, null, 2);
-        if (f.type === 'datetime-local' && value) value = toDateTimeLocal(value);
+        if (f.type === 'datetime-local' && value && !saved[f.key])
+          value = toDateTimeLocal(value, a.me?.school?.timezone);
         return [f.key, value];
       }),
     );
-  }, [resource, initial, draftKey]);
+  }, [resource, initial, draftKey, a.me?.school?.timezone]);
   const resolver: Resolver<Record<string, unknown>> = async (values, context, options) => {
     const transformed = { ...values };
+    for (const f of fields[resource].filter((f) => f.type === 'datetime-local')) {
+      if (transformed[f.key])
+        try {
+          transformed[f.key] = fromDateTimeLocal(
+            String(transformed[f.key]),
+            a.me?.school?.timezone,
+          );
+        } catch (e) {
+          return {
+            values: {},
+            errors: { [f.key]: { type: 'validate', message: (e as Error).message } },
+          };
+        }
+    }
     if (typeof transformed.rules === 'string') {
       try {
         transformed.rules = JSON.parse(transformed.rules);
@@ -281,8 +324,10 @@ export function ResourceForm({
     >;
   };
   const form = useForm<Record<string, unknown>>({ defaultValues: defaults, resolver });
+  useUnsavedChanges(form.formState.isDirty||restored);
+  useEffect(() => onDirtyChange?.(form.formState.isDirty||restored), [form.formState.isDirty, onDirtyChange,restored]);
   useEffect(() => {
-    const s = form.watch((values) => sessionStorage.setItem(draftKey, JSON.stringify(values)));
+    const s = form.watch((values) => saveDraft(draftKey, values));
     return () => s.unsubscribe();
   }, [form, draftKey]);
   const mutation = useMutation({
@@ -293,7 +338,9 @@ export function ResourceForm({
         body: JSON.stringify(values),
       }),
     onSuccess: () => {
-      sessionStorage.removeItem(draftKey);
+      setRestored(false);
+      form.reset(form.getValues());
+      deleteDraft(draftKey);
       done();
     },
     onError: (e) => setError(e.message),
@@ -313,11 +360,25 @@ export function ResourceForm({
             {label(f.key.replace(/_id$/, ''))}
             {f.optional && <span>optional</span>}
           </label>
-          {f.ref ? (
+          {f.accountRole ? (
+            <RecordSelect
+              name={f.key}
+              id={f.key}
+              endpoint={`/lookups/accounts?role=${f.accountRole}`}
+              value={String(form.watch(f.key) || '')}
+              onChange={(value) =>
+                form.setValue(f.key, value || null, { shouldValidate: true, shouldDirty: true })
+              }
+              optional={f.optional}
+              label={`${f.accountRole} account`}
+            />
+          ) : f.ref ? (
             <RefField
               field={f}
               value={String(form.watch(f.key) || '')}
-              onChange={(v) => form.setValue(f.key, v || null, { shouldValidate: true })}
+              onChange={(v) =>
+                form.setValue(f.key, v || null, { shouldValidate: true, shouldDirty: true })
+              }
             />
           ) : f.type === 'checkbox' ? (
             <input
@@ -362,13 +423,7 @@ export function ResourceForm({
               step={f.type === 'number' ? '0.01' : undefined}
               {...form.register(f.key, {
                 setValueAs: (v) =>
-                  v === '' && f.optional
-                    ? null
-                    : f.type === 'number'
-                      ? Number(v)
-                      : f.type === 'datetime-local' && v
-                        ? new Date(v).toISOString()
-                        : v,
+                  v === '' && f.optional ? null : f.type === 'number' ? Number(v) : v,
               })}
             />
           )}{' '}
@@ -400,7 +455,7 @@ export function ResourceForm({
                       .from('school-documents')
                       .uploadToSignedUrl(ticket.path, ticket.token, file);
                     if (uploaded.error) throw uploaded.error;
-                    form.setValue('storage_path', ticket.path);
+                    form.setValue('storage_path', ticket.path, { shouldDirty: true });
                   } catch (error) {
                     setError((error as Error).message);
                   } finally {
@@ -454,7 +509,7 @@ export function ResourceForm({
         </p>
       )}
       <div className="col-span-full mt-3 flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={done}>
+        <Button type="button" variant="outline" onClick={cancel || done}>
           Cancel
         </Button>
         <Button type="submit" variant="lime" disabled={mutation.isPending || uploading}>

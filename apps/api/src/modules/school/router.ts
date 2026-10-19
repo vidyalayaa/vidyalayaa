@@ -11,17 +11,22 @@ import {
   inviteSchema,
   uuid,
   type Resource,
+  retentionPolicySchema,
 } from '@vidyalayaa/contracts';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { inviteMember, invitationError } from '../identity/invitations.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
+import { paged, cursorPage } from '../../lib/pagination.js';
 import { transaction, audit, type Tx } from '../../lib/db.js';
 import { permission, loadEntitlements, type Actor } from '../../middleware/auth.js';
 import {
   definitions,
   resourceScope,
+  resourceSelect,
   parseResource,
   validateBusiness,
   studentScope,
+  classScope,
   assertStudent,
   assertClass,
 } from './resources.js';
@@ -92,7 +97,9 @@ export function schoolAccess(pool: pg.Pool) {
       ['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(a.subscription_status || '') &&
       !(
         a.active!.role === 'school_admin' &&
-        (req.path.startsWith('/reports') || req.path === '/subscription')
+        (req.path.startsWith('/reports') ||
+          req.path === '/subscription' ||
+          req.path === '/school/retention')
       )
     )
       throw new ApiError(
@@ -105,13 +112,115 @@ export function schoolAccess(pool: pg.Pool) {
 }
 export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Config) {
   const router = Router();
+  router.get(
+    '/school/retention',
+    permission('school.manage'),
+    asyncRoute(async (_req, res) => {
+      const a = res.locals.actor;
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => ({
+            policy:
+              (
+                await tx.query("SELECT settings->'retention' AS policy FROM schools WHERE id=$1", [
+                  a.context.schoolId,
+                ])
+              ).rows[0]?.policy || null,
+            plan_report_days: a.limits.report_retention_days ?? 180,
+          }),
+          true,
+        ),
+      );
+    }),
+  );
+  router.delete(
+    '/school/retention',
+    permission('school.manage'),
+    asyncRoute(async (_req, res) => {
+      const a = res.locals.actor;
+      await transaction(pool, a.context, async (tx) => {
+        await tx.query("UPDATE schools SET settings=settings-'retention' WHERE id=$1", [
+          a.context.schoolId,
+        ]);
+        await audit(
+          tx,
+          a.context.schoolId,
+          a.id,
+          'retention.policy.disabled',
+          'schools',
+          a.context.schoolId,
+        );
+      });
+      res.status(204).end();
+    }),
+  );
+  router.put(
+    '/school/retention',
+    permission('school.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        b = retentionPolicySchema.parse(req.body);
+      res.json(
+        await transaction(pool, a.context, async (tx) => {
+          await requireWrite(tx, a);
+          const policy = {
+            policy_ref: b.policy_ref,
+            report_days: b.report_days,
+            notification_days: b.notification_days,
+            approved_by: a.id,
+            approved_at: new Date().toISOString(),
+          };
+          await tx.query(
+            "UPDATE schools SET settings=jsonb_set(settings,'{retention}',$2::jsonb) WHERE id=$1",
+            [a.context.schoolId, JSON.stringify(policy)],
+          );
+          await audit(
+            tx,
+            a.context.schoolId,
+            a.id,
+            'retention.policy.approved',
+            'schools',
+            a.context.schoolId,
+          );
+          return { policy };
+        }),
+      );
+    }),
+  );
+  router.get(
+    '/support-access',
+    asyncRoute(async (_req, res) => {
+      const a = res.locals.actor;
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => ({
+            data: (
+              await tx.query(
+                'SELECT ticket_ref,expires_at,scope FROM support_access_grants WHERE school_id=$1 AND approved_by IS NOT NULL AND revoked_at IS NULL AND starts_at<=now() AND expires_at>now() ORDER BY expires_at',
+                [a.context.schoolId],
+              )
+            ).rows,
+          }),
+          true,
+        ),
+      );
+    }),
+  );
   router.patch(
     '/school',
     permission('school.manage'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
         b = z
-          .object({ name: z.string().min(2).max(200), timezone: z.string().max(100) })
+          .object({
+            name: z.string().min(2).max(200),
+            timezone: z.string().max(100),
+            locale: z.enum(['en-IN', 'hi-IN']).optional(),
+          })
           .strict()
           .parse(req.body);
       try {
@@ -124,8 +233,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           await requireWrite(tx, a);
           return (
             await tx.query(
-              'UPDATE schools SET name=$2,timezone=$3 WHERE id=$1 RETURNING name,timezone',
-              [a.context.schoolId, b.name, b.timezone],
+              "UPDATE schools SET name=$2,timezone=$3,settings=settings||CASE WHEN $4::text IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('locale',$4::text) END WHERE id=$1 RETURNING name,timezone,settings",
+              [a.context.schoolId, b.name, b.timezone, b.locale || null],
             )
           ).rows[0];
         }),
@@ -203,6 +312,41 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     }),
   );
   router.get(
+    '/lookups/accounts',
+    permission('users.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        q = pageSchema.parse(req.query),
+        role = z.enum(['teacher', 'parent', 'student']).parse(req.query.role);
+      const result = await transaction(
+        pool,
+        a.context,
+        async (tx) => {
+          const args = [a.context.schoolId, role, `%${q.search || ''}%`];
+          const where =
+            "m.school_id=$1 AND r.code=$2 AND m.status='ACTIVE' AND u.status='ACTIVE' AND (u.full_name ILIKE $3 OR u.email::text ILIKE $3)";
+          const total = Number(
+            (
+              await tx.query(
+                `SELECT count(*) FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE ${where}`,
+                args,
+              )
+            ).rows[0].count,
+          );
+          const data = (
+            await tx.query(
+              `SELECT u.id,u.full_name,u.email FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE ${where} ORDER BY u.full_name,u.id LIMIT $4 OFFSET $5`,
+              [...args, q.page_size, (q.page - 1) * q.page_size],
+            )
+          ).rows;
+          return { data, total, page: q.page, page_size: q.page_size };
+        },
+        true,
+      );
+      res.json(result);
+    }),
+  );
+  router.get(
     '/resources/:resource',
     asyncRoute(async (req, res) => {
       const name = validName(String(req.params.resource)),
@@ -238,7 +382,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             (await tx.query(`SELECT count(*) FROM ${name} t WHERE ${where}`, params)).rows[0].count,
           );
           const list = await tx.query(
-            `SELECT t.* FROM ${name} t WHERE ${where} ORDER BY t.created_at DESC,t.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+            `SELECT ${resourceSelect(name)} FROM ${name} t WHERE ${where} ORDER BY t.created_at DESC,t.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, q.page_size, (q.page - 1) * q.page_size],
           );
           return { data: list.rows, total, page: q.page, page_size: q.page_size };
@@ -268,7 +412,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         async (tx) =>
           (
             await tx.query(
-              `SELECT t.* FROM ${name} t WHERE t.school_id=$1 AND t.id=$3 AND ${resourceScope(name, a)}`,
+              `SELECT ${resourceSelect(name)} FROM ${name} t WHERE t.school_id=$1 AND t.id=$3 AND ${resourceScope(name, a)}`,
               [a.context.schoolId, a.id, id],
             )
           ).rows[0],
@@ -486,20 +630,19 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.get(
     '/corrections',
     permission('attendance.read'),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                `SELECT c.*,t.student_id,t.attendance_date,s.first_name,s.last_name FROM attendance_corrections c JOIN daily_attendance t ON t.school_id=c.school_id AND t.id=c.daily_attendance_id JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id WHERE c.school_id=$1 AND ${studentScope(a, 't.student_id', '$2')} ORDER BY c.requested_at DESC LIMIT 100`,
-                [a.context.schoolId, a.id],
-              )
-            ).rows,
-          }),
+          (tx) =>
+            paged(
+              tx,
+              `SELECT c.*,t.student_id,t.attendance_date,s.first_name,s.last_name FROM attendance_corrections c JOIN daily_attendance t ON t.school_id=c.school_id AND t.id=c.daily_attendance_id JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id WHERE c.school_id=$1 AND ${studentScope(a, 't.student_id', '$2')} ORDER BY c.requested_at DESC,c.id`,
+              [a.context.schoolId, a.id],
+              req.query,
+            ),
           true,
         ),
       );
@@ -639,20 +782,30 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.get(
     '/audit',
     permission('audit.read'),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                'SELECT id,occurred_at,actor_type,action,entity_type,entity_id FROM audit_logs WHERE school_id=$1 ORDER BY occurred_at DESC LIMIT 100',
-                [a.context.schoolId],
-              )
-            ).rows,
-          }),
+          (tx) =>
+            req.query.cursor === '1'
+              ? cursorPage(
+                  tx,
+                  'SELECT id,occurred_at,actor_type,action,entity_type,entity_id FROM audit_logs',
+                  'WHERE school_id=$1',
+                  [a.context.schoolId],
+                  'occurred_at',
+                  'id',
+                  'bigint',
+                  req.query,
+                )
+              : paged(
+                  tx,
+                  'SELECT id,occurred_at,actor_type,action,entity_type,entity_id FROM audit_logs WHERE school_id=$1 ORDER BY occurred_at DESC,id DESC',
+                  [a.context.schoolId],
+                  req.query,
+                ),
           true,
         ),
       );
@@ -665,43 +818,105 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
       const a = res.locals.actor,
         b = inviteSchema.parse(req.body);
       await transaction(pool, a.context, (tx) => requireWrite(tx, a));
-      const existing = await storage.auth.admin.inviteUserByEmail(b.email, {
-        data: { full_name: b.full_name },
-        redirectTo: config.WEB_ORIGINS.split(',')[0] + '/auth/callback',
-      });
-      if (existing.error)
-        throw new ApiError(
-          422,
-          'INVITATION_FAILED',
-          'Invitation could not be sent. For an existing account, use the membership onboarding script after verifying its identity.',
+      res
+        .status(201)
+        .json(
+          await inviteMember(
+            pool,
+            a.context,
+            storage,
+            { school_id: a.context.schoolId, ...b },
+            config.WEB_ORIGINS.split(',')[0].trim() + '/auth/callback',
+          ),
         );
-      const id = existing.data.user!.id;
-      await transaction(pool, a.context, async (tx) => {
-        await tx.query(
-          "INSERT INTO school_memberships(school_id,user_id,role_id,status,invited_by) SELECT $1,$2,id,'ACTIVE',$3 FROM roles WHERE code=$4",
-          [a.context.schoolId, id, a.id, b.role],
-        );
+    }),
+  );
+  router.get(
+    '/invitations',
+    permission('users.manage'),
+    asyncRoute(async (req, res) => {
+      res.json(
+        await transaction(
+          pool,
+          res.locals.actor.context,
+          (tx) =>
+            paged(
+              tx,
+              'SELECT id,email,full_name,role_code,status,expires_at FROM school_invitations WHERE school_id=$1 ORDER BY created_at DESC,id',
+              [res.locals.actor.context.schoolId],
+              req.query,
+            ),
+          true,
+        ),
+      );
+    }),
+  );
+  router.post(
+    '/invitations/:id/resend',
+    permission('users.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      const item = await transaction(pool, a.context, async (tx) => {
+        await requireWrite(tx, a);
+        return (
+          await tx.query(
+            'SELECT email,full_name,role_code FROM school_invitations WHERE id=$1 AND school_id=$2',
+            [id, a.context.schoolId],
+          )
+        ).rows[0];
       });
-      res.status(201).json({ id, email: b.email, status: 'INVITED' });
+      if (!item) throw notFound();
+      res.json(
+        await inviteMember(
+          pool,
+          a.context,
+          storage,
+          {
+            school_id: a.context.schoolId,
+            email: item.email,
+            full_name: item.full_name,
+            role: item.role_code,
+          },
+          config.WEB_ORIGINS.split(',')[0].trim() + '/auth/callback',
+          true,
+        ),
+      );
+    }),
+  );
+  router.post(
+    '/invitations/:id/cancel',
+    permission('users.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      try {
+        await transaction(pool, a.context, async (tx) => {
+          await requireWrite(tx, a);
+          await tx.query('SELECT app.cancel_school_invitation($1)', [id]);
+        });
+      } catch (error) {
+        invitationError(error);
+      }
+      res.status(204).end();
     }),
   );
   router.get(
     '/memberships',
     permission('users.manage'),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                'SELECT m.id,m.user_id,u.full_name,u.email,r.code AS role,m.status FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 ORDER BY u.full_name',
-                [a.context.schoolId],
-              )
-            ).rows,
-          }),
+          (tx) =>
+            paged(
+              tx,
+              'SELECT m.id,m.user_id,u.full_name,u.email,r.code AS role,m.status FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 ORDER BY u.full_name,m.id',
+              [a.context.schoolId],
+              req.query,
+            ),
           true,
         ),
       );
@@ -723,6 +938,9 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
       res.json(
         await transaction(pool, a.context, async (tx) => {
           await requireWrite(tx, a);
+          await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+            a.context.schoolId + ':memberships',
+          ]);
           const old = (
             await tx.query(
               'SELECT * FROM school_memberships WHERE school_id=$1 AND id=$2 FOR UPDATE',
@@ -730,6 +948,12 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             )
           ).rows[0];
           if (!old) throw notFound();
+          if (old.status === 'INVITED')
+            throw new ApiError(
+              409,
+              'INVITATION_PENDING',
+              'The invited person must accept their invitation before access becomes active.',
+            );
           if (old.user_id === a.id)
             throw new ApiError(
               409,
@@ -782,20 +1006,19 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.get(
     '/reports',
     permission('reports.export'),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                'SELECT id,kind,status,student_id,class_id,created_at,error_code FROM report_documents WHERE school_id=$1 AND requested_by=$2 ORDER BY created_at DESC LIMIT 100',
-                [a.context.schoolId, a.id],
-              )
-            ).rows,
-          }),
+          (tx) =>
+            paged(
+              tx,
+              'SELECT id,kind,status,student_id,class_id,created_at,error_code FROM report_documents WHERE school_id=$1 AND requested_by=$2 ORDER BY created_at DESC,id',
+              [a.context.schoolId, a.id],
+              req.query,
+            ),
           true,
         ),
       );
@@ -933,20 +1156,34 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.get(
     '/notifications',
     permission('notifications.read'),
-    asyncRoute(async (_req, res) => {
+    asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       res.json(
         await transaction(
           pool,
           a.context,
-          async (tx) => ({
-            data: (
-              await tx.query(
-                `SELECT d.id,d.channel,d.status,d.created_at,d.sent_at,d.last_error,o.kind,o.payload FROM notification_deliveries d JOIN notification_outbox o ON o.school_id=d.school_id AND o.id=d.outbox_id WHERE d.school_id=$1 ${a.active!.role === 'parent' ? 'AND EXISTS(SELECT 1 FROM parents p WHERE p.school_id=d.school_id AND p.id=d.parent_id AND p.user_id=$2)' : 'AND $2::uuid IS NOT NULL'} ORDER BY d.created_at DESC LIMIT 100`,
-                [a.context.schoolId, a.id],
-              )
-            ).rows,
-          }),
+          (tx) => {
+            const select =
+                'SELECT d.id,d.channel,d.status,d.created_at,d.sent_at,d.last_error,t.kind,t.payload FROM notification_deliveries d JOIN notification_outbox t ON t.school_id=d.school_id AND t.id=d.outbox_id',
+              where = `WHERE d.school_id=$1 ${a.active!.role === 'parent' ? `AND EXISTS(SELECT 1 FROM parents p WHERE p.school_id=d.school_id AND p.id=d.parent_id AND p.user_id=$2 AND p.status='ACTIVE') AND (t.student_id IS NULL OR ${studentScope(a, 't.student_id', '$2')}) AND (t.payload->>'class_id' IS NULL OR ${classScope(a, "(t.payload->>'class_id')::uuid", '$2')})` : 'AND $2::uuid IS NOT NULL'}`;
+            return req.query.cursor === '1'
+              ? cursorPage(
+                  tx,
+                  select,
+                  where,
+                  [a.context.schoolId, a.id],
+                  'd.created_at',
+                  'd.id',
+                  'uuid',
+                  req.query,
+                )
+              : paged(
+                  tx,
+                  `${select} ${where} ORDER BY d.created_at DESC,d.id DESC`,
+                  [a.context.schoolId, a.id],
+                  req.query,
+                );
+          },
           true,
         ),
       );

@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './fixtures/preview-app';
 import AxeBuilder from '@axe-core/playwright';
 test.use({ reducedMotion: 'reduce' });
 test('setup workspace is honest, responsive and keyboard accessible', async ({ page }, info) => {

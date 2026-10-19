@@ -9,20 +9,21 @@
     "start": "node dist/apps/api/src/server.js"
   },
   "dependencies": {
-    "@vidyalayaa/contracts": "1.0.0",
     "@supabase/supabase-js": "^2.80.0",
-    "express": "^5.1.0",
-    "pg": "^8.16.3",
+    "@vidyalayaa/contracts": "1.0.0",
     "cors": "^2.8.5",
-    "helmet": "^8.1.0",
+    "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
+    "firebase-admin": "^14.5.0",
+    "helmet": "^8.1.0",
+    "jose": "^6.1.0",
+    "pg": "^8.16.3",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
-    "jose": "^6.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/express": "^5.0.5",
-    "@types/cors": "^2.8.19"
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5"
   }
 }

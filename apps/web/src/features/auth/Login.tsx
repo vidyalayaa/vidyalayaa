@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -8,16 +8,49 @@ import {
   ShieldCheck,
   GraduationCap,
 } from 'lucide-react';
-import { configured, supabase } from '../../lib/auth';
+import {
+  completePasswordSetup,
+  completeGoogleSignIn,
+  startGoogleSignIn,
+  getSignInFactor,
+  configured,
+  supabase,
+  useAuth,
+} from '../../lib/auth';
+import { safeReturnTo } from '../../lib/auth-return';
 import { Button } from '../../components/ui/button';
 export default function Login() {
   const navigate = useNavigate(),
     [params] = useSearchParams(),
-    [recovery, setRecovery] = useState(false),
+    [recovery, setRecovery] = useState(params.get('recovery') === '1'),
     [error, setError] = useState(''),
     [message, setMessage] = useState(''),
     [pending, setPending] = useState(false),
-    [factor, setFactor] = useState('');
+    [factor, setFactor] = useState(''),
+    [checkingMfa, setCheckingMfa] = useState(params.get('mfa') === '1');
+  const submitting = useRef(false);
+  const auth = useAuth();
+  const mfaRequested = params.get('mfa') === '1';
+  const returnTo = safeReturnTo(params.get('returnTo'));
+  useEffect(() => {
+    if (!mfaRequested) return;
+    let ignore = false;
+    getSignInFactor()
+      .then((id) => {
+        if (ignore) return;
+        if (id) setFactor(id);
+        else navigate(returnTo, { replace: true });
+      })
+      .catch((cause: Error) => {
+        if (!ignore) setError(cause.message);
+      })
+      .finally(() => {
+        if (!ignore) setCheckingMfa(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [mfaRequested, navigate, returnTo]);
   return (
     <div className="login-page">
       <section className="login-story">
@@ -72,11 +105,13 @@ export default function Login() {
         <div className="login-form-box">
           <span className="eyebrow">YOUR SCHOOL, IN SYNC</span>
           <h2>
-            {factor
-              ? 'One more secure step.'
-              : recovery
-                ? 'Let’s get you back in.'
-                : 'Good to see you.'}
+            {checkingMfa
+              ? 'Checking account security…'
+              : factor
+                ? 'One more secure step.'
+                : recovery
+                  ? 'Let’s get you back in.'
+                  : 'Good to see you.'}
           </h2>
           <p>
             {factor
@@ -91,12 +126,62 @@ export default function Login() {
               connection steps.
             </div>
           )}
+          {!factor && !recovery && !checkingMfa && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-6 w-full"
+                disabled={pending || !configured}
+                onClick={async () => {
+                  if (submitting.current) return;
+                  submitting.current = true;
+                  setPending(true);
+                  setError('');
+                  setMessage('');
+                  try {
+                    await startGoogleSignIn(returnTo);
+                  } catch (cause) {
+                    setError((cause as Error).message);
+                    setPending(false);
+                    submitting.current = false;
+                  }
+                }}
+              >
+                <svg aria-hidden="true" viewBox="0 0 48 48" className="size-5">
+                  <path
+                    fill="#4285F4"
+                    d="M43.61 24.46c0-1.36-.12-2.66-.35-3.92H24v7.42h11a9.4 9.4 0 0 1-4.08 6.18v5.14h6.61c3.86-3.56 6.08-8.8 6.08-14.82Z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M24 44c5.5 0 10.1-1.83 13.47-4.72l-6.61-5.14c-1.83 1.22-4.17 1.96-6.86 1.96-5.3 0-9.79-3.58-11.4-8.4H5.78v5.3A20 20 0 0 0 24 44Z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M12.6 27.7a12 12 0 0 1 0-7.4V15H5.78a20 20 0 0 0 0 18l6.82-5.3Z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M24 11.9c3 0 5.7 1.03 7.82 3.06l5.87-5.87C34.13 5.77 29.5 4 24 4A20 20 0 0 0 5.78 15l6.82 5.3c1.61-4.82 6.1-8.4 11.4-8.4Z"
+                  />
+                </svg>
+                Continue with Google
+              </Button>
+              <div className="my-5 flex items-center gap-3 text-xs text-stone-500">
+                <span className="h-px flex-1 bg-stone-200" />
+                Or sign in with email
+                <span className="h-px flex-1 bg-stone-200" />
+              </div>
+            </>
+          )}
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               setError('');
               setMessage('');
-              if (!supabase) return;
+              if (!supabase || submitting.current || checkingMfa) return;
+              submitting.current = true;
               setPending(true);
               const f = new FormData(e.currentTarget);
               try {
@@ -106,7 +191,7 @@ export default function Login() {
                     code: String(f.get('code')),
                   });
                   if (r.error) throw r.error;
-                  navigate('/');
+                  navigate(returnTo, { replace: true });
                 } else if (recovery) {
                   const r = await supabase.auth.resetPasswordForEmail(String(f.get('email')), {
                     redirectTo: location.origin + '/auth/callback',
@@ -119,22 +204,21 @@ export default function Login() {
                     password: String(f.get('password')),
                   });
                   if (r.error) throw r.error;
-                  const factors = await supabase.auth.mfa.listFactors();
-                  const verified = factors.data?.totp.find((x) => x.status === 'verified');
-                  if (verified) setFactor(verified.id);
-                  else {
-                    const to = params.get('returnTo');
-                    navigate(to?.startsWith('/') && !to.startsWith('//') ? to : '/');
-                  }
+                  const id = await getSignInFactor();
+                  if (id) setFactor(id);
+                  else navigate(returnTo, { replace: true });
                 }
               } catch (e) {
                 setError((e as Error).message);
               } finally {
                 setPending(false);
+                submitting.current = false;
               }
             }}
           >
-            {factor ? (
+            {checkingMfa ? (
+              <p role="status">Checking your authenticator settings…</p>
+            ) : factor ? (
               <div>
                 <label className="field-label" htmlFor="code">
                   Authentication code
@@ -200,7 +284,11 @@ export default function Login() {
                 {message}
               </p>
             )}
-            <Button className="mt-6 w-full" variant="lime" disabled={pending || !configured}>
+            <Button
+              className="mt-6 w-full"
+              variant="lime"
+              disabled={pending || checkingMfa || !configured}
+            >
               {pending
                 ? 'Please wait…'
                 : factor
@@ -211,6 +299,20 @@ export default function Login() {
               <ArrowRight size={16} />
             </Button>
           </form>
+          {factor && (
+            <button
+              type="button"
+              className="mt-5 text-sm underline"
+              disabled={pending}
+              onClick={async () => {
+                await auth.logout();
+                navigate('/login', { replace: true });
+                setFactor('');
+              }}
+            >
+              Use a different account
+            </button>
+          )}
           {recovery && (
             <button className="mt-5 text-sm underline" onClick={() => setRecovery(false)}>
               Back to sign in
@@ -232,51 +334,162 @@ export default function Login() {
     </div>
   );
 }
-export function AuthCallback() {
-  const [message, setMessage] = useState(''),
-    [error, setError] = useState(''),
-    navigate = useNavigate();
+export function GoogleCallback() {
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+  useEffect(() => {
+    let ignore = false;
+    completeGoogleSignIn()
+      .then((returnTo) => {
+        if (!ignore)
+          navigate(`/login?mfa=1&returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+      })
+      .catch((cause: Error) => {
+        if (!ignore) setError(cause.message);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [navigate]);
   return (
     <div className="callback-page">
       <div className="panel p-8">
-        <h1 className="text-2xl font-semibold">Make yourself at home.</h1>
+        <h1 className="text-2xl font-semibold">
+          {error ? 'Google sign-in needs another try.' : 'Completing Google sign-in…'}
+        </h1>
+        {error ? (
+          <>
+            <p className="field-error my-4" role="alert">
+              {error}
+            </p>
+            <Button asChild variant="lime">
+              <Link to="/login">Back to sign in</Link>
+            </Button>
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-stone-600" role="status">
+            Please wait while we verify your account.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+export function AuthCallback() {
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [identity, setIdentity] = useState<{ id: string; email?: string } | null>(null);
+  const submitting = useRef(false);
+  const navigate = useNavigate();
+  useEffect(() => {
+    let ignore = false;
+    completePasswordSetup()
+      .then((account) => {
+        if (!ignore) setIdentity(account);
+      })
+      .catch((cause: Error) => {
+        if (!ignore) setError(cause.message);
+      })
+      .finally(() => {
+        if (!ignore) setChecking(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+  return (
+    <div className="callback-page">
+      <div className="panel p-8">
+        <h1 className="text-2xl font-semibold">
+          {checking
+            ? 'Checking your setup link…'
+            : identity
+              ? 'Make yourself at home.'
+              : 'Request a fresh setup link.'}
+        </h1>
         <p className="my-3 text-sm text-stone-500">
-          Set a new password to finish your invitation or recovery.
+          {checking
+            ? 'Please wait while we verify your account.'
+            : identity
+              ? `Choose your Vidyalayaa password for ${identity.email || 'your account'}.`
+              : 'Use a new password setup email to continue securely.'}
         </p>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const password = String(new FormData(e.currentTarget).get('password'));
-            if (!supabase) return;
-            const r = await supabase.auth.updateUser({ password });
-            if (r.error) setError(r.error.message);
-            else {
-              setMessage('Password updated.');
-              navigate('/');
-            }
-          }}
-        >
-          <label className="field-label" htmlFor="new-password">
-            New password
-          </label>
-          <input
-            id="new-password"
-            name="password"
-            className="input"
-            type="password"
-            minLength={12}
-            autoComplete="new-password"
-            required
-          />
-          <Button className="mt-4" variant="lime">
-            Set password & continue
-          </Button>
-        </form>
-        {message && <p role="status">{message}</p>}
+        {identity && (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!supabase || submitting.current) return;
+              const fields = new FormData(e.currentTarget);
+              const password = String(fields.get('password'));
+              if (password !== String(fields.get('confirmation'))) {
+                setError('The passwords do not match.');
+                return;
+              }
+              submitting.current = true;
+              setPending(true);
+              setError('');
+              try {
+                // A stale or rejected callback must never update a different account
+                // that happens to be signed in in this browser.
+                const current = await supabase.auth.getUser();
+                if (current.error || current.data.user?.id !== identity.id) {
+                  setIdentity(null);
+                  throw new Error(
+                    'Your sign-in changed. Request a new setup link before choosing a password.',
+                  );
+                }
+                const result = await supabase.auth.updateUser({ password });
+                if (result.error) throw result.error;
+                navigate('/settings', { replace: true });
+              } catch (cause) {
+                setError((cause as Error).message);
+              } finally {
+                submitting.current = false;
+                setPending(false);
+              }
+            }}
+          >
+            <label className="field-label" htmlFor="new-password">
+              New password
+            </label>
+            <input
+              id="new-password"
+              name="password"
+              className="input"
+              type="password"
+              minLength={12}
+              autoComplete="new-password"
+              disabled={pending}
+              required
+            />
+            <label className="field-label mt-4" htmlFor="confirm-password">
+              Confirm password
+            </label>
+            <input
+              id="confirm-password"
+              name="confirmation"
+              className="input"
+              type="password"
+              minLength={12}
+              autoComplete="new-password"
+              disabled={pending}
+              required
+            />
+            <Button className="mt-4" variant="lime" disabled={pending}>
+              {pending ? 'Saving your password…' : 'Set password & continue'}
+            </Button>
+          </form>
+        )}
         {error && (
           <p className="field-error" role="alert">
             {error}
           </p>
+        )}
+        {!checking && !identity && (
+          <Button asChild className="mt-4" variant="lime">
+            <Link to="/login?recovery=1">Request a new setup link</Link>
+          </Button>
         )}
       </div>
     </div>

@@ -43,27 +43,27 @@ DB-REQ-009,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented sour
 DB-REQ-010,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 DB-REQ-011,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 DB-REQ-012,db/migrations; db/tests/verify.sql,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-001,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-002,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-003,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-004,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-005,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-006,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-007,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-008,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-009,apps/api/src/modules/devices; firmware,docs/READINESS.md,Prototype example; production hardware/OTA acceptance pending
-DEV-REQ-010,apps/api/src/modules/devices; firmware,docs/READINESS.md,Prototype example; production hardware/OTA acceptance pending
-DEV-REQ-011,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-012,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-013,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-014,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-DEV-REQ-015,apps/api/src/modules/devices; firmware,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-FE-REQ-001,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-FE-REQ-002,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-FE-REQ-003,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-FE-REQ-004,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-FE-REQ-005,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-FE-REQ-006,apps/web,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+DEV-REQ-001,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-002,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-003,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-004,firmware/include/durable_queue.h; firmware/src/main.cpp,firmware/README.md; docs/READINESS.md,Prototype only: verified durable segment writes and safe acknowledgement cursor source unfinished; power-cut acceptance not run
+DEV-REQ-005,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-006,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-007,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-008,firmware/src/main.cpp; apps/api/src/modules/devices/router.ts,firmware/README.md; docs/READINESS.md,Prototype retry source present; blocking network loop/task separation and measured backlog recovery remain unfinished
+DEV-REQ-009,firmware; apps/api/src/modules/devices/router.ts,firmware/README.md; docs/READINESS.md,Not implemented production source: signed A/B install/anti-rollback/self-test; API image offers disabled; board revision/flash unverified
+DEV-REQ-010,firmware/include/durable_queue.h,firmware/README.md; docs/READINESS.md,Prototype CRC/quarantine source only; segmented queue durability/wear/capacity and power-cut rig remain incomplete/unverified
+DEV-REQ-011,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-012,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-013,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+DEV-REQ-014,apps/api/src/modules/devices/router.ts; db/migrations/202610180008_operations.sql; apps/web/src/features/operations/DeviceConfiguration.tsx,tests/api/workflows.test.ts; tests/database/schema.test.ts,Authenticated configuration/version history/omitted field preservation exercised; physical application pending
+DEV-REQ-015,apps/api/src/modules/devices/router.ts; apps/api/src/modules/attendance/service.ts; apps/worker/src/jobs.ts; firmware,tests/api/workflows.test.ts; tests/unit/engine.test.ts; docs/DEVICE_API.md,Backend contracts exercised locally; device example only and physical reader/clock/queue acceptance pending
+FE-REQ-001,apps/web/src/main.tsx; apps/web/src/components/Layout.tsx; apps/web/src/lib/portals.ts,tests/e2e/onboarding.spec.ts; tests/e2e/school-workflows.spec.ts; tests/e2e/platform.spec.ts,Implemented role portals and shared layout; authenticated fixture journeys exercised on desktop/mobile
+FE-REQ-002,apps/api/src/middleware/auth.ts; apps/api/src/modules/school/resources.ts; apps/web/src/main.tsx,tests/api/workflows.test.ts; tests/api/invitations.test.ts,API role/scope/IDOR rejection exercised; route guards are UX only
+FE-REQ-003,apps/web/src/components/ui; apps/web/src/styles.css,tests/e2e/workspace.spec.ts; docs/READINESS.md,Core setup axe/keyboard checks executed; full manual screen-reader and WCAG acceptance pending
+FE-REQ-004,apps/web/src/lib/auth.tsx; apps/web/src/lib/drafts.ts; apps/web/src/features/auth/Login.tsx,tests/unit/school-time.test.ts; tests/e2e/school-workflows.spec.ts,One forced refresh; private memory checkpoint restored only to same-user reauthentication with school/return path; ownership and desktop/mobile fixtures passed; live staging acceptance pending
+FE-REQ-005,apps/web/src/components/Layout.tsx; apps/web/src/features/resources/ResourceScreen.tsx; apps/web/src/styles.css,tests/e2e/workspace.spec.ts; tests/e2e/school-workflows.spec.ts,Desktop/mobile checks executed; family bottom navigation and private homework flow verified with fixtures; tablet/manual acceptance pending
+FE-REQ-006,apps/web/src/lib/auth.tsx; .env.example; apps/web/.env.example; scripts/check-secrets.mjs,output/verification.json; .github/workflows/ci.yml,Public-only browser configuration; local source/bundle secret scan and dependency audit; history scan configured in CI
 NOT-REQ-001,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 NOT-REQ-002,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 NOT-REQ-003,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
@@ -71,13 +71,13 @@ NOT-REQ-004,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINE
 NOT-REQ-005,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 NOT-REQ-006,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 NOT-REQ-007,apps/worker/src/outbox.ts; apps/worker/src/providers.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-OPS-REQ-001,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-OPS-REQ-002,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-001,.github/workflows/ci.yml,output/verification.json; docs/DEPLOYMENT.md,Type checks/tests/build/secret and dependency scans configured; no remote CI run claimed; dedicated lint gate not yet supplied
+OPS-REQ-002,.github/workflows/deploy.yml; docs/DEPLOYMENT.md,docs/READINESS.md,Staging/promotion configuration supplied; actual cloud deployment/rollback drill pending
 OPS-REQ-003,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,External vendor/legal/restore acceptance pending
-OPS-REQ-004,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-004,apps/worker/src/jobs.ts; apps/worker/src/health.ts; apps/api/src/modules/platform/router.ts; apps/web/src/features/operations/PlatformPanels.tsx,tests/api/worker.test.ts; tests/api/invitations.test.ts; docs/DEPLOYMENT.md,Device/backlog/worker metrics and local checks supplied; external database/API monitors and on-call alert drill require deployment setup
 OPS-REQ-005,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,External vendor/legal/restore acceptance pending
 OPS-REQ-006,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-OPS-REQ-007,render.yaml; firebase.json; .github; docs/DEPLOYMENT.md,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+OPS-REQ-007,apps/api/src/app.ts; apps/worker/src/health.ts; apps/worker/src/healthcheck.ts,tests/api/worker.test.ts; docs/DEPLOYMENT.md,API HTTP probes and private database worker probes implemented; worker intentionally has no public HTTP listener; host monitoring acceptance pending
 PERF-REQ-001,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
 PERF-REQ-002,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
 PERF-REQ-003,tests/load; tests/integration,docs/READINESS.md,Target unmeasured; requires staging load/soak test
@@ -100,7 +100,7 @@ SEC-REQ-011,apps/api/src/middleware; db/migrations; tests/security,docs/READINES
 SEC-REQ-012,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,External vendor/legal/restore acceptance pending
 SEC-REQ-013,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 SEC-REQ-014,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-SEC-REQ-015,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
+SEC-REQ-015,firmware; apps/api/src/modules/devices/router.ts,firmware/README.md; docs/READINESS.md,Production signed OTA installation/anti-rollback source incomplete; API image offers disabled; hardware validation pending
 SEC-REQ-016,apps/api/src/middleware; db/migrations; tests/security,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 SUB-REQ-001,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 SUB-REQ-002,apps/api/src/modules/platform; apps/worker/src/jobs.ts,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
@@ -114,48 +114,48 @@ TEN-REQ-004,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented
 TEN-REQ-005,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 TEN-REQ-006,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
 TEN-REQ-007,apps/api/src/middleware; db/migrations,docs/READINESS.md,Implemented source; see READINESS for local evidence and limits
-TEST-REQ-001,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-002,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-003,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-004,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-005,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-006,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-007,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-008,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-009,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-010,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-011,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-012,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-001,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-002,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-003,tests/database/schema.test.ts,tests/database/schema.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-004,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-005,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-006,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-007,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-008,tests/api/invitations.test.ts,tests/api/invitations.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-009,tests/api/invitations.test.ts,tests/api/invitations.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-010,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-011,tests/integration,docs/READINESS.md,Native five-device multi-connection suite supplied; not executed locally
+TEST-REQ-012,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
 TEST-REQ-013,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
 TEST-REQ-014,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-015,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-016,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-017,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-018,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-019,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-015,firmware; docs/DEPLOYMENT.md,docs/READINESS.md,Not executed: requires physical production firmware/power-cut/OTA or isolated restore drill
+TEST-REQ-016,firmware; docs/DEPLOYMENT.md,docs/READINESS.md,Not executed: requires physical production firmware/power-cut/OTA or isolated restore drill
+TEST-REQ-017,tests/unit/engine.test.ts,tests/unit/engine.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-018,firmware; docs/DEPLOYMENT.md,docs/READINESS.md,Not executed: requires physical production firmware/power-cut/OTA or isolated restore drill
+TEST-REQ-019,tests/unit/engine.test.ts,tests/unit/engine.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
 TEST-REQ-020,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-021,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-021,tests/api/worker.test.ts,tests/api/worker.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
 TEST-REQ-022,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
 TEST-REQ-023,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
 TEST-REQ-024,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
 TEST-REQ-025,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-026,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-027,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-028,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-029,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-030,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-026,firmware; docs/DEPLOYMENT.md,docs/READINESS.md,Not executed: requires physical production firmware/power-cut/OTA or isolated restore drill
+TEST-REQ-027,firmware; docs/DEPLOYMENT.md,docs/READINESS.md,Not executed: requires physical production firmware/power-cut/OTA or isolated restore drill
+TEST-REQ-028,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-029,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-030,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
 TEST-REQ-031,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-032,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-033,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-034,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-035,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-036,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-037,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-032,tests/unit/engine.test.ts,tests/unit/engine.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-033,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-034,tests/api/worker.test.ts,tests/api/worker.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-035,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-036,apps/web/src/lib/auth.tsx; apps/web/src/lib/drafts.ts,tests/e2e/school-workflows.spec.ts; tests/unit/school-time.test.ts,Desktop/mobile expired refresh then same-user password sign-in/draft/return-path fixture passed; cross-identity and explicit logout checkpoint clearing unit test passed; live staging pending
+TEST-REQ-037,tests/api/workflows.test.ts,tests/api/workflows.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
 TEST-REQ-038,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
 TEST-REQ-039,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-040,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-041,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-042,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-040,scripts/check-secrets.mjs,scripts/check-secrets.mjs; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-041,tests/e2e/workspace.spec.ts,tests/e2e/workspace.spec.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
+TEST-REQ-042,tests/unit/engine.test.ts,tests/unit/engine.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)
 TEST-REQ-043,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
 TEST-REQ-044,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
-TEST-REQ-045,tests,tests; docs/READINESS.md,Test inventory; not an assertion that all 45 acceptance cases executed
+TEST-REQ-045,tests/database/schema.test.ts,tests/database/schema.test.ts; output/verification.json,Related local checks executed; exact SAS acceptance scope and external limits remain in READINESS (not blanket acceptance)

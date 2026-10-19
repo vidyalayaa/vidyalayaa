@@ -13,6 +13,9 @@ import {
   reportSchema,
   inviteSchema,
   bulkMarksSchema,
+  firstAdminSchema,
+  deviceTuningSchema,
+  retentionPolicySchema,
 } from '@vidyalayaa/contracts';
 // Generate from the same schemas used by Express and the browser. Do not edit JSON by hand.
 function json(schema: z.ZodTypeAny): Record<string, unknown> {
@@ -90,6 +93,9 @@ const schemas = {
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
+  FirstSchoolAdministrator: firstAdminSchema,
+  DeviceTuning: deviceTuningSchema,
+  RetentionPolicy: retentionPolicySchema,
   ...resourceSchemas,
 };
 const paths: Record<string, Record<string, unknown>> = {};
@@ -113,7 +119,9 @@ function operation(
               {
                 name: 'X-School-Id',
                 in: 'header',
-                required: !['/me'].includes(path),
+                required:
+                  !['/me', '/invitations/pending', '/invitations/{id}/respond'].includes(path) &&
+                  !path.startsWith('/platform/'),
                 schema: { type: 'string', format: 'uuid' },
               },
             ]
@@ -159,6 +167,60 @@ operation('/corrections', 'post', 'Request a correction', 'Correction');
 operation('/corrections/{id}/decision', 'post', 'Approve/reject; self-approval prohibited');
 operation('/marks/bulk', 'post', 'Atomic, idempotent upload of up to 500 mark rows', 'BulkMarks');
 operation('/invitations', 'post', 'Invite school member', 'Invitation');
+operation('/invitations', 'get', 'Paginated school invitations; users.manage');
+operation(
+  '/invitations/pending',
+  'get',
+  'Own invitations matched to a verified Auth email; no school required',
+);
+operation(
+  '/invitations/{id}/respond',
+  'post',
+  'Accept or decline the authenticated recipient’s invitation; {accept:boolean}',
+);
+operation(
+  '/invitations/{id}/resend',
+  'post',
+  'Retry an invitation; users.manage; preserves current sending lease',
+);
+operation(
+  '/invitations/{id}/cancel',
+  'post',
+  'Cancel an unaccepted school invitation; users.manage',
+);
+operation(
+  '/lookups/accounts',
+  'get',
+  'Paginated active school accounts, filtered by teacher/parent/student role; users.manage',
+);
+operation(
+  '/school',
+  'patch',
+  'Update school name, IANA timezone and notification locale; school.manage',
+);
+operation(
+  '/school/retention',
+  'get',
+  'Read approved document/notification retention policy; school.manage',
+);
+operation(
+  '/school/retention',
+  'put',
+  'Record an approved retention policy; no child/audit record deletion',
+  'RetentionPolicy',
+);
+operation('/school/retention', 'delete', 'Stop future retention cleanup; school.manage');
+operation('/support-access', 'get', 'Current school approved support-access notice');
+operation(
+  '/devices/{id}/configurations',
+  'get',
+  'Paginated append-only configuration history; devices.read',
+);
+operation(
+  '/devices/{id}',
+  'patch',
+  'Change reader state and safe tuning; partial config preserves omitted keys',
+);
 operation('/reports', 'get', 'Own reports');
 operation('/reports', 'post', 'Queue a private report', 'ReportRequest');
 operation('/reports/{id}/download', 'get', 'Obtain a short-lived authorized download');
@@ -183,6 +245,37 @@ for (const p of ['/schools', '/devices', '/plans', '/support-grants']) {
   operation('/platform' + p, 'get', `Platform metadata ${p}`);
   if (p !== '/plans') operation('/platform' + p, 'post', `Platform operation ${p}`);
 }
+operation(
+  '/platform/operations',
+  'get',
+  'MFA-protected aggregate usage, backlog and private worker health',
+);
+operation(
+  '/platform/plans/{id}',
+  'patch',
+  'Edit defined plan features/limits; reason and MFA required',
+);
+operation(
+  '/platform/schools/{id}/subscription',
+  'patch',
+  'Edit subscription; omitted overrides and grace period are preserved',
+);
+operation(
+  '/platform/schools/{id}/administrator-invitation',
+  'post',
+  'Invite first School Admin only; email side effect, verified email acceptance and MFA',
+  'FirstSchoolAdministrator',
+);
+operation(
+  '/platform/schools/{id}/administrator-invitation/{invitation}/cancel',
+  'post',
+  'Cancel first-admin invitation before acceptance; MFA required',
+);
+operation(
+  '/platform/support-grants/{id}/{feature}',
+  'get',
+  'Approved, scoped, paginated support read; live grant lock and audit in one transaction',
+);
 for (const [path, methods] of Object.entries(paths))
   for (const op of Object.values(methods)) {
     const o = op as {
@@ -193,7 +286,10 @@ for (const [path, methods] of Object.entries(paths))
         name: m[1],
         in: 'path',
         required: true,
-        schema: { type: 'string', format: 'uuid' },
+        schema:
+          m[1] === 'feature'
+            ? { type: 'string', enum: ['students', 'attendance', 'marks', 'fees'] }
+            : { type: 'string', format: 'uuid' },
       });
   }
 const spec = {

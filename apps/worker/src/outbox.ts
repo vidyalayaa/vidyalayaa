@@ -4,6 +4,7 @@ import { transaction } from '../../api/src/lib/db.js';
 import { decrypt, hash } from '../../api/src/lib/crypto.js';
 import { localParts } from '../../api/src/modules/attendance/engine.js';
 import { deliver, DeliveryError } from './providers.js';
+import { sendPushTargets } from './push-targets.js';
 export const retryDelays = [30, 120, 600, 1800, 7200, 7200];
 interface Job {
   id: string;
@@ -25,14 +26,41 @@ export function inQuietHours(time: string, start: string | null, end: string | n
   if (!start || !end || start === end) return false;
   return start < end ? time >= start && time < end : time >= start || time < end;
 }
-export function messageFor(kind: string, payload: Record<string, unknown>, timezone: string) {
+export function messageFor(
+  kind: string,
+  payload: Record<string, unknown>,
+  timezone: string,
+  locale = 'en-IN',
+) {
   const when = payload.event_time
-    ? new Intl.DateTimeFormat('en-IN', {
+    ? new Intl.DateTimeFormat(locale, {
         timeZone: timezone,
         hour: 'numeric',
         minute: '2-digit',
       }).format(new Date(String(payload.event_time)))
     : '';
+  if (locale === 'hi-IN') {
+    switch (kind) {
+      case 'STUDENT_ARRIVED':
+        return `आपका बच्चा ${when} बजे विद्यालय पहुँचा${payload.attendance_status === 'LATE' ? ' (देरी से)' : ''}।`;
+      case 'STUDENT_DEPARTED':
+        return `आपका बच्चा ${when} बजे विद्यालय से निकला।`;
+      case 'STUDENT_ABSENT':
+        return 'आज आपके बच्चे की अनुपस्थिति दर्ज की गई है।';
+      case 'ATTENDANCE_CORRECTED':
+        return `उपस्थिति में सुधार किया गया है (${String(payload.attendance_status)})। विवरण के लिए Vidyalayaa खोलें।`;
+      case 'FEE_REMINDER':
+        return `${payload.currency} ${(Number(payload.amount_due) - Number(payload.amount_paid)).toFixed(2)} का शुल्क ${String(payload.due_on).slice(0, 10)} तक देय है। विवरण के लिए Vidyalayaa खोलें।`;
+      case 'DEVICE_ALERT':
+        return 'विद्यालय के NFC रीडर की जाँच आवश्यक है। विवरण के लिए Vidyalayaa खोलें।';
+      case 'SUBSCRIPTION_UPDATE':
+        return `विद्यालय की सदस्यता की स्थिति बदली है (${String(payload.subscription_status)})। विवरण के लिए Vidyalayaa खोलें।`;
+      case 'ANNOUNCEMENT':
+        return `विद्यालय की सूचना: ${String(payload.title || 'नई सूचना के लिए Vidyalayaa खोलें।')}`;
+      default:
+        return 'विद्यालय की नई जानकारी के लिए Vidyalayaa खोलें।';
+    }
+  }
   switch (kind) {
     case 'STUDENT_ARRIVED':
       return `Your child arrived at school at ${when}${payload.attendance_status === 'LATE' ? ' (late)' : ''}.`;
@@ -74,8 +102,9 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
         pool,
         ctx,
         async (tx) => {
-          const school = (await tx.query('SELECT timezone FROM schools WHERE id=$1', [schoolId]))
-            .rows[0];
+          const school = (
+            await tx.query('SELECT timezone,settings FROM schools WHERE id=$1', [schoolId])
+          ).rows[0];
           const sub = (
             await tx.query(
               'SELECT s.status,p.features FROM subscriptions s JOIN subscription_plans p ON p.id=s.plan_id WHERE s.school_id=$1 ORDER BY s.created_at DESC LIMIT 1',
@@ -90,6 +119,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
           ).rows;
           return {
             timezone: school.timezone,
+            locale: school.settings.locale === 'hi-IN' ? 'hi-IN' : 'en-IN',
             sub,
             recipients: ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
               ? [
@@ -118,6 +148,18 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
                 [schoolId, parent.id, job.kind, channel],
               )
             ).rows[0];
+            const pushTargets =
+              channel === 'PUSH' && parent.user_id
+                ? (
+                    await tx.query(
+                      "SELECT id,token_encrypted FROM push_tokens WHERE school_id=$1 AND user_id=$2 AND is_active AND last_seen_at>now()-interval '60 days'",
+                      [schoolId, parent.user_id],
+                    )
+                  ).rows.map((x) => ({
+                    id: x.id,
+                    address: decrypt(x.token_encrypted, encryptionKey),
+                  }))
+                : [];
             const addresses =
               channel === 'EMAIL'
                 ? parent.email
@@ -127,14 +169,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
                   ? parent.phone
                     ? [parent.phone]
                     : []
-                  : parent.user_id
-                    ? (
-                        await tx.query(
-                          "SELECT token_encrypted FROM push_tokens WHERE school_id=$1 AND user_id=$2 AND is_active AND last_seen_at>now()-interval '60 days'",
-                          [schoolId, parent.user_id],
-                        )
-                      ).rows.map((x) => decrypt(x.token_encrypted, encryptionKey))
-                    : [];
+                  : pushTargets.map((x) => x.address);
             let status = 'PENDING';
             const eventTime = new Date(
               String(job.payload.event_time || job.created_at.toISOString()),
@@ -198,7 +233,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               ]);
               delivery.status = status;
             }
-            return { addresses, delivery };
+            return { addresses, delivery, pushTargets };
           });
           const delivery = data.delivery;
           if (!['PENDING', 'FAILED'].includes(delivery.status)) continue;
@@ -213,13 +248,35 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
           const attempt = delivery.attempts + 1;
           try {
             let providerId = '';
-            for (const address of data.addresses)
-              providerId = await deliver(
-                channel,
-                address,
-                messageFor(job.kind, job.payload, context.timezone),
+            if (channel === 'PUSH')
+              providerId = await sendPushTargets(
+                pool,
+                schoolId,
                 delivery.id,
+                data.pushTargets,
+                messageFor(job.kind, job.payload, context.timezone, context.locale),
               );
+            else
+              for (const address of data.addresses) {
+                const rate = Number(process.env[`${channel}_RATE_PER_SECOND`] || 10),
+                  capacity = Number(process.env[`${channel}_BURST`] || 10);
+                const wait = Number(
+                  (
+                    await pool.query('SELECT app.take_provider_token($1,$2,$3) AS wait', [
+                      channel,
+                      rate,
+                      capacity,
+                    ])
+                  ).rows[0].wait,
+                );
+                if (wait) throw new DeliveryError('PROVIDER_THROTTLED', false, wait);
+                providerId = await deliver(
+                  channel,
+                  address,
+                  messageFor(job.kind, job.payload, context.timezone, context.locale),
+                  delivery.id,
+                );
+              }
             await transaction(pool, ctx, async (tx) => {
               await tx.query(
                 "UPDATE notification_deliveries SET status='SENT',attempts=$2,provider_message_id=$3,sent_at=now(),last_error=NULL WHERE id=$1",
@@ -250,11 +307,6 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
                 'INSERT INTO notification_attempts(school_id,delivery_id,attempt,status,error_code) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
                 [schoolId, delivery.id, attempt, dead ? 'DEAD' : 'FAILED', e.code],
               );
-              if (channel === 'PUSH' && e.permanent && parent.user_id)
-                await tx.query(
-                  'UPDATE push_tokens SET is_active=false WHERE school_id=$1 AND user_id=$2',
-                  [schoolId, parent.user_id],
-                );
             });
           }
         }

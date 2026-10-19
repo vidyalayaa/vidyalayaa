@@ -2,7 +2,8 @@ import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { bulkMarksSchema, type Page } from '@vidyalayaa/contracts';
 import { parseCsv } from '../../lib/csv';
-import { api, useAuth } from '../../lib/auth';
+import { api, useAuth, HttpError } from '../../lib/auth';
+import { ZodError } from 'zod';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
 async function all(resource: string) {
@@ -18,6 +19,7 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
     qc = useQueryClient(),
     [file, setFile] = useState<File | null>(null),
     [error, setError] = useState(''),
+    [rowErrors, setRowErrors] = useState<string[]>([]),
     [pending, setPending] = useState(false),
     idempotency = useRef(crypto.randomUUID());
   const exams = useQuery({
@@ -39,6 +41,7 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
         onSubmit={async (e) => {
           e.preventDefault();
           setError('');
+          setRowErrors([]);
           if (!file) return;
           const exam_id = String(new FormData(e.currentTarget).get('exam_id'));
           setPending(true);
@@ -72,7 +75,25 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
             qc.invalidateQueries({ queryKey: [a.school] });
             close();
           } catch (e) {
-            setError((e as Error).message);
+            const issues =
+              e instanceof ZodError
+                ? e.issues
+                : e instanceof HttpError && Array.isArray(e.details)
+                  ? e.details
+                  : [];
+            setRowErrors(
+              issues.map((issue: { path: (string | number)[]; message: string }) => {
+                const index = issue.path.indexOf('entries'),
+                  row = index >= 0 ? Number(issue.path[index + 1]) + 2 : undefined;
+                return `${row ? `CSV row ${row}: ` : ''}${issue.message} (${issue.path.filter((x) => typeof x === 'string' && x !== 'entries').join(' / ')})`;
+              }),
+            );
+            setError(
+              e instanceof ZodError
+                ? 'Check the highlighted CSV rows.'
+                : (e as Error).message +
+                    (e instanceof HttpError && e.requestId ? ` Reference: ${e.requestId}` : ''),
+            );
           } finally {
             setPending(false);
           }
@@ -117,6 +138,13 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
           <p className="field-error" role="alert">
             {error}
           </p>
+        )}
+        {!!rowErrors.length && (
+          <ul className="field-error list-disc pl-5" aria-label="CSV validation errors">
+            {rowErrors.map((message, i) => (
+              <li key={i}>{message}</li>
+            ))}
+          </ul>
         )}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={close}>

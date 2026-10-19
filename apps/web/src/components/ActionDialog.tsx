@@ -3,13 +3,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
 import { Dialog } from './ui/dialog';
-import { label } from '../lib/utils';
+import { label, fromDateTimeLocal } from '../lib/utils';
+import RecordSelect from './RecordSelect';
 export interface ActionField {
   key: string;
   type?: string;
   options?: string[];
   optional?: boolean;
   default?: string;
+  lookup?: string;
 }
 export function ActionDialog({
   open,
@@ -62,6 +64,10 @@ export function ActionDialog({
             body: Record<string, unknown> = {};
           try {
             for (const field of fields) {
+              if (field.type === 'multiselect') {
+                body[field.key] = f.getAll(field.key).map(String);
+                continue;
+              }
               const value = String(f.get(field.key) || '');
               if (field.optional && !value) continue;
               body[field.key] =
@@ -70,58 +76,104 @@ export function ActionDialog({
                   : field.type === 'json'
                     ? JSON.parse(value)
                     : field.type === 'datetime-local'
-                      ? new Date(value).toISOString()
+                      ? fromDateTimeLocal(value, a.me?.school?.timezone)
                       : field.type === 'boolean'
                         ? value === 'true'
                         : value;
             }
             mutation.mutate(body);
-          } catch {
-            setError('Check JSON and date fields before saving.');
+          } catch (error) {
+            setError(
+              error instanceof SyntaxError
+                ? 'Check the JSON fields before saving.'
+                : (error as Error).message,
+            );
           }
         }}
       >
-        {fields.map((field) => (
-          <div
-            key={field.key}
-            className={['textarea', 'json'].includes(field.type || '') ? 'col-span-full' : ''}
-          >
-            <label className="field-label" htmlFor={`action-${field.key}`}>
-              {label(field.key.replace(/_id$/, ''))}
-              {field.optional && <span>optional</span>}
-            </label>
-            {field.options || field.type === 'boolean' ? (
-              <select
-                id={`action-${field.key}`}
-                name={field.key}
-                className="input"
-                defaultValue={field.default}
+        {fields.map((field) =>
+          field.type === 'hidden' ? (
+            <input key={field.key} name={field.key} type="hidden" value={field.default || ''} />
+          ) : (
+            <div
+              key={field.key}
+              className={['textarea', 'json'].includes(field.type || '') ? 'col-span-full' : ''}
+            >
+              <label
+                className="field-label"
+                id={`action-${field.key}-label`}
+                htmlFor={field.type === 'multiselect' ? undefined : `action-${field.key}`}
               >
-                {(field.options || ['true', 'false']).map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
-            ) : ['textarea', 'json'].includes(field.type || '') ? (
-              <textarea
-                id={`action-${field.key}`}
-                name={field.key}
-                rows={5}
-                className="input"
-                defaultValue={field.default}
-                required={!field.optional}
-              />
-            ) : (
-              <input
-                id={`action-${field.key}`}
-                className="input"
-                name={field.key}
-                type={field.type || 'text'}
-                defaultValue={field.default}
-                required={!field.optional}
-              />
-            )}
-          </div>
-        ))}
+                {label(field.key.replace(/_id$/, ''))}
+                {field.optional && <span>optional</span>}
+              </label>
+              {field.type === 'multiselect' ? (
+                <fieldset
+                  aria-labelledby={`action-${field.key}-label`}
+                  className="grid grid-cols-2 gap-3"
+                >
+                  {field.options?.map((option) => (
+                    <label key={option} className="flex gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name={field.key}
+                        value={option}
+                        defaultChecked={(JSON.parse(field.default || '[]') as string[]).includes(
+                          option,
+                        )}
+                      />
+                      {label(option)}
+                    </label>
+                  ))}
+                </fieldset>
+              ) : field.lookup ? (
+                <RecordSelect
+                  name={field.key}
+                  id={`action-${field.key}`}
+                  endpoint={field.lookup}
+                  defaultValue={field.default}
+                  optional={field.optional}
+                  label={label(field.key.replace(/_id$/, ''))}
+                />
+              ) : field.options || field.type === 'boolean' ? (
+                <select
+                  id={`action-${field.key}`}
+                  name={field.key}
+                  className="input"
+                  defaultValue={field.default}
+                >
+                  {(field.options || ['true', 'false']).map((o) => (
+                    <option key={o} value={o}>
+                      {o === 'en-IN'
+                        ? 'English (India)'
+                        : o === 'hi-IN'
+                          ? 'हिन्दी (भारत)'
+                          : label(o)}
+                    </option>
+                  ))}
+                </select>
+              ) : ['textarea', 'json'].includes(field.type || '') ? (
+                <textarea
+                  id={`action-${field.key}`}
+                  name={field.key}
+                  rows={5}
+                  className="input"
+                  defaultValue={field.default}
+                  required={!field.optional}
+                />
+              ) : (
+                <input
+                  id={`action-${field.key}`}
+                  className="input"
+                  name={field.key}
+                  type={field.type || 'text'}
+                  defaultValue={field.default}
+                  required={!field.optional}
+                />
+              )}
+            </div>
+          ),
+        )}
         {error && (
           <p role="alert" className="field-error col-span-full">
             {error}

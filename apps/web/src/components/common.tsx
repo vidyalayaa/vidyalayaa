@@ -2,6 +2,7 @@ import { ArrowUpRight, Inbox, Loader2, RefreshCw, ShieldCheck, AlertCircle } fro
 import type { ReactNode } from 'react';
 import { Button } from './ui/button';
 import { display, label, cn } from '../lib/utils';
+import { useAuth } from '../lib/auth';
 export function Badge({ children }: { children: ReactNode }) {
   const value = String(children);
   return (
@@ -118,11 +119,16 @@ export function DataTable({
   rows,
   columns,
   onEdit,
+  onView,
+  actions,
 }: {
   rows: Record<string, unknown>[];
   columns: string[];
   onEdit?: (row: Record<string, unknown>) => void;
+  onView?: (row: Record<string, unknown>) => void;
+  actions?: (row: Record<string, unknown>) => ReactNode;
 }) {
+  const timeZone = useAuth().me?.school?.timezone;
   return (
     <div className="table-scroll">
       <table>
@@ -133,7 +139,7 @@ export function DataTable({
                 {label(c.replace(/_id$/, ''))}
               </th>
             ))}
-            {onEdit && (
+            {(onEdit || onView || actions) && (
               <th scope="col">
                 <span className="sr-only">Actions</span>
               </th>
@@ -156,22 +162,34 @@ export function DataTable({
                     <Badge>{display(row[c])}</Badge>
                   ) : c.endsWith('_id') ? (
                     <span className="text-xs text-stone-500" title={String(row[c] || '')}>
-                      {display(row[c]).slice(0, 12)}
+                      {row[c.replace(/_id$/, '_label')]
+                        ? display(row[c.replace(/_id$/, '_label')])
+                        : display(row[c]).slice(0, 12)}
                     </span>
                   ) : (
-                    display(row[c])
+                    display(row[c], timeZone)
                   )}
                 </td>
               ))}
-              {onEdit && (
+              {(onEdit || onView || actions) && (
                 <td>
-                  <button
-                    className="row-action"
-                    onClick={() => onEdit(row)}
-                    aria-label={`Edit ${String(row.first_name || row.name || row.title || 'record')}`}
-                  >
-                    <ArrowUpRight size={17} />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    {actions?.(row)}
+                    {onView && (
+                      <Button variant="outline" size="sm" onClick={() => onView(row)}>
+                        View
+                      </Button>
+                    )}
+                    {onEdit && (
+                      <button
+                        className="row-action"
+                        onClick={() => onEdit(row)}
+                        aria-label={`Edit ${String(row.first_name || row.name || row.title || 'record')}`}
+                      >
+                        <ArrowUpRight size={17} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               )}
             </tr>

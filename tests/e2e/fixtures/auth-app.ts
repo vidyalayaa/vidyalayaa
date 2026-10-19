@@ -1,0 +1,77 @@
+import { test as base } from '@playwright/test';
+import { createServer } from 'vite';
+import { fileURLToPath } from 'node:url';
+import tailwindcss from 'tailwindcss';
+import autoprefixer from 'autoprefixer';
+import theme from '../../../apps/web/tailwind.config.js';
+
+// Auth regressions use isolated servers and browser contexts, never local credentials
+// or a real Supabase project. Tests intercept the .test provider's network requests.
+export const test = base.extend<{ isolateServices: void }, { authAppURL: string }>({
+  isolateServices: [
+    async ({ page }, use) => {
+      await page.route('**/api/v1/**', (route) =>
+        route.fulfill(
+          ['/invitations/pending', '/support-access'].some((path) =>
+            new URL(route.request().url()).pathname.endsWith(path),
+          )
+            ? { json: { data: [] } }
+            : {
+                status: 501,
+                json: { error: { message: 'This API request needs an explicit test fixture.' } },
+              },
+        ),
+      );
+      await use();
+    },
+    { auto: true },
+  ],
+  authAppURL: [
+    async ({}, use, workerInfo) => {
+      const root = fileURLToPath(new URL('../../../apps/web', import.meta.url));
+      const contentRoot = root.replaceAll('\\', '/');
+      const server = await createServer({
+        root,
+        envFile: false,
+        define: {
+          'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://mfa-qr.test'),
+          'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('test-only-public-key'),
+          'import.meta.env.VITE_API_URL': JSON.stringify(''),
+        },
+        css: {
+          postcss: {
+            plugins: [
+              tailwindcss({
+                presets: [theme],
+                content: [`${contentRoot}/index.html`, `${contentRoot}/src/**/*.{ts,tsx}`],
+              }),
+              autoprefixer(),
+            ],
+          },
+        },
+        server: { host: '127.0.0.1', port: 5187 + workerInfo.parallelIndex, strictPort: true },
+      });
+      await server.listen();
+      // Compile lazy entry screens before starting timed browser assertions.
+      // This avoids testing Vite's cold transform speed on busy CI hosts.
+      await Promise.all(
+        [
+          '/src/main.tsx',
+          '/src/features/auth/Login.tsx',
+          '/src/features/resources/ResourceScreen.tsx',
+          '/src/features/operations/Screens.tsx',
+          '/src/features/operations/Platform.tsx',
+        ].map((path) => server.warmupRequest(path)),
+      );
+      const address = server.httpServer!.address();
+      if (!address || typeof address === 'string')
+        throw new Error('Auth test server did not start.');
+      try {
+        await use(`http://127.0.0.1:${address.port}`);
+      } finally {
+        await server.close();
+      }
+    },
+    { scope: 'worker' },
+  ],
+});

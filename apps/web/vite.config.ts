@@ -7,7 +7,7 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: { vendor: ['react', 'react-dom', 'react-router-dom'], charts: ['recharts'] },
+        manualChunks: { vendor: ['react', 'react-dom', 'react-router-dom'], charts: ['recharts'],identity:['@supabase/supabase-js'],forms:['react-hook-form','@hookform/resolvers/zod','zod'] },
       },
     },
   },

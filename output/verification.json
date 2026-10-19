@@ -1,37 +1,121 @@
 {
-  "date": "2026-10-17",
+  "date": "2026-10-18",
   "builds": {
     "contracts": "passed",
     "api": "passed",
     "worker": "passed",
     "web": "passed",
-    "firmware_esp32dev": "passed"
+    "strict_typecheck": "passed"
   },
   "local_tests": {
-    "files": 8,
-    "passed": 63
+    "files": 10,
+    "passed": 88,
+    "database": "isolated PostgreSQL/WASM; all nine migrations; forced RLS"
   },
   "browser_tests": {
-    "passed": 8,
+    "passed": 54,
     "viewports": [
       "desktop",
       "mobile"
     ],
-    "core_axe_serious_critical": 0
+    "services": "isolated API/Auth fixtures; local real credentials ignored",
+    "core_axe_serious_critical": 0,
+    "coverage": [
+      "setup/keyboard/axe",
+      "MFA QR/duplicate enrollment",
+      "invite/recovery callbacks",
+      "first School Admin/Principal acceptance",
+      "plans/expiring support",
+      "attendance/corrections",
+      "private homework",
+      "drafts and same-user session-expiry recovery"
+    ],
+    "note": "An extra callback recheck hit a cold Vite load timeout under parallel build load, passed on rerun; fixtures now warm lazy modules before assertions. No real test invitations or provider messages sent."
+  },
+  "database": {
+    "applied_migrations": 9,
+    "configured_project_schema_verification": "passed",
+    "real_school_retention_enabled_by_this_work": false
   },
   "production_dependency_audit": {
-    "vulnerabilities": 0
+    "vulnerabilities": 0,
+    "command": "npm audit --omit=dev --json"
   },
-  "secret_scan": "passed",
-  "deployment_pdf_pages": 10,
+  "secret_scan": "passed source and browser bundle",
+  "openapi_generation": "passed from shared schemas",
+  "deployment_pdf": {
+    "pages": 12,
+    "version": "1.2",
+    "updated": "2026-10-19",
+    "text_checks": "passed",
+    "rendered_visual_review": "passed"
+  },
+  "local_services": {
+    "web_http": 200,
+    "api_readiness_http": 200,
+    "real_worker_started": false
+  },
+  "hardware": {
+    "family": "ESP32 Dev Module with Wi-Fi and BLE",
+    "usb_connected": false,
+    "chip_revision": "unverified",
+    "flash_capacity": "unverified",
+    "flashed": false,
+    "build": "unchanged prototype compiled in earlier delivery; no production firmware build claimed"
+  },
+  "source_gaps": [
+    "production firmware task separation and verified durable segmented queue/cursors",
+    "encrypted provisioning and signed A/B OTA/anti-rollback/self-test",
+    "dedicated lint rule set",
+    "production error-monitoring integration"
+  ],
   "not_executed": [
-    "full native PostgreSQL concurrency suite",
-    "live Supabase/Auth/Storage journeys",
+    "native PostgreSQL multi-connection concurrency suite",
+    "complete live staging Auth/Storage/role journeys",
     "container image execution",
     "external provider delivery",
-    "hardware power-loss and secure OTA",
-    "production load and restore drill",
-    "cloud deployment"
+    "hardware power-loss/RTC/secure OTA rig",
+    "production load/soak and restore drill",
+    "manual screen-reader/tablet acceptance",
+    "cloud deployment and on-call alert drill"
   ],
-  "configuration_syntax": "JSON, YAML and TOML parsed successfully"
+  "latest_follow_up": {
+    "date": "2026-10-19",
+    "feature": "Google OAuth alongside email/password with enrolled MFA and unchanged role authorization",
+    "targeted_tests": {
+      "passed": 39,
+      "files": 3,
+      "services": "isolated PostgreSQL/WASM and API fixtures"
+    },
+    "browser_tests": {
+      "passed": 62,
+      "viewports": [
+        "desktop",
+        "mobile"
+      ],
+      "services": "isolated Auth/API fixtures",
+      "coverage": [
+        "all six roles through Google PKCE",
+        "MFA required and invalid-code retry",
+        "email/password MFA",
+        "unavailable Google provider",
+        "unassigned identity",
+        "cancelled/missing/invalid callbacks",
+        "existing invitation/recovery flows",
+        "existing MFA enrollment",
+        "school workflows and expired sessions"
+      ]
+    },
+    "production_builds": "contracts, API, worker, web passed",
+    "secret_scan": "source and browser bundle passed",
+    "google_provider": {
+      "configured_project_enabled": false,
+      "owner_has_created_oauth_client": false,
+      "real_google_round_trip": "pending external setup"
+    },
+    "database_migrations_required": false,
+    "live_account_or_membership_changes": false,
+    "new_guide": "docs/GOOGLE_SIGN_IN.md",
+    "deployment_pdf_version": "1.2"
+  }
 }

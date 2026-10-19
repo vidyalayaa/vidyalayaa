@@ -52,14 +52,15 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
           report.kind as 'ATTENDANCE' | 'ACADEMIC' | 'FEES'
         ];
         const dateColumn = {
-          ATTENDANCE: 'attendance_date',
-          ACADEMIC: 'created_at::date',
-          FEES: 'due_on',
+          ATTENDANCE: 't.attendance_date',
+          ACADEMIC: 'coalesce(ex.starts_on,(t.created_at AT TIME ZONE sch.timezone)::date)',
+          FEES: 't.due_on',
         }[report.kind as 'ATTENDANCE' | 'ACADEMIC' | 'FEES'];
         const columns = {
           ATTENDANCE:
             't.attendance_date,t.attendance_status,t.movement_status,t.first_arrival_at,t.last_departure_at',
-          ACADEMIC: 't.score,sub.name AS subject,ex.name AS exam,ex.max_score',
+          ACADEMIC:
+            't.score,t.remarks,sub.name AS subject,ex.id AS exam_id,ex.name AS exam,ex.exam_type,ex.starts_on,ex.max_score',
           FEES: 't.fee_type,t.amount_due,t.amount_paid,t.currency,t.due_on,t.status',
         }[report.kind as 'ATTENDANCE' | 'ACADEMIC' | 'FEES'];
         const joins =
@@ -72,7 +73,7 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
             : '';
         const rows = (
           await tx.query(
-            `SELECT s.student_code,s.first_name,s.last_name,${columns} FROM ${table} t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id ${joins} WHERE t.school_id=$1 AND ${studentScope(a, 't.student_id', '$2')} AND ($3::uuid IS NULL OR t.student_id=$3) AND ($4::uuid IS NULL OR EXISTS(SELECT FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=t.student_id AND en.class_id=$4)) AND t.${dateColumn}>=$5::date AND t.${dateColumn}<$6::date+1 ${examRestriction} ORDER BY s.student_code LIMIT 10001`,
+            `SELECT s.student_code,s.first_name,s.last_name,${columns} FROM ${table} t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id JOIN schools sch ON sch.id=t.school_id ${joins} WHERE t.school_id=$1 AND ${studentScope(a, 't.student_id', '$2')} AND ($3::uuid IS NULL OR t.student_id=$3) AND ($4::uuid IS NULL OR ${report.kind === 'ACADEMIC' ? 'ex.class_id=$4' : report.kind === 'ATTENDANCE' ? 't.class_id=$4' : 'EXISTS(SELECT FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=t.student_id AND en.class_id=$4 AND en.starts_on<=t.due_on AND (en.ends_on IS NULL OR en.ends_on>=t.due_on))'}) AND ${dateColumn}>=$5::date AND ${dateColumn}<$6::date+1 ${examRestriction} ORDER BY s.student_code LIMIT 10001`,
             [
               schoolId,
               report.requested_by,
@@ -143,6 +144,30 @@ function makePdf(
       .text(`${from} to ${to} | Generated ${new Date().toISOString()}`)
       .moveDown();
     if (!rows.length) doc.text('No matching records in this period.');
+    if (kind === 'ACADEMIC' && rows.length) {
+      doc.fontSize(13).text('Student assessment summary').moveDown(0.4);
+      for (const summary of academicSummaries(rows)) {
+        if (doc.y > 700) doc.addPage();
+        doc
+          .fontSize(10)
+          .fillColor('#171b16')
+          .text(`${summary.student_code} - ${summary.name} | ${summary.exam}`);
+        doc
+          .fontSize(9)
+          .fillColor('#555555')
+          .text(
+            `${summary.subjects} assessed subjects | Total ${summary.score.toFixed(2)} / ${summary.maximum.toFixed(2)} | ${summary.percentage.toFixed(2)}%`,
+          )
+          .moveDown(0.7);
+      }
+      doc
+        .fontSize(9)
+        .text(
+          'Totals include recorded subjects only. Missing marks are not treated as zero. Grades require the school’s approved grading policy.',
+        )
+        .moveDown();
+      doc.fontSize(13).fillColor('#171b16').text('Subject results and remarks').moveDown(0.5);
+    }
     for (const row of rows) {
       if (doc.y > 730) doc.addPage();
       doc
@@ -154,7 +179,7 @@ function makePdf(
         .fillColor('#555555')
         .text(
           Object.entries(row)
-            .filter(([k]) => !['student_code', 'first_name', 'last_name'].includes(k))
+            .filter(([k]) => !['student_code', 'first_name', 'last_name', 'exam_id'].includes(k))
             .map(
               ([k, v]) =>
                 `${k.replaceAll('_', ' ')}: ${v instanceof Date ? v.toISOString() : (v ?? '-')}`,
@@ -166,4 +191,36 @@ function makePdf(
     }
     doc.end();
   });
+}
+export function academicSummaries(rows: Record<string, unknown>[]) {
+  const groups = new Map<
+    string,
+    {
+      student_code: string;
+      name: string;
+      exam: string;
+      subjects: number;
+      score: number;
+      maximum: number;
+      percentage: number;
+    }
+  >();
+  for (const row of rows) {
+    const key = `${row.student_code}:${row.exam_id}`;
+    const s = groups.get(key) || {
+      student_code: String(row.student_code),
+      name: `${row.first_name} ${row.last_name || ''}`.trim(),
+      exam: String(row.exam),
+      subjects: 0,
+      score: 0,
+      maximum: 0,
+      percentage: 0,
+    };
+    s.subjects++;
+    s.score += Number(row.score);
+    s.maximum += Number(row.max_score);
+    s.percentage = s.maximum ? (s.score / s.maximum) * 100 : 0;
+    groups.set(key, s);
+  }
+  return [...groups.values()];
 }

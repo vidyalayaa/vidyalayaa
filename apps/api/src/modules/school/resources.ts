@@ -12,6 +12,51 @@ export interface ResourceDefinition {
   classColumn?: string;
   immutable?: boolean;
 }
+// Resolve only references on records already authorized by resourceScope.
+const relations: Partial<Record<Resource, Record<string, string>>> = {
+  students: { user_id: 'users' },
+  parents: { user_id: 'users' },
+  teachers: { user_id: 'users' },
+  classes: { academic_session_id: 'academic_sessions', class_teacher_id: 'teachers' },
+  enrollments: {
+    student_id: 'students',
+    class_id: 'classes',
+    academic_session_id: 'academic_sessions',
+  },
+  student_parents: { student_id: 'students', parent_id: 'parents' },
+  teacher_class_assignments: {
+    teacher_id: 'teachers',
+    class_id: 'classes',
+    subject_id: 'subjects',
+  },
+  exams: { class_id: 'classes' },
+  marks: { student_id: 'students', exam_id: 'exams', subject_id: 'subjects' },
+  assignments: { class_id: 'classes', subject_id: 'subjects' },
+  timetable_entries: { class_id: 'classes', subject_id: 'subjects', teacher_id: 'teachers' },
+  school_holidays: { class_id: 'classes' },
+  announcements: { class_id: 'classes' },
+  fee_records: { student_id: 'students', academic_session_id: 'academic_sessions' },
+  nfc_cards: { student_id: 'students' },
+  device_locations: { class_id: 'classes' },
+  attendance_rule_versions: { class_id: 'classes' },
+  notification_preferences: { parent_id: 'parents' },
+};
+export function resourceSelect(name: Resource) {
+  return [
+    't.*',
+    ...Object.entries(relations[name] || {}).map(([column, table]) => {
+      const text =
+        table === 'students'
+          ? "concat_ws(' ',r.first_name,r.last_name)||' · '||r.student_code"
+          : table === 'classes'
+            ? "concat_ws(' ',r.grade,r.section)"
+            : ['teachers', 'parents', 'users'].includes(table)
+              ? 'r.full_name'
+              : 'r.name';
+      return `(SELECT ${text} FROM ${table} r WHERE r.id=t.${column}${table === 'users' ? '' : ' AND r.school_id=t.school_id'}) AS ${column.replace(/_id$/, '_label')}`;
+    }),
+  ].join(',');
+}
 export const definitions: Record<Resource, ResourceDefinition> = {
   students: {
     read: 'students.read',
@@ -162,7 +207,7 @@ export async function assertStudent(tx: Tx, a: Actor, id: string) {
 }
 export async function assertClass(tx: Tx, a: Actor, id: string, subject?: string) {
   const { rows } = await tx.query(
-    `SELECT t.id FROM classes t WHERE t.school_id=$1 AND t.id=$3 AND ${classScope(a, 't.id', '$2', subject ? '$4' : undefined)}`,
+    `SELECT t.id FROM classes t WHERE t.school_id=$1 AND t.id=$3 AND ${classScope(a, 't.id', '$2', subject ? '$4' : undefined)}${subject ? ' AND EXISTS(SELECT 1 FROM subjects s WHERE s.school_id=t.school_id AND s.id=$4)' : ''}`,
     [a.context.schoolId, a.id, id, ...(subject ? [subject] : [])],
   );
   if (!rows.length) throw notFound();
