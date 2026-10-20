@@ -46,6 +46,26 @@ icon_512.paste(v_resized, (pos_x, pos_y), v_resized)
 
 icon_512.save(os.path.join(OUT_DIR, "icon-512.png"))
 
+icon_192 = icon_512.resize((192, 192), Image.Resampling.LANCZOS)
+icon_192.save(os.path.join(OUT_DIR, "icon-192.png"))
+
+# Maskable icon with safe-zone margin
+icon_maskable = Image.new("RGBA", (512, 512), BG_COLOR)
+draw_maskable = ImageDraw.Draw(icon_maskable)
+for radius in [150, 220, 300]:
+    draw_maskable.ellipse(
+        [center_pt[0] - radius, center_pt[1] - radius, center_pt[0] + radius, center_pt[1] + radius],
+        outline=ring_color,
+        width=3
+    )
+target_mask_w = 230
+target_mask_h = int(target_mask_w / aspect)
+v_mask = v_cropped.resize((target_mask_w, target_mask_h), Image.Resampling.LANCZOS)
+pos_m_x = (512 - target_mask_w) // 2
+pos_m_y = (512 - target_mask_h) // 2
+icon_maskable.paste(v_mask, (pos_m_x, pos_m_y), v_mask)
+icon_maskable.save(os.path.join(OUT_DIR, "icon-512-maskable.png"))
+
 icon_180 = icon_512.resize((180, 180), Image.Resampling.LANCZOS)
 icon_180.save(os.path.join(OUT_DIR, "apple-touch-icon.png"))
 
