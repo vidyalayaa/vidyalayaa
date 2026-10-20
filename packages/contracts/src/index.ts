@@ -189,6 +189,7 @@ export interface Membership {
   permissions: string[];
 }
 export interface Me {
+  security_mfa_required?: boolean;
   locale?: 'en-IN' | 'hi-IN';
   id: string;
   full_name: string;
@@ -213,11 +214,13 @@ export const pageSchema = z.object({
   search: z.string().max(120).optional(),
   date: date.optional(),
   class_id: uuid.optional(),
+  student_id: uuid.optional(),
 });
 export const resourceSchemas = {
   students: z
     .object({
       student_code: text,
+      email: z.string().trim().email().max(254).nullable().optional(),
       first_name: text,
       last_name: nullableText,
       date_of_birth: date.nullable().optional(),
@@ -237,6 +240,8 @@ export const resourceSchemas = {
   teachers: z
     .object({
       staff_code: text,
+      email: z.string().trim().email().max(254).nullable().optional(),
+      staff_role: z.enum(['teacher', 'principal', 'school_admin']).default('teacher'),
       full_name: text,
       user_id: uuid.nullable().optional(),
       status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
@@ -408,6 +413,7 @@ export const correctionSchema = z
 export const reportSchema = z
   .object({
     kind: z.enum(['ATTENDANCE', 'ACADEMIC', 'FEES']),
+    format: z.enum(['PDF', 'CSV']).optional(),
     student_id: uuid.optional(),
     class_id: uuid.optional(),
     from: date,
@@ -417,6 +423,7 @@ export const reportSchema = z
   .refine((x) => x.to >= x.from, 'End date must follow start date');
 export const inviteSchema = z
   .object({
+    record_id: uuid,
     email: z
       .string()
       .trim()
@@ -465,3 +472,11 @@ export const manualSchema = z
   .strict();
 
 export { bulkMarksSchema } from './bulk.js';
+export * from './operations.js';
+
+export interface InvitationCandidate {
+  id: string;
+  full_name: string;
+  email: string;
+  code: string;
+}

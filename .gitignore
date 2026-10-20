@@ -18,3 +18,13 @@ docs/source/
 .firebaserc
 
 output/*.zip
+
+.tools/
+backups/
+*.dump
+*.vbackup
+
+firmware-production/build/
+firmware-production/sdkconfig
+firmware-production/sdkconfig.old
+firmware-production/secrets/

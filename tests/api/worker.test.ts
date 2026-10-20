@@ -174,7 +174,8 @@ it('generates private academic PDFs for the requested exam period and current fa
       from: (bucket: string) => ({
         upload: async (path: string, buffer: Buffer) => {
           expect(bucket).toBe('school-documents');
-          expect(path).toBe(`${f.schoolA}/reports/${report}.pdf`);
+          expect(path.startsWith(`${f.schoolA}/reports/${report}/`)).toBe(true);
+          expect(path).toMatch(/\/[0-9a-f-]{36}\.pdf$/);
           uploaded = buffer;
           return { error: null };
         },

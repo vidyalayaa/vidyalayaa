@@ -26,6 +26,20 @@ export function invitationError(error: unknown): never {
       404,
       'This invitation is unavailable, expired, or was already answered.',
     ],
+    INVITATION_RECORD_REQUIRED: [
+      422,
+      'Choose an existing school record. Cancel and reissue older invitations without a record.',
+    ],
+    INVITATION_RECORD_UNAVAILABLE: [
+      422,
+      'Choose an active record in this school with the matching email and role.',
+    ],
+    INVITATION_RECORD_LINKED: [409, 'This record is already linked to a different account.'],
+    INVITATION_RECORD_BUSY: [
+      409,
+      'This record already has a pending invitation. Cancel it before changing the recipient.',
+    ],
+    PARENT_CHILD_REQUIRED: [422, 'Link this parent to their child before inviting them.'],
     FORBIDDEN: [403, 'Your account cannot manage this invitation.'],
     IDENTITY_MISMATCH: [409, 'The invited identity could not be verified. Retry the invitation.'],
   };
@@ -38,7 +52,7 @@ export async function inviteMember(
   pool: pg.Pool,
   context: TenantContext,
   auth: SupabaseClient,
-  input: { school_id: string; email: string; full_name: string; role: Role },
+  input: { school_id: string; email: string; full_name: string; role: Role; record_id?: string },
   redirectTo: string,
   resend = false,
 ): Promise<InvitationResult> {
@@ -48,6 +62,7 @@ export async function inviteMember(
     action: 'none' | 'send' | 'link';
     user_id?: string;
     status: string;
+    full_name?: string;
   };
   try {
     intent = await transaction(
@@ -55,12 +70,13 @@ export async function inviteMember(
       context,
       async (tx) =>
         (
-          await tx.query('SELECT app.begin_school_invitation($1,$2,$3,$4,$5) AS result', [
+          await tx.query('SELECT app.begin_school_invitation($1,$2,$3,$4,$5,$6) AS result', [
             input.school_id,
             input.email,
             input.full_name,
             input.role,
             resend,
+            input.record_id ?? null,
           ])
         ).rows[0].result,
     );
@@ -72,7 +88,7 @@ export async function inviteMember(
     let identity = intent.user_id;
     if (intent.action === 'send') {
       const response = await auth.auth.admin.inviteUserByEmail(input.email, {
-        data: { full_name: input.full_name },
+        data: { full_name: intent.full_name || input.full_name },
         redirectTo,
       });
       if (response.error || !response.data.user) {

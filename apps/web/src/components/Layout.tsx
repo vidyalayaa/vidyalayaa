@@ -23,6 +23,7 @@ import {
   Building2,
   Layers3,
   ClipboardCheck,
+  HeartHandshake,
 } from 'lucide-react';
 import { configured, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
@@ -31,10 +32,23 @@ import { schoolPath } from '../lib/portals';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/auth';
 import { display } from '../lib/utils';
+const navigationFeatures: Record<string, string> = {
+  '/r/assignments': 'assignments',
+  '/r/timetable_entries': 'timetable',
+  '/devices': 'nfc_attendance',
+};
 const items = [
+  { to: '/exports', text: 'School exports', icon: Layers3, permission: 'school.manage' },
   { to: '/', text: 'Overview', icon: LayoutDashboard },
   { to: '/r/students', text: 'Students', icon: Users, permission: 'students.read' },
-  { to: '/r/teachers', text: 'Teachers', icon: GraduationCap, permission: 'teachers.read' },
+  { to: '/r/parents', text: 'Parents', icon: Users, permission: 'parents.read' },
+  {
+    to: '/r/student_parents',
+    text: 'Family links',
+    icon: HeartHandshake,
+    permission: 'parents.read',
+  },
+  { to: '/r/teachers', text: 'School staff', icon: GraduationCap, permission: 'teachers.read' },
   { to: '/attendance', text: 'Attendance', icon: CalendarCheck2, permission: 'attendance.read' },
   { to: '/r/classes', text: 'Academics', icon: BookOpen, permission: 'academics.read' },
   { to: '/r/assignments', text: 'Homework', icon: BookOpen, permission: 'assignments.read' },
@@ -94,8 +108,15 @@ export default function Layout() {
         { to: '/platform/health', text: 'Overview', icon: LayoutDashboard },
         { to: '/platform/schools', text: 'Schools', icon: Building2 },
         { to: '/platform/devices', text: 'Device inventory', icon: Radio },
+        { to: '/platform/firmware', text: 'Firmware updates', icon: Radio },
         { to: '/platform/plans', text: 'Plans', icon: Layers3 },
         { to: '/platform/support-grants', text: 'Support access', icon: ShieldCheck },
+        { to: '/platform/support-requests', text: 'Support requests', icon: ShieldCheck },
+        { to: '/platform/notices', text: 'Platform notices', icon: Bell },
+        { to: '/platform/audit', text: 'Audit history', icon: ShieldCheck },
+        { to: '/platform/organizations', text: 'Campus groups', icon: Building2 },
+        { to: '/platform/usage', text: 'Usage', icon: Layers3 },
+        { to: '/platform/offboarding', text: 'School closure', icon: ShieldCheck },
       ]
     : items;
   return (
@@ -161,7 +182,12 @@ export default function Layout() {
         <p className="nav-label">{platformOnly ? 'PLATFORM' : 'WORKSPACE'}</p>
         <nav aria-label="Main navigation">
           {navigation
-            .filter((i) => !configured || !i.permission || permissions.includes(i.permission))
+            .filter(
+              (i) =>
+                !configured ||
+                ((!i.permission || permissions.includes(i.permission)) &&
+                  (!navigationFeatures[i.to] || a.me?.features[navigationFeatures[i.to]])),
+            )
             .map((i) => (
               <NavLink
                 key={i.to}

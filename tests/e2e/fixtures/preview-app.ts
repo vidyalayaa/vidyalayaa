@@ -9,11 +9,17 @@ import theme from '../../../apps/web/tailwind.config.js';
 export const test = base.extend<{}, { previewAppURL: string }>({
   baseURL: async ({ previewAppURL }, use) => use(previewAppURL),
   previewAppURL: [
-    async ({}, use, workerInfo) => {
+    async ({ browser }, use, workerInfo) => {
       const root = fileURLToPath(new URL('../../../apps/web', import.meta.url));
       const contentRoot = root.replaceAll('\\', '/');
       const server = await createServer({
         root,
+        cacheDir: fileURLToPath(
+          new URL(
+            `../../../node_modules/.vite-audit/preview-app-${workerInfo.parallelIndex}`,
+            import.meta.url,
+          ),
+        ),
         envFile: false,
         define: Object.fromEntries(
           ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_API_URL'].map((name) => [
@@ -42,12 +48,26 @@ export const test = base.extend<{}, { previewAppURL: string }>({
           '/src/features/resources/ResourceScreen.tsx',
         ].map((path) => server.warmupRequest(path)),
       );
+      // Each fixture/worker has its own dependency cache. Finish the initial
+      // browser dependency load outside individual workflow timing.
+      const warmContext = await browser.newContext();
+      try {
+        const warmPage = await warmContext.newPage();
+        await warmPage.route('https://mfa-qr.test/**', (route) => route.abort());
+        await warmPage.goto(`http://127.0.0.1:${5210 + workerInfo.parallelIndex}/login`, {
+          waitUntil: 'load',
+          timeout: 90000,
+        });
+        await warmPage.getByRole('heading', { level: 1 }).first().waitFor();
+      } finally {
+        await warmContext.close();
+      }
       try {
         await use(`http://127.0.0.1:${5210 + workerInfo.parallelIndex}`);
       } finally {
         await server.close();
       }
     },
-    { scope: 'worker' },
+    { scope: 'worker', timeout: 120000 },
   ],
 });

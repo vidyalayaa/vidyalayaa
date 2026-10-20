@@ -2,6 +2,7 @@ import { ArrowUpRight, Inbox, Loader2, RefreshCw, ShieldCheck, AlertCircle } fro
 import type { ReactNode } from 'react';
 import { Button } from './ui/button';
 import { display, label, cn } from '../lib/utils';
+import { HttpError } from '../lib/auth';
 import { useAuth } from '../lib/auth';
 export function Badge({ children }: { children: ReactNode }) {
   const value = String(children);
@@ -44,9 +45,13 @@ export function Empty({
 }
 export function Loading() {
   return (
-    <div className="empty-state" role="status">
-      <Loader2 className="animate-spin" />
-      <p>Getting everything ready…</p>
+    <div className="p-6" role="status" aria-label="Loading records">
+      <span className="sr-only">Getting everything ready…</span>
+      <div aria-hidden="true" className="space-y-3 animate-pulse">
+        <div className="h-5 w-1/3 rounded bg-stone-100" />
+        <div className="h-12 rounded bg-stone-100" />
+        <div className="h-12 rounded bg-stone-100" />
+      </div>
     </div>
   );
 }
@@ -57,6 +62,9 @@ export function ErrorState({ error, retry }: { error: Error; retry?: () => void 
       <div>
         <h3>We couldn’t complete that request</h3>
         <p>{error.message}</p>
+        {error instanceof HttpError && error.requestId && (
+          <p className="mt-1 text-xs">Reference: {error.requestId}</p>
+        )}
         {retry && (
           <Button className="mt-3" size="sm" variant="outline" onClick={retry}>
             <RefreshCw size={14} />
@@ -150,7 +158,7 @@ export function DataTable({
           {rows.map((row, i) => (
             <tr key={String(row.id || i)}>
               {columns.map((c) => (
-                <td key={c}>
+                <td key={c} data-label={label(c.replace(/_id$/, ''))}>
                   {[
                     'status',
                     'attendance_status',

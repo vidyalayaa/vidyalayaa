@@ -31,10 +31,19 @@ export async function transaction<T>(
   ctx: TenantContext,
   fn: (tx: Tx) => Promise<T>,
   readOnly = false,
+  isolation: 'read committed' | 'repeatable read' = 'read committed',
 ): Promise<T> {
   const c = await pool.connect();
   try {
-    await c.query(readOnly ? 'BEGIN READ ONLY' : 'BEGIN');
+    await c.query(
+      isolation === 'repeatable read'
+        ? readOnly
+          ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'
+          : 'BEGIN ISOLATION LEVEL REPEATABLE READ'
+        : readOnly
+          ? 'BEGIN READ ONLY'
+          : 'BEGIN',
+    );
     await c.query(
       "SELECT set_config('app.school_id',$1,true),set_config('app.user_id',$2,true),set_config('app.actor_type',$3,true),set_config('app.request_id',$4,true),set_config('lock_timeout','5s',true),set_config('statement_timeout','30s',true)",
       [ctx.schoolId, ctx.userId || '', ctx.actorType || 'USER', ctx.requestId || ''],

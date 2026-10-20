@@ -2,6 +2,19 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { z } from 'zod';
 import {
   resourceSchemas,
+  firmwareManifestSchema,
+  firmwareApprovalSchema,
+  hardwareVerificationSchema,
+  firmwareAssignmentSchema,
+  securityPolicySchema,
+  exportRequestSchema,
+  reconciliationRequestSchema,
+  retirementSchema,
+  notificationPrivacySchema,
+  campusAssociationSchema,
+  supportRequestSchema,
+  supportResponseSchema,
+  deviceProtocol,
   eventSchema,
   batchSchema,
   heartbeatSchema,
@@ -82,6 +95,18 @@ function json(schema: z.ZodTypeAny): Record<string, unknown> {
   }
 }
 const schemas = {
+  FirmwareManifest: firmwareManifestSchema,
+  FirmwareApproval: firmwareApprovalSchema,
+  HardwareVerification: hardwareVerificationSchema,
+  FirmwareAssignment: firmwareAssignmentSchema,
+  SchoolSecurity: securityPolicySchema,
+  SchoolExport: exportRequestSchema,
+  Reconciliation: reconciliationRequestSchema,
+  Retirement: retirementSchema,
+  NotificationPrivacy: notificationPrivacySchema,
+  CampusAssociation: campusAssociationSchema,
+  SupportRequest: supportRequestSchema,
+  SupportResponse: supportResponseSchema,
   DeviceEvent: eventSchema,
   DeviceBatch: batchSchema,
   Heartbeat: heartbeatSchema,
@@ -147,8 +172,10 @@ function operation(
       '429': { description: 'Rate limited; honor Retry-After' },
       '503': { description: 'Dependency unavailable; do not discard unacknowledged device events' },
     },
-    ...extra,
+    ...Object.fromEntries(Object.entries(extra).filter(([key]) => key !== 'parameters')),
   };
+  if (Array.isArray(extra.parameters))
+    (paths[path][method] as { parameters: unknown[] }).parameters.push(...extra.parameters);
 }
 for (const name of Object.keys(resourceSchemas)) {
   operation(`/resources/${name}`, 'get', `List scoped ${name}`);
@@ -166,7 +193,17 @@ operation('/corrections', 'get', 'Scoped correction requests');
 operation('/corrections', 'post', 'Request a correction', 'Correction');
 operation('/corrections/{id}/decision', 'post', 'Approve/reject; self-approval prohibited');
 operation('/marks/bulk', 'post', 'Atomic, idempotent upload of up to 500 mark rows', 'BulkMarks');
-operation('/invitations', 'post', 'Invite school member', 'Invitation');
+operation(
+  '/invitations',
+  'post',
+  'Invite an existing same-school record; requires record_id and matching email/role',
+  'Invitation',
+);
+operation(
+  '/invitation-candidates',
+  'get',
+  'Eligible existing records; users.manage; role required; optional page, page_size and search',
+);
 operation('/invitations', 'get', 'Paginated school invitations; users.manage');
 operation(
   '/invitations/pending',
@@ -276,6 +313,174 @@ operation(
   'get',
   'Approved, scoped, paginated support read; live grant lock and audit in one transaction',
 );
+for (const [path, method, summary, schema] of [
+  ['/support-requests', 'get', 'Own school support requests; no implied support grant', undefined],
+  ['/support-requests', 'post', 'School Admin support intake', 'SupportRequest'],
+  ['/platform/support-requests', 'get', 'School support queue', undefined],
+  ['/platform/support-requests/{id}', 'patch', 'Platform support response', 'SupportResponse'],
+  ['/platform/notices', 'get', 'Metadata-only lifecycle and device escalations', undefined],
+  ['/school/security', 'get', 'Read approved school security policy', undefined],
+  ['/school/security', 'put', 'Set policy; school.manage and verified MFA', 'SchoolSecurity'],
+  ['/analytics', 'get', 'Current authorized academic and attendance aggregates', undefined],
+  ['/attendance/events', 'get', 'Scoped raw movement history', undefined],
+  [
+    '/attendance/events/{id}/reconcile',
+    'post',
+    'Request review without rewriting the raw event',
+    'Reconciliation',
+  ],
+  ['/attendance/reviews', 'get', 'Scoped review queue', undefined],
+  ['/profile/family', 'get', 'Own permitted family profile', undefined],
+  ['/profile/preferences', 'get', 'Parent lock-screen privacy', undefined],
+  ['/profile/preferences', 'put', 'Update parent privacy', 'NotificationPrivacy'],
+  ['/exports', 'get', 'School Admin exports', undefined],
+  ['/exports', 'post', 'Request consistent full-school export', 'SchoolExport'],
+  ['/exports/{id}', 'get', 'Current authorized export manifest', undefined],
+  ['/exports/{id}/files/{index}', 'get', 'Authorized private export object', undefined],
+  ['/offboarding', 'get', 'Own school closure proposal', undefined],
+  ['/offboarding/{id}/approve', 'post', 'School Admin contractual approval', undefined],
+  ['/usage', 'get', 'Own persisted daily usage', undefined],
+  [
+    '/organization/campuses',
+    'get',
+    'Same organization campuses with explicit membership',
+    undefined,
+  ],
+  ['/notifications/{id}/retry', 'post', 'Admin retry with reason', 'Reconciliation'],
+  ['/devices/{id}/health', 'get', 'Paginated device health history', undefined],
+  ['/platform/audit', 'get', 'Platform metadata audit only', undefined],
+  ['/platform/usage', 'get', 'Persisted platform usage', undefined],
+  ['/platform/organizations', 'get', 'Campus groups', undefined],
+  ['/platform/organizations', 'post', 'Create campus group', undefined],
+  [
+    '/platform/schools/{id}/organization',
+    'patch',
+    'Associate Enterprise campus; never grants membership',
+    'CampusAssociation',
+  ],
+  ['/platform/offboarding', 'get', 'School closure review', undefined],
+  [
+    '/platform/schools/{id}/offboarding',
+    'post',
+    'Propose contractual export/retention windows',
+    undefined,
+  ],
+  [
+    '/platform/offboarding/{id}/close',
+    'post',
+    'Close after distinct school approval and device synchronization',
+    undefined,
+  ],
+  ['/platform/offboarding/{id}/hold', 'post', 'Record legal hold decision', undefined],
+  [
+    '/platform/offboarding/{id}/purge',
+    'post',
+    'Queue approved operational-data deletion',
+    undefined,
+  ],
+] as const)
+  operation(path, method, summary, schema);
+for (const name of [
+  'students',
+  'parents',
+  'teachers',
+  'student_parents',
+  'teacher_class_assignments',
+])
+  operation('/imports/' + name, 'post', 'Validate or atomically import up to 500 named records');
+for (const name of [
+  'academic_sessions',
+  'classes',
+  'subjects',
+  'exams',
+  'assignments',
+  'timetable_entries',
+  'school_holidays',
+  'announcements',
+  'teacher_class_assignments',
+])
+  operation(
+    '/resources/' + name + '/{id}/retire',
+    'post',
+    'Retire record; preserve history',
+    'Retirement',
+  );
+operation(
+  '/platform/firmware-releases',
+  'get',
+  'Paginated immutable signed release metadata; platform MFA',
+);
+operation(
+  '/platform/firmware-releases',
+  'post',
+  'Publish disabled signed image; approved RSA-3072 public key required',
+  undefined,
+  'UserJWT',
+  {
+    requestBody: {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['image', 'manifest'],
+            properties: {
+              image: {
+                type: 'string',
+                format: 'binary',
+                description: 'ESP-IDF signed app image; 1024..1245184 bytes',
+              },
+              manifest: { type: 'string', description: 'JSON encoding of FirmwareManifest' },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+    },
+    responses: {
+      '201': { description: 'Immutable release published, enabled=false' },
+      '413': { description: 'Image exceeds application partition size' },
+      '422': { description: 'Invalid manifest, hash, signature or image' },
+      '403': { description: 'Platform MFA required' },
+      '503': { description: 'Signing configuration or private storage unavailable' },
+    },
+  },
+);
+operation(
+  '/platform/firmware-releases/{version}',
+  'patch',
+  'Enable accepted release or disable future offers',
+  'FirmwareApproval',
+);
+operation(
+  '/platform/devices/{id}/hardware',
+  'patch',
+  'Record physical hardware verification; never infer from device name',
+  'HardwareVerification',
+);
+operation(
+  '/platform/devices/{id}/ota',
+  'post',
+  'Assign accepted release or withdraw reader assignment',
+  'FirmwareAssignment',
+);
+operation(
+  '/device/ota/image/{version}',
+  'get',
+  'Assigned reader authenticated image download; SHA-256 checked',
+  '',
+  'DeviceCredential',
+  {
+    responses: {
+      '200': {
+        description: 'Private signed application bytes',
+        content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
+      },
+      '404': { description: 'No matching active assignment' },
+      '503': { description: 'Storage unavailable or integrity failed' },
+    },
+  },
+);
 for (const [path, methods] of Object.entries(paths))
   for (const op of Object.values(methods)) {
     const o = op as {
@@ -287,9 +492,13 @@ for (const [path, methods] of Object.entries(paths))
         in: 'path',
         required: true,
         schema:
-          m[1] === 'feature'
-            ? { type: 'string', enum: ['students', 'attendance', 'marks', 'fees'] }
-            : { type: 'string', format: 'uuid' },
+          m[1] === 'version'
+            ? { type: 'string', pattern: '^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$' }
+            : m[1] === 'index'
+              ? { type: 'integer', minimum: 0 }
+              : m[1] === 'feature'
+                ? { type: 'string', enum: ['students', 'attendance', 'marks', 'fees'] }
+                : { type: 'string', format: 'uuid' },
       });
   }
 const spec = {
@@ -317,3 +526,8 @@ const spec = {
 await mkdir('docs/api', { recursive: true });
 await writeFile('docs/api/openapi.json', JSON.stringify(spec, null, 2) + '\n');
 console.info('Generated OpenAPI from shared Zod contracts.');
+
+await writeFile(
+  'firmware/include/protocol.generated.h',
+  `// Generated by npm run contracts. Do not edit.\n#pragma once\n#define VIDYALAYAA_PROTOCOL_VERSION ${deviceProtocol.version}\n#define VIDYALAYAA_MAX_BATCH_EVENTS ${deviceProtocol.maxBatchEvents}\n#define VIDYALAYAA_DEVICE_CODE_MAX ${deviceProtocol.maxDeviceCodeLength}\n`,
+);

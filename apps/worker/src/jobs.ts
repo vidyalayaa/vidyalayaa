@@ -21,23 +21,30 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
         [schoolId],
       )
     ).rows[0].id;
+    const offlineMs =
+      Math.max(1, Math.min(60, Number(school.settings.security?.device_offline_minutes || 3))) *
+      60000;
     const devices = (
       await tx.query("SELECT * FROM devices WHERE school_id=$1 AND status='ACTIVE'", [schoolId])
     ).rows;
     const delayed = devices.some(
       (d) =>
         !d.last_seen_at ||
-        Date.now() - d.last_seen_at.getTime() > 180000 ||
+        Date.now() - d.last_seen_at.getTime() > offlineMs ||
         d.pending_event_count > 0,
     );
     for (const d of devices)
       if (
         !d.last_seen_at ||
-        Date.now() - d.last_seen_at.getTime() > 180000 ||
+        Date.now() - d.last_seen_at.getTime() > offlineMs ||
         d.reader_status === 'FAIL' ||
         d.rtc_status === 'DRIFT' ||
         d.storage_used_pct >= 80
       ) {
+        await tx.query(
+          "INSERT INTO platform_notices(school_id,kind,source_ref) VALUES($1,'DEVICE_ALERT',$2) ON CONFLICT DO NOTHING",
+          [schoolId, `${d.id}:${local.date}`],
+        );
         for (const admin of (await tx.query('SELECT * FROM app.admin_contacts()')).rows)
           await queue(
             tx,
@@ -56,7 +63,7 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
     if (local.time >= '00:05') {
       const enrolled = (
         await tx.query(
-          "SELECT e.* FROM enrollments e JOIN students s ON s.school_id=e.school_id AND s.id=e.student_id WHERE e.school_id=$1 AND e.starts_on<=$2 AND (e.ends_on IS NULL OR e.ends_on>=$2) AND s.status='ACTIVE'",
+          "SELECT e.* FROM enrollments e JOIN students s ON s.school_id=e.school_id AND s.id=e.student_id WHERE e.school_id=$1 AND e.status='ACTIVE' AND EXISTS(SELECT 1 FROM academic_sessions ac WHERE ac.school_id=e.school_id AND ac.id=e.academic_session_id AND ac.is_current) AND e.starts_on<=$2 AND (e.ends_on IS NULL OR e.ends_on>=$2) AND s.status='ACTIVE'",
           [schoolId, local.date],
         )
       ).rows;
@@ -90,6 +97,19 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
             "UPDATE daily_attendance SET attendance_status='ABSENT',version=version+1,provisional=$3 WHERE school_id=$1 AND student_id=$2 AND attendance_date=$4 AND attendance_status='PENDING' AND first_arrival_at IS NULL AND NOT manual_override RETURNING id",
             [schoolId, en.student_id, delayed, local.date],
           );
+          if (changed.rowCount && delayed) {
+            const affected = devices.find(
+              (d) =>
+                !d.last_seen_at ||
+                Date.now() - d.last_seen_at.getTime() > offlineMs ||
+                d.pending_event_count > 0,
+            );
+            if (affected)
+              await tx.query(
+                "SELECT app.queue_device_security_alert('ABSENCE_PROVISIONAL',NULL,$1)",
+                [affected.id],
+              );
+          }
           if (changed.rowCount && rule.notify.absent)
             await queue(
               tx,
@@ -106,6 +126,12 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
         }
       }
     }
+    await tx.query(
+      `INSERT INTO school_usage_snapshots(school_id,on_date,active_students,devices,notifications_sent)
+      SELECT $1,$2,(SELECT count(*) FROM students WHERE school_id=$1 AND status='ACTIVE'),(SELECT count(*) FROM devices WHERE school_id=$1 AND status<>'REVOKED'),(SELECT count(*) FROM notification_deliveries WHERE school_id=$1 AND status='SENT' AND sent_at>=($2::date::timestamp AT TIME ZONE $3) AND sent_at<(($2::date+1)::timestamp AT TIME ZONE $3))
+      ON CONFLICT(school_id,on_date) DO UPDATE SET active_students=EXCLUDED.active_students,devices=EXCLUDED.devices,notifications_sent=EXCLUDED.notifications_sent,recorded_at=now()`,
+      [schoolId, local.date, school.timezone],
+    );
     const sub = (
       await tx.query(
         'SELECT * FROM subscriptions WHERE school_id=$1 ORDER BY created_at DESC LIMIT 1 FOR UPDATE',
@@ -124,6 +150,10 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
         else if (now > grace) status = 'SUSPENDED_READONLY';
       }
       if (status !== sub.status) {
+        await tx.query(
+          "INSERT INTO platform_notices(school_id,kind,source_ref) VALUES($1,'SUBSCRIPTION_UPDATE',$2) ON CONFLICT DO NOTHING",
+          [schoolId, `${sub.id}:${status}:${local.date}`],
+        );
         await tx.query(
           "UPDATE subscriptions SET status=$2,grace_ends_at=coalesce(grace_ends_at,current_period_end+interval '15 days') WHERE id=$1",
           [sub.id, status],

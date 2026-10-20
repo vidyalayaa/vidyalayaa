@@ -1,7 +1,14 @@
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
+import { schoolPath } from '../../lib/portals';
+import RecordImportDialog, { type ImportResource } from './RecordImportDialog';
+import { ActionDialog } from '../../components/ActionDialog';
 import BulkMarksDialog from './BulkMarksDialog';
 import RecordSelect from '../../components/RecordSelect';
 import ResourceDetails from './ResourceDetails';
+import StudentProfileDialog from './StudentProfileDialog';
+import AttendanceRuleBuilder from '../operations/AttendanceRuleBuilder';
+import FeePaymentDialog from './FeePaymentDialog';
+import { IssueCardDialog, BlockCardDialog } from './CardActionDialogs';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,11 +35,17 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
   const a = useAuth(),
     qc = useQueryClient(),
     [bulk, setBulk] = useState(false),
+    [importing, setImporting] = useState(false),
+    [retiring, setRetiring] = useState<Record<string, unknown> | null>(null),
     [dirty, setDirty] = useState(false),
     [view, setView] = useState<string | null>(null),
     [search, setSearch] = useState(params.get('search') || ''),
     [page, setPage] = useState(1),
     [editing, setEditing] = useState<Record<string, unknown> | null | undefined>(undefined),
+    [payingFee, setPayingFee] = useState<Record<string, unknown> | null>(null),
+    [issuingCard, setIssuingCard] = useState(false),
+    [blockingCard, setBlockingCard] = useState<{ id: string; card_uid: string; student_id: string } | null>(null),
+    [actionNotice, setActionNotice] = useState(''),
     info = resourceInfo[resource],
     canWrite = !!info.write && !!a.me?.school?.permissions.includes(info.write),
     locked = !!info.feature && !a.me?.features[info.feature];
@@ -65,12 +78,31 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
         description={info.description}
         actions={
           <>
+            {[
+              'students',
+              'parents',
+              'teachers',
+              'student_parents',
+              'teacher_class_assignments',
+            ].includes(resource) &&
+              canWrite &&
+              a.me?.school?.permissions.includes('users.manage') && (
+                <Button variant="outline" onClick={() => setImporting(true)}>
+                  Import CSV
+                </Button>
+              )}
             {resource === 'marks' && canWrite && (
               <Button variant="outline" onClick={() => setBulk(true)}>
                 Import CSV
               </Button>
             )}
-            {(!configured || canWrite) && (
+            {resource === 'nfc_cards' && canWrite && (
+              <Button variant="lime" onClick={() => setIssuingCard(true)}>
+                <Plus size={17} />
+                Issue Card
+              </Button>
+            )}
+            {(!configured || canWrite) && resource !== 'nfc_cards' && (
               <Button
                 variant="lime"
                 onClick={() => setEditing(null)}
@@ -83,6 +115,28 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           </>
         }
       />
+      {['students', 'parents', 'student_parents'].includes(resource) && (
+        <div className="tabs">
+          <Link
+            className={resource === 'students' ? 'tab-active' : ''}
+            to={schoolPath('/r/students', a.me?.school?.role)}
+          >
+            Students
+          </Link>
+          <Link
+            className={resource === 'parents' ? 'tab-active' : ''}
+            to={schoolPath('/r/parents', a.me?.school?.role)}
+          >
+            Parents & Guardians
+          </Link>
+          <Link
+            className={resource === 'student_parents' ? 'tab-active' : ''}
+            to={schoolPath('/r/student_parents', a.me?.school?.role)}
+          >
+            Family Connections
+          </Link>
+        </div>
+      )}
       {locked && configured ? (
         <div className="notice">
           <LockKeyhole size={20} />
@@ -128,7 +182,67 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
               rows={query.data.data}
               columns={info.columns}
               onView={(row) => setView(String(row.id))}
-              onEdit={canWrite && resource !== 'attendance_rule_versions' ? setEditing : undefined}
+              actions={
+                resource === 'fee_records'
+                  ? (row) => (
+                      <div className="flex gap-1.5">
+                        {canWrite && !['PAID', 'WAIVED'].includes(String(row.status)) && (
+                          <Button size="sm" variant="lime" onClick={() => setPayingFee(row)}>
+                            Pay
+                          </Button>
+                        )}
+                        {canWrite && !['PAID', 'WAIVED'].includes(String(row.status)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const res = await api<{ queued: boolean }>(`/fees/${row.id}/remind`, { method: 'POST' });
+                                setActionNotice(res.queued ? 'Fee reminder queued.' : 'A reminder was already queued today.');
+                              } catch (e) {
+                                setActionNotice((e as Error).message);
+                              }
+                            }}
+                          >
+                            Remind
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  : resource === 'nfc_cards'
+                    ? (row) => (
+                        canWrite && row.status === 'ACTIVE' ? (
+                          <Button size="sm" variant="outline" onClick={() => setBlockingCard(row as { id: string; card_uid: string; student_id: string })}>
+                            Deactivate
+                          </Button>
+                        ) : undefined
+                      )
+                    : resource === 'students'
+                      ? (row) => (
+                          <Button size="sm" variant="outline" onClick={() => setView(String(row.id))}>
+                            Profile
+                          </Button>
+                        )
+                      : canWrite &&
+                        [
+                          'academic_sessions',
+                          'classes',
+                          'subjects',
+                          'exams',
+                          'assignments',
+                          'timetable_entries',
+                          'school_holidays',
+                          'announcements',
+                          'teacher_class_assignments',
+                        ].includes(resource)
+                        ? (row) => (
+                            <Button size="sm" variant="outline" onClick={() => setRetiring(row)}>
+                              Archive
+                            </Button>
+                          )
+                        : undefined
+              }
+              onEdit={canWrite && !['attendance_rule_versions', 'nfc_cards'].includes(resource) ? setEditing : undefined}
             />
           ) : (
             <Empty
@@ -175,8 +289,36 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           </div>
         </Panel>
       )}
+      {importing && (
+        <RecordImportDialog
+          resource={resource as ImportResource}
+          close={() => setImporting(false)}
+        />
+      )}
+      {retiring && (
+        <ActionDialog
+          open
+          close={() => setRetiring(null)}
+          title="Archive this record"
+          endpoint={`/resources/${resource}/${retiring.id}/retire`}
+          fields={[{ key: 'reason', type: 'textarea' }]}
+        />
+      )}
       {bulk && <BulkMarksDialog open={bulk} close={() => setBulk(false)} />}
-      {view && <ResourceDetails resource={resource} id={view} close={() => setView(null)} />}
+      {actionNotice && (
+        <div className="notice mb-4" role="status">
+          {actionNotice}
+        </div>
+      )}
+      {payingFee && <FeePaymentDialog fee={payingFee as any} close={() => setPayingFee(null)} />}
+      {issuingCard && <IssueCardDialog open={issuingCard} close={() => setIssuingCard(false)} />}
+      {blockingCard && <BlockCardDialog card={blockingCard} close={() => setBlockingCard(null)} />}
+      {view &&
+        (resource === 'students' ? (
+          <StudentProfileDialog studentId={view} close={() => setView(null)} />
+        ) : (
+          <ResourceDetails resource={resource} id={view} close={() => setView(null)} />
+        ))}
       <Dialog
         open={editing !== undefined}
         onOpenChange={(open) => {
@@ -275,7 +417,7 @@ export function ResourceForm({
     [statusMessage, setStatusMessage] = useState(''),
     [uploading, setUploading] = useState(false),
     draftKey = `vidyalayaa.draft.${a.me?.id}.${a.school}.${resource}.${initial?.id || 'new'}`;
-  const [restored,setRestored]=useState(()=>Object.keys(readDraft(draftKey)).length>0);
+  const [restored, setRestored] = useState(() => Object.keys(readDraft(draftKey)).length > 0);
   const defaults = useMemo(() => {
     const saved = readDraft(draftKey);
     return Object.fromEntries(
@@ -324,8 +466,11 @@ export function ResourceForm({
     >;
   };
   const form = useForm<Record<string, unknown>>({ defaultValues: defaults, resolver });
-  useUnsavedChanges(form.formState.isDirty||restored);
-  useEffect(() => onDirtyChange?.(form.formState.isDirty||restored), [form.formState.isDirty, onDirtyChange,restored]);
+  useUnsavedChanges(form.formState.isDirty || restored);
+  useEffect(
+    () => onDirtyChange?.(form.formState.isDirty || restored),
+    [form.formState.isDirty, onDirtyChange, restored],
+  );
   useEffect(() => {
     const s = form.watch((values) => saveDraft(draftKey, values));
     return () => s.unsubscribe();
@@ -396,25 +541,25 @@ export function ResourceForm({
               ))}
             </select>
           ) : f.type === 'textarea' ? (
-            <>
+            f.key === 'rules' ? (
+              <div className="col-span-full">
+                <AttendanceRuleBuilder
+                  value={String(form.watch('rules') || '')}
+                  onChange={(v) =>
+                    form.setValue('rules', v, { shouldDirty: true, shouldValidate: true })
+                  }
+                />
+              </div>
+            ) : (
               <textarea
                 id={f.key}
-                className={`input min-h-28 ${f.key === 'rules' ? 'font-mono text-xs' : ''}`}
-                rows={f.key === 'rules' ? 12 : 4}
+                className="input min-h-28"
+                rows={4}
                 {...form.register(f.key, {
                   setValueAs: (v) => (v === '' && f.optional ? null : v),
                 })}
               />
-              {f.key === 'rules' && (
-                <button
-                  className="text-xs underline"
-                  type="button"
-                  onClick={() => form.setValue('rules', JSON.stringify(sampleRule, null, 2))}
-                >
-                  Load example schedule (review before saving)
-                </button>
-              )}
-            </>
+            )
           ) : (
             <input
               id={f.key}

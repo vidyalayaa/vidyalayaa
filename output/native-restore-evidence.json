@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-20T09:44:57.126Z",
+  "engine": "postgres:17",
+  "encryption": "AES-256-GCM/HKDF-SHA256",
+  "bytes": 10458553,
+  "sha256": "a0ab4b17410cd4c677fe47aad273bf2c4a1de33e2730d72b18574887a3ba8a8f",
+  "matched_counts": {
+    "events": 0,
+    "days": 30000,
+    "students": 1002,
+    "identities": 5,
+    "outbox": 0,
+    "event_hash": null
+  },
+  "schema_security_verified": true,
+  "elapsed_ms": 94297,
+  "scope": "Generated local fixture database only. No cloud Auth/provider/object-storage or operational RPO/RTO acceptance."
+}

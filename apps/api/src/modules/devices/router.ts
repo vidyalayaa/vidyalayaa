@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
+import { deviceOtaOffer } from './ota.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { Router, json } from 'express';
-import rateLimit from 'express-rate-limit';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -14,34 +16,37 @@ import {
 import { deviceAuth, permission } from '../../middleware/auth.js';
 import { transaction, audit } from '../../lib/db.js';
 import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
-import { equalHash } from '../../lib/crypto.js';
+import { equalHash, hash } from '../../lib/crypto.js';
 import { processEvent } from '../attendance/service.js';
 import { requireWrite } from '../school/router.js';
 import { paged } from '../../lib/pagination.js';
-function throttle(limit: number) {
-  return rateLimit({
-    windowMs: 60000,
-    limit,
-    keyGenerator: (_req, res) => res.locals.device.id,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_req, res) =>
-      res.status(429).json({
-        error: { code: 'RATE_LIMITED', message: 'Retry after the indicated delay.' },
-        server_time: new Date().toISOString(),
-      }),
+function throttle(pool: pg.Pool, limit: number) {
+  return asyncRoute(async (req, res, next) => {
+    const retry = Number(
+      (
+        await pool.query('SELECT app.take_http_token($1,$2,60) AS retry', [
+          hash('device:' + res.locals.device.id + ':' + req.path),
+          limit,
+        ])
+      ).rows[0].retry,
+    );
+    if (retry) {
+      res.setHeader('Retry-After', String(retry));
+      throw new ApiError(429, 'RATE_LIMITED', 'Retry after the indicated delay.');
+    }
+    next();
   });
 }
 function mismatch(expected: string, actual: string) {
   if (expected !== actual)
     throw new ApiError(403, 'DEVICE_MISMATCH', 'Payload device_id must match X-Device-Id.');
 }
-export function deviceRouter(pool: pg.Pool) {
+export function deviceRouter(pool: pg.Pool, storage: SupabaseClient, releasePublicKey?: string) {
   const r = Router();
   r.use(deviceAuth(pool));
   r.post(
     '/events/batch',
-    throttle(30),
+    throttle(pool, 30),
     json({ limit: '256kb' }),
     asyncRoute(async (req, res) => {
       const b = batchSchema.parse(req.body),
@@ -93,9 +98,39 @@ export function deviceRouter(pool: pg.Pool) {
       });
     }),
   );
+  r.get(
+    '/ota/image/:version',
+    throttle(pool, 6),
+    asyncRoute(async (req, res) => {
+      const d = res.locals.device,
+        target = String(req.params.version);
+      if (!/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(target))
+        throw new ApiError(404, 'NOT_FOUND', 'Firmware is unavailable.');
+      const offer = await transaction(
+        pool,
+        { schoolId: d.schoolId, actorType: 'DEVICE' },
+        (tx) => deviceOtaOffer(tx, d.id, releasePublicKey),
+        true,
+      );
+      if (!offer.available || offer.version !== target || !offer.storage_path)
+        throw new ApiError(404, 'NOT_FOUND', 'Firmware is unavailable.');
+      const object = await storage.storage.from('firmware').download(offer.storage_path);
+      if (object.error)
+        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Firmware storage is unavailable.');
+      const bytes = Buffer.from(await object.data.arrayBuffer());
+      if (
+        bytes.length !== offer.size ||
+        createHash('sha256').update(bytes).digest('hex') !== offer.sha256
+      )
+        throw new ApiError(503, 'FIRMWARE_INTEGRITY', 'Firmware integrity check failed.');
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', bytes.length);
+      res.send(bytes);
+    }),
+  );
   r.post(
     '/heartbeat',
-    throttle(6),
+    throttle(pool, 6),
     json({ limit: '16kb' }),
     asyncRoute(async (req, res) => {
       const b = heartbeatSchema.parse(req.body),
@@ -122,7 +157,7 @@ export function deviceRouter(pool: pg.Pool) {
             prev.pending_events !== b.pending_events
           )
             await tx.query(
-              'INSERT INTO device_heartbeats(school_id,device_id,device_time,skew_ms,boot_id,uptime_ms,firmware_version,pending_events,storage_used_pct,wifi_rssi_dbm,reader_status,rtc_status,boot_reference_time) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+              'INSERT INTO device_heartbeats(school_id,device_id,device_time,skew_ms,boot_id,uptime_ms,firmware_version,pending_events,storage_used_pct,wifi_rssi_dbm,reader_status,rtc_status,boot_reference_time,last_ntp_sync,reset_reason,config_version,oldest_pending_sequence,last_sequence,applied_config_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)',
               [
                 d.schoolId,
                 d.id,
@@ -137,6 +172,12 @@ export function deviceRouter(pool: pg.Pool) {
                 b.reader_status,
                 b.rtc_status,
                 new Date(now.getTime() - b.uptime_ms),
+                b.last_ntp_sync,
+                b.reset_reason,
+                b.config_version,
+                b.oldest_pending_sequence,
+                b.last_sequence,
+                b.config_version,
               ],
             );
           for (const l of b.logs)
@@ -164,7 +205,10 @@ export function deviceRouter(pool: pg.Pool) {
         server_time: now.toISOString(),
         skew_ms: skew,
         config_version: row.config_version,
-        ota: { available: false },
+        ota: await transaction(pool, { schoolId: d.schoolId, actorType: 'DEVICE' }, async (tx) => {
+          const { storage_path, ...offer } = await deviceOtaOffer(tx, d.id, releasePublicKey);
+          return offer;
+        }),
         alerts: [
           ...(Math.abs(skew) > 120000 ? ['RTC_DRIFT'] : []),
           ...(b.storage_used_pct >= 80 ? ['STORAGE_WARNING'] : []),
@@ -174,7 +218,7 @@ export function deviceRouter(pool: pg.Pool) {
   );
   r.get(
     '/config',
-    throttle(6),
+    throttle(pool, 6),
     asyncRoute(async (req, res) => {
       const d = res.locals.device,
         c = await transaction(
@@ -213,13 +257,21 @@ export function deviceRouter(pool: pg.Pool) {
           ...c.config.feedback,
         },
         location: { name: c.name, type: c.location_type },
-        ota: { channel: 'stable', available: false },
+        ota: await transaction(
+          pool,
+          { schoolId: d.schoolId, actorType: 'DEVICE' },
+          async (tx) => {
+            const { storage_path, ...offer } = await deviceOtaOffer(tx, d.id, releasePublicKey);
+            return offer;
+          },
+          true,
+        ),
       });
     }),
   );
   r.post(
     '/sync-ack',
-    throttle(30),
+    throttle(pool, 30),
     json({ limit: '4kb' }),
     asyncRoute(async (req, res) => {
       const b = syncAckSchema.parse(req.body),
@@ -259,6 +311,11 @@ export function deviceRouter(pool: pg.Pool) {
                 { previous: old, purged: end, queue_corruption_count: b.queue_corruption_count },
               ],
             );
+          if (gap || b.queue_corruption_count > 0)
+            await tx.query('SELECT app.queue_device_security_alert($1,NULL,$2)', [
+              gap ? 'SEQUENCE_GAP' : 'QUEUE_CORRUPTION',
+              d.id,
+            ]);
           return {
             gap_detected: gap,
             next_expected_sequence: (gap ? old : Math.max(old, end)) + 1,
@@ -270,7 +327,7 @@ export function deviceRouter(pool: pg.Pool) {
   );
   r.post(
     '/ota/status',
-    throttle(12),
+    throttle(pool, 12),
     json({ limit: '4kb' }),
     asyncRoute(async (req, res) => {
       const b = otaSchema.parse(req.body),
@@ -317,6 +374,41 @@ export function managementRouter(pool: pg.Pool) {
               [a.context.schoolId],
               req.query,
             ),
+          true,
+        ),
+      );
+    }),
+  );
+  r.get(
+    '/:id/health',
+    permission('devices.read'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => {
+            if (
+              !(
+                await tx.query('SELECT id FROM devices WHERE school_id=$1 AND id=$2', [
+                  a.context.schoolId,
+                  id,
+                ])
+              ).rowCount
+            )
+              throw notFound();
+            const kind = z.enum(['heartbeats', 'logs']).default('heartbeats').parse(req.query.kind);
+            return paged(
+              tx,
+              kind === 'logs'
+                ? 'SELECT id,received_at,level,code,detail FROM device_logs WHERE school_id=$1 AND device_id=$2 ORDER BY received_at DESC,id DESC'
+                : 'SELECT id,received_at,pending_events,storage_used_pct,reader_status,rtc_status,wifi_rssi_dbm,last_ntp_sync,reset_reason,config_version,skew_ms FROM device_heartbeats WHERE school_id=$1 AND device_id=$2 ORDER BY received_at DESC,id DESC',
+              [a.context.schoolId, id],
+              req.query,
+            );
+          },
           true,
         ),
       );
@@ -378,6 +470,7 @@ export function managementRouter(pool: pg.Pool) {
             )
           ).rows[0];
           if (!d?.claim_code_hash || !equalHash(b.claim_code, d.claim_code_hash)) throw notFound();
+          await tx.query("SELECT set_config('app.claim_verified','true',true)");
           return (
             await tx.query(
               "UPDATE devices SET name=$2,location_id=$3,status='ACTIVE',claim_code_hash=NULL,config_version=config_version+1 WHERE id=$1 RETURNING id,name,status",
@@ -414,6 +507,12 @@ export function managementRouter(pool: pg.Pool) {
             ])
           ).rows[0];
           if (!d) throw notFound();
+          if (d.status === 'PROVISIONED' && b.status !== 'REVOKED')
+            throw new ApiError(
+              409,
+              'CLAIM_REQUIRED',
+              'Claim this reader using its one-time claim code first.',
+            );
           if (d.status === 'REVOKED')
             throw new ApiError(
               409,

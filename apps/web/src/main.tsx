@@ -1,3 +1,4 @@
+import { captureRenderFailure } from './lib/monitoring';
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -15,11 +16,16 @@ import { resourceNames, type Resource } from '@vidyalayaa/contracts';
 import { AuthProvider, configured, useAuth, HttpError } from './lib/auth';
 import Layout from './components/Layout';
 import { Loading, ErrorState, Empty } from './components/common';
+import AuthenticatorSetup from './features/auth/AuthenticatorSetup';
 import PendingInvitations from './features/auth/PendingInvitations';
 import { resourceInfo } from './features/resources/metadata';
 
 import './styles.css';
-import { portals, schoolPath } from './lib/portals';
+import { portals, schoolPath, platformSections } from './lib/portals';
+const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
+const AttendanceHistory = lazy(() =>
+  import('./features/operations/SchoolTools').then((m) => ({ default: m.AttendanceHistory })),
+);
 const ResourceScreen = lazy(() =>
   import('./features/resources/ResourceScreen').then((m) => ({ default: m.ResourceScreen })),
 );
@@ -58,7 +64,14 @@ const Dashboard = lazy(() => import('./features/dashboard/Dashboard')),
   Settings = lazy(() => import('./features/operations/Settings')),
   Platform = lazy(() => import('./features/operations/Platform'));
 const client = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30000, retry: 1, refetchOnWindowFocus: true } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30000,
+      retry: (count, error) => count < 2 && (!(error instanceof HttpError) || error.status >= 500),
+      retryDelay: (count) => Math.min(1000 * 2 ** count, 10000),
+      refetchOnWindowFocus: true,
+    },
+  },
 });
 function Guard() {
   const a = useAuth(),
@@ -74,6 +87,19 @@ function Guard() {
       />
     );
   if (a.error) return <ErrorState error={a.error} retry={a.refetch} />;
+  if (a.me?.security_mfa_required)
+    return (
+      <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-white p-8">
+        <h1 className="text-xl font-semibold">Secure your school account</h1>
+        <p className="my-4">
+          Your school requires an authenticator. Enroll and verify it to continue.
+        </p>
+        <AuthenticatorSetup />
+        <button className="mt-4 underline" onClick={() => a.logout()}>
+          Sign out
+        </button>
+      </div>
+    );
   if (configured && a.me) {
     if (location.pathname.startsWith('/platform') && a.me.platform_role !== 'SUPER_ADMIN')
       return (
@@ -126,7 +152,7 @@ function Guard() {
         </div>
       );
   }
-  return <Layout />;
+  return <Layout key={`${a.me?.id}:${a.school}:${a.me?.school?.role}`} />;
 }
 function PortalGate() {
   const a = useAuth(),
@@ -170,6 +196,9 @@ class Boundary extends React.Component<{ children: React.ReactNode }, { error: E
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
+  componentDidCatch(error: Error) {
+    captureRenderFailure(error);
+  }
   render() {
     return this.state.error ? <ErrorState error={this.state.error} /> : this.props.children;
   }
@@ -178,7 +207,23 @@ function schoolRoutes() {
   return (
     <>
       <Route index element={<Dashboard />} />
+      <Route
+        path="exports"
+        element={
+          <Permission code="school.manage">
+            <SchoolExports />
+          </Permission>
+        }
+      />
       <Route path="r/:resource" element={<ResourcePage />} />
+      <Route
+        path="attendance/history"
+        element={
+          <Permission code="attendance.read">
+            <AttendanceHistory />
+          </Permission>
+        }
+      />
       <Route
         path="attendance"
         element={
@@ -258,6 +303,9 @@ const router = createBrowserRouter(
         <Route path=":portal" element={<PortalGate />}>
           {schoolRoutes()}
         </Route>
+        {platformSections.map((section) => (
+          <Route key={section} path={`platform/${section}`} element={<Platform />} />
+        ))}
         <Route path="platform/*" element={<Platform />} />
         <Route
           path="*"
@@ -272,6 +320,14 @@ const router = createBrowserRouter(
     </>,
   ),
 );
+window.addEventListener('vidyalayaa:step-up', (event) => {
+  const enroll = (event as CustomEvent).detail?.enroll;
+  router.navigate(
+    enroll
+      ? '/settings'
+      : `/login?mfa=1&recent=1&returnTo=${encodeURIComponent(location.pathname + location.search)}`,
+  );
+});
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Boundary>

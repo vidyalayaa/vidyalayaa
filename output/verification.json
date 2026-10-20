@@ -1,121 +1,177 @@
 {
-  "date": "2026-10-18",
+  "date": "2026-10-20",
+  "scope": "Website, API, worker, database and deployment source; firmware deferred by owner",
+  "production_approved": false,
+  "cloud_deployment_performed": false,
+  "owner_decisions": {
+    "billing": "manual",
+    "authentication": "Supabase Auth; Google/password plus enrolled MFA",
+    "firmware": "deferred",
+    "implementation_model": "GPT-6.1 Sol"
+  },
   "builds": {
     "contracts": "passed",
     "api": "passed",
     "worker": "passed",
     "web": "passed",
-    "strict_typecheck": "passed"
+    "strict_typecheck": "passed",
+    "note": "All four production builds passed after record-bound invitation changes; web build includes strict TypeScript."
   },
-  "local_tests": {
-    "files": 10,
-    "passed": 88,
-    "database": "isolated PostgreSQL/WASM; all nine migrations; forced RLS"
+  "isolated_tests": {
+    "passed": 125,
+    "files": 22,
+    "command": "npm test",
+    "services": "Disposable PGlite/PostgreSQL-WASM plus isolated API/Auth/Storage/provider fixtures; no live school records",
+    "source_version": "Historical audit pass before record-bound invitation follow-up; use latest_follow_up below for current targeted execution."
+  },
+  "native_runner": {
+    "passed": 85,
+    "files": 11,
+    "command": "node scripts/run-native-tests.mjs --fixtures",
+    "engine": "Disposable local PostgreSQL 17 for API/ownership checks; ten schema tests directly initialize PGlite",
+    "migrations": 22
+  },
+  "separate_native_checks": {
+    "concurrency": {
+      "passed": 2,
+      "readers": 5,
+      "events": 5000,
+      "claims": [
+        "cross-reader debounce",
+        "duplicate request idempotency",
+        "single attendance day/arrival notification"
+      ]
+    },
+    "committed_response_loss": {
+      "passed": 1,
+      "claim": "same event UUID retry preserves one immutable event and outbox effect"
+    },
+    "query_plans_and_pdf": {
+      "passed": 2,
+      "learners": 1000,
+      "attendance_rows": 30000,
+      "evidence": "output/native-queryplans-evidence.json"
+    },
+    "encrypted_restore": {
+      "passed": true,
+      "attendance_rows": 30000,
+      "evidence": "output/native-restore-evidence.json",
+      "scope": "generated local fixture database only; not cloud Auth/Storage/PITR recovery"
+    }
+  },
+  "csv_scale": {
+    "passed": true,
+    "rows": 10001,
+    "checks": [
+      "tenant restriction",
+      "formula neutralization",
+      "bounded streaming output"
+    ]
   },
   "browser_tests": {
-    "passed": 54,
+    "final_full_run": "Previous broad run was interrupted at the owner stop request; no clean complete-suite result claimed.",
+    "command": "npx playwright test --workers=1",
     "viewports": [
       "desktop",
       "mobile"
     ],
-    "services": "isolated API/Auth fixtures; local real credentials ignored",
-    "core_axe_serious_critical": 0,
-    "coverage": [
-      "setup/keyboard/axe",
-      "MFA QR/duplicate enrollment",
-      "invite/recovery callbacks",
-      "first School Admin/Principal acceptance",
-      "plans/expiring support",
-      "attendance/corrections",
-      "private homework",
-      "drafts and same-user session-expiry recovery"
-    ],
-    "note": "An extra callback recheck hit a cold Vite load timeout under parallel build load, passed on rerun; fixtures now warm lazy modules before assertions. No real test invitations or provider messages sent."
+    "services": "Isolated Auth/API fixtures; real local credentials ignored",
+    "targeted_platform_onboarding": {
+      "passed": 12,
+      "note": "After explicit platform route correction; both viewports passed audit before/after details, first-admin and Principal onboarding, manual subscriptions, plans/health and support expiry."
+    }
   },
   "database": {
-    "applied_migrations": 9,
-    "configured_project_schema_verification": "passed",
-    "real_school_retention_enabled_by_this_work": false
+    "fresh_migrations_verified": 23,
+    "upgrade_from_migration": 9,
+    "upgrade_to_migration": 23,
+    "configured_project_modified": false,
+    "configured_project_current_state": "Last prior read-only check found 10 migration ledger records and missing newer website schema. Not modified or re-inspected in the record-bound invitation follow-up; apply reviewed pending source migrations 010-023 in order before activation.",
+    "production_data_mutated": false
+  },
+  "lint": {
+    "status": "passed",
+    "source_files": 107,
+    "command": "npm run lint"
   },
   "production_dependency_audit": {
     "vulnerabilities": 0,
-    "command": "npm audit --omit=dev --json"
+    "command": "npm audit --omit=dev --audit-level=high",
+    "scope": "Production dependencies only; unused firebase umbrella dependency removed while app/messaging modules retained"
   },
-  "secret_scan": "passed source and browser bundle",
-  "openapi_generation": "passed from shared schemas",
+  "secret_scan": {
+    "status": "passed",
+    "scope": "source and browser bundle",
+    "history_gitleaks": "configured in CI, not executed remotely"
+  },
   "deployment_pdf": {
-    "pages": 12,
-    "version": "1.2",
-    "updated": "2026-10-19",
+    "version": "1.3",
+    "pages": 14,
     "text_checks": "passed",
-    "rendered_visual_review": "passed"
+    "rendered_visual_review": "passed",
+    "path": "output/pdf/Vidyalayaa_Deployment_Guide.pdf"
   },
-  "local_services": {
-    "web_http": 200,
-    "api_readiness_http": 200,
-    "real_worker_started": false
+  "container": {
+    "release_image_execution": "unverified",
+    "note": "Local build compiled applications but Docker client/engine failed during image unpacking under resource pressure; no accepted release image or remote Trivy result claimed."
   },
-  "hardware": {
-    "family": "ESP32 Dev Module with Wi-Fi and BLE",
-    "usb_connected": false,
-    "chip_revision": "unverified",
-    "flash_capacity": "unverified",
-    "flashed": false,
-    "build": "unchanged prototype compiled in earlier delivery; no production firmware build claimed"
-  },
-  "source_gaps": [
-    "production firmware task separation and verified durable segmented queue/cursors",
-    "encrypted provisioning and signed A/B OTA/anti-rollback/self-test",
-    "dedicated lint rule set",
-    "production error-monitoring integration"
+  "messages_invitations_payments_sent": false,
+  "persistent_application_services_started": true,
+  "committed_or_pushed": false,
+  "remaining_source_work": [
+    "T16: separately generated runtime response schemas for every specialized projection and deeper route/service/repository extraction"
   ],
-  "not_executed": [
-    "native PostgreSQL multi-connection concurrency suite",
-    "complete live staging Auth/Storage/role journeys",
-    "container image execution",
-    "external provider delivery",
-    "hardware power-loss/RTC/secure OTA rig",
-    "production load/soak and restore drill",
-    "manual screen-reader/tablet acceptance",
-    "cloud deployment and on-call alert drill"
+  "external_acceptance_pending": [
+    "Google OAuth client/provider and real staging Auth/MFA/recovery role journeys",
+    "Staging 010-022 migrations, non-bypass runtime roles/TLS and private Storage",
+    "Live email/FCM/selected SMS delivery and timeout/retry/logout ownership checks",
+    "Cloud release/rollback, protected secrets and CI/container scanning",
+    "Representative 100-user load, all performance targets and multi-hour failure/soak tests",
+    "Managed Auth/Storage/PITR/object/key recovery and measured operational RPO/RTO",
+    "Actual school security/privacy/consent/retention/attendance/grading approvals",
+    "Manual screen-reader/tablet and independent security review"
   ],
+  "firmware": {
+    "status": "deferred by owner",
+    "hardware_flashed": false,
+    "production_firmware_claimed": false
+  },
+  "counting_note": "Separate runs overlap; never add their counts to claim unique requirement completion. The original 239-row audit has not been re-certified row by row.",
+  "local_service_history": "Local web/API were temporarily started for troubleshooting, then all project process trees were stopped at the owner request. This invitation follow-up starts only disposable test servers, which close after tests.",
   "latest_follow_up": {
-    "date": "2026-10-19",
-    "feature": "Google OAuth alongside email/password with enrolled MFA and unchanged role authorization",
+    "date": "2026-10-20",
+    "feature": "Existing-record invitations and atomic account linking",
+    "migration": "202610200023_record_bound_invitations.sql",
+    "remote_migration_applied": false,
     "targeted_tests": {
-      "passed": 39,
-      "files": 3,
-      "services": "isolated PostgreSQL/WASM and API fixtures"
+      "passed": 27,
+      "files": 4,
+      "command": "npx vitest run tests/api/invitations.test.ts tests/api/offboarding.test.ts tests/database/ownership.test.ts tests/database/upgrade.test.ts",
+      "scope": "Disposable PGlite/real SQL, isolated API/Auth and mocked email; 21 invitation checks, 2 offboarding checks, 3 ownership checks and 1 upgrade check"
     },
     "browser_tests": {
-      "passed": 62,
+      "passed": 12,
+      "command": "npx playwright test tests/e2e/record-invitations.spec.ts --workers=1",
       "viewports": [
         "desktop",
         "mobile"
       ],
-      "services": "isolated Auth/API fixtures",
-      "coverage": [
-        "all six roles through Google PKCE",
-        "MFA required and invalid-code retry",
-        "email/password MFA",
-        "unavailable Google provider",
-        "unassigned identity",
-        "cancelled/missing/invalid callbacks",
-        "existing invitation/recovery flows",
-        "existing MFA enrollment",
-        "school workflows and expired sessions"
-      ]
+      "scope": "Isolated Auth/API fixtures; four role invitation forms, missing-record blocking and safe pagination"
     },
-    "production_builds": "contracts, API, worker, web passed",
-    "secret_scan": "source and browser bundle passed",
-    "google_provider": {
-      "configured_project_enabled": false,
-      "owner_has_created_oauth_client": false,
-      "real_google_round_trip": "pending external setup"
-    },
-    "database_migrations_required": false,
-    "live_account_or_membership_changes": false,
-    "new_guide": "docs/GOOGLE_SIGN_IN.md",
-    "deployment_pdf_version": "1.2"
+    "production_build": "contracts, API, worker and web passed",
+    "strict_types": "passed in production builds",
+    "lint": "passed",
+    "source_bundle_secret_scan": "passed",
+    "diff_whitespace_check": "passed",
+    "live_invitations_sent": false,
+    "real_database_records_modified": false,
+    "notes": [
+      "Students retain email-based authentication; no roll-number login added.",
+      "Parent-child links required for parent onboarding.",
+      "Principal and additional School Admin records use school staff with the corresponding staff_role.",
+      "First administrator bootstrap is a restricted exception.",
+      "Existing accepted identities are not silently matched to records by email.",
+      "Earlier broad test counts are historical and overlap targeted tests; do not sum them."
+    ]
   }
 }

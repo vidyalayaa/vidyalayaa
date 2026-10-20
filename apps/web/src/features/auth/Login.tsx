@@ -35,7 +35,7 @@ export default function Login() {
   useEffect(() => {
     if (!mfaRequested) return;
     let ignore = false;
-    getSignInFactor()
+    getSignInFactor(params.get('recent') === '1')
       .then((id) => {
         if (ignore) return;
         if (id) setFactor(id);

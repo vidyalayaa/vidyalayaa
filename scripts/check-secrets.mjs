@@ -4,7 +4,17 @@ const findings = [];
 async function scan(dir) {
   for (const e of await readdir(dir, { withFileTypes: true })) {
     if (
-      ['node_modules', '.git', 'tmp', 'test-results', 'playwright-report', '.pio'].includes(e.name)
+      [
+        'node_modules',
+        '.git',
+        '.tools',
+        'backups',
+        'secrets',
+        'tmp',
+        'test-results',
+        'playwright-report',
+        '.pio',
+      ].includes(e.name)
     )
       continue;
     const path = join(dir, e.name);

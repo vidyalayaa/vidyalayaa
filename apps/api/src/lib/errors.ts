@@ -1,3 +1,4 @@
+import { captureFailure } from './monitoring.js';
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { ZodError } from 'zod';
 export class ApiError extends Error {
@@ -31,12 +32,25 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     });
     return;
   }
-  if (err?.type === 'entity.too.large') {
+  if (err?.type === 'entity.too.large' || err?.code === 'LIMIT_FILE_SIZE') {
     res.status(413).json({
       error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds the endpoint limit.' },
       request_id,
       server_time: new Date().toISOString(),
     });
+    return;
+  }
+  if (err?.name === 'MulterError') {
+    res
+      .status(422)
+      .json({
+        error: {
+          code: 'INVALID_UPLOAD',
+          message: 'Upload one image and one manifest within the documented limits.',
+        },
+        request_id,
+        server_time: new Date().toISOString(),
+      });
     return;
   }
   if (err?.type === 'entity.parse.failed') {
@@ -52,6 +66,12 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     dbCode === '23514' &&
     (
       {
+        DEVICE_SYNC_REQUIRED:
+          'Synchronize every active reader and clear its pending queue before closing the school.',
+        OFFBOARDING_APPROVAL_REQUIRED:
+          'A different School Admin must approve the closure and an export window must remain open.',
+        ENTERPRISE_REQUIRED: 'This school needs an active Enterprise campus entitlement.',
+        CAMPUS_LIMIT_REACHED: 'The organization has reached a participating school campus limit.',
         LAST_SCHOOL_ADMIN:
           'Add another active School Admin before changing the last administrator.',
         INVITATION_PENDING:
@@ -74,6 +94,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         : 500;
   const code =
     err instanceof ApiError ? err.code : status === 409 ? 'CONSTRAINT_CONFLICT' : 'INTERNAL';
+  if (status === 500) captureFailure(err, dbCode || 'INTERNAL', request_id);
   if (status === 500) req.log.error({ error_code: dbCode, request_id }, 'Request failed');
   res.status(status).json({
     error: {

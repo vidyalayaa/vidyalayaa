@@ -9,6 +9,10 @@ export interface Actor extends Me {
   context: TenantContext;
   active?: Membership;
   aal2: boolean;
+  securityPolicy?: { require_privileged_mfa?: boolean; step_up_sensitive?: boolean };
+  security_mfa_required?: boolean;
+  recentVerification?: boolean;
+  hasVerifiedFactor?: boolean;
 }
 declare global {
   namespace Express {
@@ -37,13 +41,42 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
     if (!me) throw new ApiError(403, 'ACCOUNT_UNAVAILABLE', 'Your account is not active.');
     // getUser verified the signature and current identity; read aal only from that verified token.
     let aal2 = false;
+    let sessionId: string | undefined;
+    let recentVerification = false;
     try {
-      aal2 = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).aal === 'aal2';
+      const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+      aal2 = claims.aal === 'aal2';
+      recentVerification =
+        aal2 &&
+        Array.isArray(claims.amr) &&
+        claims.amr.some(
+          (x: { method?: string; timestamp?: number }) =>
+            ['totp', 'mfa/totp'].includes(x.method || '') &&
+            typeof x.timestamp === 'number' &&
+            Date.now() / 1000 - x.timestamp >= 0 &&
+            Date.now() / 1000 - x.timestamp <= 900,
+        );
+      if (typeof claims.session_id === 'string' && /^[0-9a-f-]{36}$/i.test(claims.session_id))
+        sessionId = claims.session_id;
     } catch {
       /* no step-up */
     }
     if (!aal2 && data.user.factors?.some((factor) => factor.status === 'verified'))
       throw new ApiError(403, 'MFA_REQUIRED', 'Complete multi-factor authentication to continue.');
+    if (sessionId)
+      await pool.query('SELECT app.record_privileged_login($1,$2)', [me.id, sessionId]);
+    const policies = new Map<string, Record<string, unknown>>();
+    for (const member of me.memberships) {
+      const policy =
+        (await pool.query('SELECT app.school_security_policy($1) AS policy', [member.school_id]))
+          .rows[0]?.policy || {};
+      policies.set(member.school_id, policy);
+    }
+    me.memberships = me.memberships.filter(
+      (member) =>
+        member.role !== 'student' ||
+        policies.get(member.school_id)?.student_login_enabled !== false,
+    );
     const selected = req.header('X-School-Id');
     const active = selected
       ? me.memberships.find((x) => x.school_id === selected)
@@ -57,6 +90,14 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
       limits: {},
       subscription_status: null,
       aal2,
+      recentVerification,
+      hasVerifiedFactor: !!data.user.factors?.some((factor) => factor.status === 'verified'),
+      securityPolicy: active ? policies.get(active.school_id) : undefined,
+      security_mfa_required:
+        !!active &&
+        ['school_admin', 'principal'].includes(active.role) &&
+        policies.get(active.school_id)?.require_privileged_mfa === true &&
+        !aal2,
       active,
       context: {
         schoolId: active?.school_id || '',
@@ -68,7 +109,31 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
     next();
   });
 }
-export const requireSchool: RequestHandler = (_req, res, next) => {
+export const requireSchool: RequestHandler = (req, res, next) => {
+  const actor = res.locals.actor;
+  if (actor.security_mfa_required)
+    return next(
+      new ApiError(
+        403,
+        'MFA_ENROLLMENT_REQUIRED',
+        'Your school requires an authenticator. Set it up and verify a code to continue.',
+      ),
+    );
+  if (
+    actor.securityPolicy?.step_up_sensitive &&
+    !actor.recentVerification &&
+    req.method !== 'GET' &&
+    /^\/(memberships|devices|support-grants|reports|school\/security)/.test(req.path)
+  )
+    return next(
+      new ApiError(
+        403,
+        actor.hasVerifiedFactor ? 'MFA_STEP_UP_REQUIRED' : 'MFA_ENROLLMENT_REQUIRED',
+        actor.hasVerifiedFactor
+          ? 'Verify your authenticator again before this sensitive change.'
+          : 'Set up an authenticator before this sensitive change.',
+      ),
+    );
   if (!res.locals.actor.active) {
     next(new ApiError(400, 'SCHOOL_REQUIRED', 'Select a school to continue.'));
     return;

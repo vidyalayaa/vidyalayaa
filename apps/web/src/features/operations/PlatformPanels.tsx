@@ -115,6 +115,7 @@ export function SubscriptionEditor({
 }) {
   const qc = useQueryClient(),
     [planId, setPlanId] = useState(String(school.plan_id || '')),
+    [status, setStatus] = useState(String(school.subscription_status || 'TRIALING')),
     [error, setError] = useState('');
   const plans = useQuery({
     queryKey: ['platform', 'plans', 'editor'],
@@ -174,6 +175,10 @@ export function SubscriptionEditor({
                   : null,
                 limit_overrides: limits,
                 reason: f.get('reason'),
+                billing_ref: String(f.get('billing_ref') || '').trim() || null,
+                export_until: f.get('export_until')
+                  ? fromDateTimeLocal(String(f.get('export_until')), zone)
+                  : null,
               });
             } catch (e) {
               setError((e as Error).message);
@@ -210,7 +215,8 @@ export function SubscriptionEditor({
             <select
               className="input mt-2"
               name="status"
-              defaultValue={String(school.subscription_status || 'TRIALING')}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
             >
               {[
                 'TRIALING',
@@ -246,6 +252,20 @@ export function SubscriptionEditor({
               defaultValue={toDateTimeLocal(school.grace_ends_at, zone)}
             />
           </label>
+          <label className="block field-label">
+            Contractual export deadline
+            <input
+              className="input mt-2"
+              type="datetime-local"
+              name="export_until"
+              required={['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(status)}
+              defaultValue={toDateTimeLocal(school.export_until, zone)}
+            />
+            <span className="mt-2 text-xs font-normal">
+              Required when ending access. Use the school’s approved contract; a blank date never
+              grants unlimited exports.
+            </span>
+          </label>
           <fieldset className="grid gap-3 sm:grid-cols-2" key={String(plan?.id)}>
             <legend className="field-label">School-specific limits</legend>
             {Object.entries((plan?.limits || {}) as Record<string, number>).map(([k, v]) => (
@@ -264,6 +284,19 @@ export function SubscriptionEditor({
               </label>
             ))}
           </fieldset>
+          <p className="text-sm text-muted-foreground">
+            Billing is manual. Confirm payment or the approved contract before changing access.
+          </p>
+          <label className="block field-label">
+            Payment or contract reference (optional)
+            <input
+              className="input mt-2"
+              name="billing_ref"
+              defaultValue={String(school.billing_ref || '')}
+              minLength={3}
+              maxLength={200}
+            />
+          </label>
           <label className="block field-label">
             Reason for change
             <textarea className="input mt-2" name="reason" required minLength={5} />

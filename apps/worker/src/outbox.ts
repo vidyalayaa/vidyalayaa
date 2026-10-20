@@ -21,6 +21,7 @@ interface Recipient {
   user_id: string;
   email: string | null;
   phone: string | null;
+  no_names_on_lock_screen?: boolean;
 }
 export function inQuietHours(time: string, start: string | null, end: string | null) {
   if (!start || !end || start === end) return false;
@@ -111,9 +112,18 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               [schoolId],
             )
           ).rows[0];
+          let publication: Record<string, any> | undefined;
+          if (job.kind === 'ANNOUNCEMENT') {
+            publication = (
+              await tx.query(
+                'SELECT * FROM announcements WHERE school_id=$1 AND id=$2 AND published_at<=now() AND publication_version=$3',
+                [schoolId, job.payload.announcement_id, job.payload.publication_version],
+              )
+            ).rows[0];
+          }
           const recipients = (
             await tx.query<Recipient>(
-              `SELECT DISTINCT p.id,p.user_id,p.email,p.phone FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id AND sp.status='ACTIVE' AND sp.can_receive_alerts JOIN students s ON s.school_id=sp.school_id AND s.id=sp.student_id WHERE p.school_id=$1 AND p.status='ACTIVE' AND ($2::uuid IS NULL OR sp.student_id=$2) AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=s.school_id AND en.student_id=s.id AND en.class_id=$3 AND en.status='ACTIVE'))`,
+              `SELECT DISTINCT p.id,p.user_id,p.email,p.phone,p.no_names_on_lock_screen FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id AND sp.status='ACTIVE' AND sp.can_receive_alerts JOIN students s ON s.school_id=sp.school_id AND s.id=sp.student_id WHERE p.school_id=$1 AND p.status='ACTIVE' AND ($2::uuid IS NULL OR sp.student_id=$2) AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=s.school_id AND en.student_id=s.id AND en.class_id=$3 AND en.status='ACTIVE'))`,
               [schoolId, job.student_id, job.payload.class_id || null],
             )
           ).rows;
@@ -121,16 +131,26 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             timezone: school.timezone,
             locale: school.settings.locale === 'hi-IN' ? 'hi-IN' : 'en-IN',
             sub,
-            recipients: ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
-              ? [
-                  {
-                    id: null,
-                    user_id: String(job.payload.recipient_user_id),
-                    email: String(job.payload.recipient_email),
-                    phone: null,
-                  },
-                ]
-              : recipients,
+            recipients:
+              job.kind === 'ANNOUNCEMENT' && !publication
+                ? []
+                : job.kind === 'ANNOUNCEMENT' && publication?.audience === 'STAFF'
+                  ? (
+                      await tx.query<Recipient>(
+                        "SELECT NULL::uuid AS id,u.id AS user_id,u.email,NULL::text AS phone FROM school_memberships m JOIN roles r ON r.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=$1 AND m.status='ACTIVE' AND u.status='ACTIVE' AND r.code IN ('school_admin','principal','teacher')",
+                        [schoolId],
+                      )
+                    ).rows
+                  : ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
+                    ? [
+                        {
+                          id: null,
+                          user_id: String(job.payload.recipient_user_id),
+                          email: String(job.payload.recipient_email),
+                          phone: null,
+                        },
+                      ]
+                    : recipients,
           };
         },
         true,
@@ -138,7 +158,8 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
       let retry = false;
       let next = 30;
       for (const parent of context.recipients) {
-        for (const channel of ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
+        for (const channel of !parent.id ||
+        ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
           ? ['EMAIL']
           : ['PUSH', 'EMAIL', 'SMS']) {
           const data = await transaction(pool, ctx, async (tx) => {
@@ -208,7 +229,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             );
             if (cap >= Number(process.env.NOTIFICATION_DAILY_CAP || 8)) status = 'SUPPRESSED';
             const inserted = await tx.query(
-              'INSERT INTO notification_deliveries(school_id,outbox_id,parent_id,channel,address_hash,status) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(school_id,outbox_id,parent_id,channel) DO NOTHING RETURNING *',
+              'INSERT INTO notification_deliveries(school_id,outbox_id,parent_id,channel,address_hash,status,recipient_user_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING *',
               [
                 schoolId,
                 job.id,
@@ -216,14 +237,15 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
                 channel,
                 addresses[0] ? hash(addresses[0]) : null,
                 status,
+                parent.user_id || null,
               ],
             );
             const delivery =
               inserted.rows[0] ||
               (
                 await tx.query(
-                  'SELECT * FROM notification_deliveries WHERE school_id=$1 AND outbox_id=$2 AND parent_id IS NOT DISTINCT FROM $3::uuid AND channel=$4',
-                  [schoolId, job.id, parent.id, channel],
+                  'SELECT * FROM notification_deliveries WHERE school_id=$1 AND outbox_id=$2 AND parent_id IS NOT DISTINCT FROM $3::uuid AND channel=$4 AND ($3::uuid IS NOT NULL OR recipient_user_id=$5)',
+                  [schoolId, job.id, parent.id, channel, parent.user_id],
                 )
               ).rows[0];
             if (status !== 'PENDING' && ['PENDING', 'FAILED'].includes(delivery.status)) {
@@ -245,6 +267,56 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             ),
           );
           if (!own.rowCount) break;
+          const allowed = await transaction(pool, ctx, async (tx) => {
+            if (
+              (
+                await tx.query(
+                  "SELECT id FROM school_offboarding WHERE school_id=$1 AND status IN ('CLOSED','PURGE_REQUESTED','PURGING','PURGED')",
+                  [schoolId],
+                )
+              ).rowCount
+            )
+              return false;
+            if (
+              job.kind === 'ANNOUNCEMENT' &&
+              !(
+                await tx.query(
+                  'SELECT id FROM announcements WHERE school_id=$1 AND id=$2 AND publication_version=$3 AND published_at<=now()',
+                  [schoolId, job.payload.announcement_id, job.payload.publication_version],
+                )
+              ).rowCount
+            )
+              return false;
+            if (!parent.id)
+              return !!(
+                await tx.query(
+                  "SELECT m.id FROM school_memberships m JOIN roles r ON r.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE' AND u.status='ACTIVE' AND r.code=ANY($3::text[])",
+                  [
+                    schoolId,
+                    parent.user_id,
+                    job.kind === 'ANNOUNCEMENT'
+                      ? ['school_admin', 'principal', 'teacher']
+                      : ['school_admin'],
+                  ],
+                )
+              ).rowCount;
+            return !!(
+              await tx.query(
+                "SELECT p.id FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id JOIN students st ON st.school_id=sp.school_id AND st.id=sp.student_id WHERE p.school_id=$1 AND p.id=$2 AND p.status='ACTIVE' AND sp.status='ACTIVE' AND sp.can_receive_alerts AND st.status='ACTIVE' AND (p.user_id IS NULL OR EXISTS(SELECT 1 FROM school_memberships m JOIN roles ro ON ro.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=p.school_id AND m.user_id=p.user_id AND m.status='ACTIVE' AND ro.code='parent' AND u.status='ACTIVE')) AND ($3::uuid IS NULL OR sp.student_id=$3) AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=sp.school_id AND en.student_id=sp.student_id AND en.class_id=$4 AND en.status='ACTIVE'))",
+                [schoolId, parent.id, job.student_id, job.payload.class_id || null],
+              )
+            ).rowCount;
+          });
+          if (!allowed) {
+            await transaction(pool, ctx, (tx) =>
+              tx.query(
+                "UPDATE notification_deliveries SET status='SUPPRESSED',last_error='RECIPIENT_ACCESS_CHANGED' WHERE id=$1",
+                [delivery.id],
+              ),
+            );
+            continue;
+          }
+
           const attempt = delivery.attempts + 1;
           try {
             let providerId = '';
@@ -254,7 +326,11 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
                 schoolId,
                 delivery.id,
                 data.pushTargets,
-                messageFor(job.kind, job.payload, context.timezone, context.locale),
+                parent.no_names_on_lock_screen !== false
+                  ? context.locale === 'hi-IN'
+                    ? 'विद्यालय की नई जानकारी के लिए Vidyalayaa खोलें।'
+                    : 'A school update is available. Open Vidyalayaa for details.'
+                  : messageFor(job.kind, job.payload, context.timezone, context.locale),
               );
             else
               for (const address of data.addresses) {

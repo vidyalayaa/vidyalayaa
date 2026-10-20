@@ -30,6 +30,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build -w @vidyalayaa/contracts
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npx tsx scripts/prepare-test-db.ts
@@ -37,12 +38,12 @@ jobs:
       - run: npm run db:verify
       - run: npm run test:integration
       - run: npm run contracts
-      - run: git diff --exit-code docs/api/openapi.json
+      - run: git diff --exit-code docs/api/openapi.json firmware/include/protocol.generated.h
       - run: npm run build
       - run: npm run check:secrets
       - run: npm audit --omit=dev --audit-level=high
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/e2e/workspace.spec.ts tests/e2e/mfa.spec.ts tests/e2e/auth-callback.spec.ts tests/e2e/google-login.spec.ts tests/e2e/onboarding.spec.ts tests/e2e/school-workflows.spec.ts tests/e2e/platform.spec.ts --workers=2
+      - run: npx playwright test tests/e2e/workspace.spec.ts tests/e2e/mfa.spec.ts tests/e2e/auth-callback.spec.ts tests/e2e/google-login.spec.ts tests/e2e/onboarding.spec.ts tests/e2e/school-workflows.spec.ts tests/e2e/platform.spec.ts tests/e2e/audit-workflows.spec.ts --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -61,12 +62,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  firmware:
+  # Firmware development and its build gates are deferred by the owner until website completion.
+  container-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - run: docker build --tag vidyalayaa:ci .
+      - uses: aquasecurity/trivy-action@0.28.0
         with:
-          python-version: '3.12'
-      - run: pip install platformio==6.1.18
-      - run: pio run -d firmware
+          image-ref: vidyalayaa:ci
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

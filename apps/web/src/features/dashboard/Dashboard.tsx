@@ -20,6 +20,11 @@ import {
 import { api, configured, useAuth } from '../../lib/auth';
 import { Button } from '../../components/ui/button';
 import { Badge, Empty, ErrorState, PageHeading, Panel, Loading } from '../../components/common';
+import { AcademicOverview } from '../operations/SchoolTools';
+import ParentPortalSection from './ParentPortalSection';
+import TeacherPortalSection from './TeacherPortalSection';
+import StudentPortalSection from './StudentPortalSection';
+import AdminActionStrip from './AdminActionStrip';
 const Chart = lazy(() => import('./TrendChart'));
 interface DashboardData {
   date: string;
@@ -109,6 +114,7 @@ export default function Dashboard() {
           </Button>
         }
       />
+      {configured && a.me?.school?.permissions.includes('marks.read') && <AcademicOverview />}
       {!configured && (
         <div className="setup-banner">
           <span className="status-dot" />
@@ -127,6 +133,10 @@ export default function Dashboard() {
           Attendance data may be delayed. One or more school devices is offline.
         </div>
       )}
+      {configured && role === 'parent' && <ParentPortalSection />}
+      {configured && role === 'teacher' && <TeacherPortalSection />}
+      {configured && role === 'student' && <StudentPortalSection />}
+      {configured && (role === 'school_admin' || role === 'principal') && <AdminActionStrip />}
       <div className="hero-grid">
         <section className="welcome-card">
           <div className="hero-copy">

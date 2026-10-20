@@ -1,3 +1,6 @@
+import InviteMemberDialog from '../auth/InviteMemberDialog';
+import SupportRequests from './SupportRequests';
+import ClassAttendanceSheet from './ClassAttendanceSheet';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -12,6 +15,7 @@ import {
   X,
   FileText,
   RefreshCw,
+  Users,
 } from 'lucide-react';
 import type { Page } from '@vidyalayaa/contracts';
 import { api, configured, useAuth, downloadReport } from '../../lib/auth';
@@ -71,6 +75,7 @@ export function Attendance() {
       `/attendance?date=${date}&page=${page}${classId ? `&class_id=${classId}` : ''}`,
     ),
     [action, setAction] = useState(''),
+    [batchOpen, setBatchOpen] = useState(false),
     [correction, setCorrection] = useState<Record<string, unknown> | null>(null);
   return (
     <>
@@ -83,6 +88,14 @@ export function Attendance() {
               <Link to="/corrections">
                 Corrections <ArrowUpRight size={15} />
               </Link>
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!a.me?.school?.permissions.includes('attendance.manual_write')}
+              onClick={() => setBatchOpen(true)}
+            >
+              <Users size={16} />
+              Class Register
             </Button>
             <Button
               variant="lime"
@@ -99,8 +112,13 @@ export function Attendance() {
         <Link className="tab-active" to="/attendance">
           Daily attendance
         </Link>
-        <Link to="/r/nfc_cards">NFC cards</Link>
-        <Link to="/r/attendance_rule_versions">Rule versions</Link>
+        <Link to="/attendance/history">Movement history</Link>
+        {a.me?.school?.permissions.includes('cards.read') && (
+          <Link to="/r/nfc_cards">NFC cards</Link>
+        )}
+        {a.me?.school?.permissions.includes('rules.read') && (
+          <Link to="/r/attendance_rule_versions">Rule versions</Link>
+        )}
         <Link to="/r/school_holidays">Calendar</Link>
       </div>
       <Panel
@@ -216,6 +234,17 @@ export function Attendance() {
             },
             { key: 'reason', type: 'textarea' },
           ]}
+        />
+      )}
+      {batchOpen && (
+        <ClassAttendanceSheet
+          open={batchOpen}
+          close={() => {
+            setBatchOpen(false);
+            query.refetch();
+          }}
+          initialClassId={classId}
+          initialDate={date}
         />
       )}
     </>
@@ -445,7 +474,11 @@ export function Reports() {
   async function download(id: unknown) {
     try {
       const r = await api<{ url: string }>(`/reports/${id}/download`);
-      await downloadReport(r.url);
+      const row = query.data?.data.find((x) => x.id === id);
+      await downloadReport(
+        r.url,
+        `vidyalayaa-report.${(row?.parameters as { format?: string })?.format === 'CSV' ? 'csv' : 'pdf'}`,
+      );
     } catch (e) {
       setError((e as Error).message);
     }
@@ -554,6 +587,11 @@ export function Reports() {
           ...(!['parent', 'student'].includes(a.me?.school?.role || '')
             ? [{ key: 'class_id', optional: true, lookup: '/resources/classes' }]
             : []),
+          {
+            key: 'format',
+            options: a.me?.features.advanced_reporting ? ['PDF', 'CSV'] : ['PDF'],
+            default: 'PDF',
+          },
           { key: 'from', type: 'date' },
           { key: 'to', type: 'date' },
         ]}
@@ -562,6 +600,7 @@ export function Reports() {
   );
 }
 export function Notifications() {
+  const [retry, setRetry] = useState<Record<string, unknown> | null>(null);
   const a = useAuth(),
     query = useRows('/notifications');
   return (
@@ -577,6 +616,15 @@ export function Notifications() {
           )
         }
       />
+      {retry && (
+        <ActionDialog
+          open
+          close={() => setRetry(null)}
+          title="Retry failed delivery"
+          endpoint={`/notifications/${retry.id}/retry`}
+          fields={[{ key: 'reason', type: 'textarea' }]}
+        />
+      )}
       <Panel title="Notification history">
         {query.data?.data.length ? (
           query.data.data.map((n) => (
@@ -602,7 +650,15 @@ export function Notifications() {
                 </p>
                 {Boolean(n.last_error) && <p className="field-error">{String(n.last_error)}</p>}
               </div>
-              <Badge>{String(n.status)}</Badge>
+              <div className="flex gap-3">
+                <Badge>{String(n.status)}</Badge>
+                {a.me?.school?.permissions.includes('users.manage') &&
+                  ['DEAD', 'FAILED'].includes(String(n.status)) && (
+                    <Button size="sm" variant="outline" onClick={() => setRetry(n)}>
+                      Retry delivery
+                    </Button>
+                  )}
+              </div>
             </article>
           ))
         ) : (
@@ -657,28 +713,18 @@ export function Members() {
         </p>
       )}
       <MemberInvitations />
-      <ActionDialog
-        open={open}
-        close={() => setOpen(false)}
-        title="Invite a school member"
-        onResult={(result) =>
-          setInvitationMessage(
-            result.status === 'READY'
-              ? 'This account already exists. The person can sign in and accept the school invitation in Settings.'
-              : 'The setup email has been sent. The person will choose a password and accept the school invitation.',
-          )
-        }
-        endpoint="/invitations"
-        fields={[
-          { key: 'full_name' },
-          { key: 'email', type: 'email' },
-          {
-            key: 'role',
-            options: ['school_admin', 'principal', 'teacher', 'parent', 'student'],
-            default: 'teacher',
-          },
-        ]}
-      />
+      {open && (
+        <InviteMemberDialog
+          close={() => setOpen(false)}
+          onResult={(result) =>
+            setInvitationMessage(
+              result.status === 'READY'
+                ? 'The person can sign in and accept the invitation. Their existing school record will be linked automatically.'
+                : 'The setup email has been sent. Acceptance will link the account to the selected school record.',
+            )
+          }
+        />
+      )}
       {edit && (
         <ActionDialog
           open={true}
@@ -743,6 +789,7 @@ export function SupportGrants() {
         description="Review and revoke time-limited support access to school records."
       />
       {error && <div className="notice">{error}</div>}
+      <SupportRequests />
       <Panel title="Support access requests">
         {q.data?.data.length ? (
           q.data.data.map((g) => (

@@ -41,6 +41,41 @@ async function platformSession(page: Page) {
     r.fulfill({ json: { data: [], total: 0, page: 1, page_size: 25 } }),
   );
 }
+
+test('Super Admin reads the approved before and after audit details', async ({
+  page,
+  authAppURL,
+}) => {
+  await platformSession(page);
+  await page.route('**/api/v1/platform/audit?**', (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id,
+            occurred_at: '2026-10-20T09:00:00Z',
+            actor_id: id,
+            action: 'device.revoke',
+            entity_type: 'devices',
+            reason: 'Approved isolated reader change',
+            request_id: id,
+            before: { status: 'ACTIVE' },
+            after: { status: 'REVOKED' },
+          },
+        ],
+        page: 1,
+        page_size: 25,
+        total: 1,
+      },
+    }),
+  );
+  await page.goto(authAppURL + '/platform/audit');
+  await page.getByRole('button', { name: 'View change', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('device.revoke');
+  await expect(dialog).toContainText('"ACTIVE"');
+  await expect(dialog).toContainText('"REVOKED"');
+});
 test('Super Admin edits named plan controls and sees processing health', async ({
   page,
   authAppURL,
@@ -144,6 +179,8 @@ test('Super Admin sets up a school with no subscription and sees the saved value
         report_retention_days: 120,
       },
       reason: 'Approved initial subscription',
+      billing_ref: null,
+      export_until: null,
     });
     return r.fulfill({
       json: { id: '00000000-0000-4000-8000-000000000303', school_id: school, ...saved },
@@ -166,7 +203,7 @@ test('Super Admin sets up a school with no subscription and sees the saved value
   await page.getByLabel('Reason for change', { exact: true }).fill('Approved initial subscription');
   await page.getByRole('button', { name: 'Save subscription', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('cell', { name: 'ACTIVE', exact: true })).toBeVisible();
+  await expect(page.getByText('ACTIVE', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Subscription', exact: true }).click();
   await expect(
     page.getByText('This school has no subscription yet.', { exact: false }),

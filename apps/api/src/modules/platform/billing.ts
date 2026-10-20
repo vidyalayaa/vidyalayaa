@@ -14,7 +14,7 @@ export function billingRouter(pool: pg.Pool, secret?: string) {
         throw new ApiError(
           503,
           'BILLING_NOT_CONFIGURED',
-          'The billing provider adapter is not configured.',
+          'Subscriptions are managed manually by the platform administrator.',
         );
       const timestamp = req.header('X-Webhook-Timestamp') || '',
         provided = req.header('X-Webhook-Signature') || '';

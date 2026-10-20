@@ -28,7 +28,7 @@ export async function resolveRules(
   pinned?: string,
 ) {
   const { rows: holidays } = await tx.query(
-    'SELECT kind FROM school_holidays WHERE school_id=$1 AND on_date=$2 AND (class_id=$3 OR class_id IS NULL) ORDER BY class_id NULLS LAST',
+    'SELECT kind FROM school_holidays WHERE school_id=$1 AND retired_at IS NULL AND on_date=$2 AND (class_id=$3 OR class_id IS NULL) ORDER BY class_id NULLS LAST',
     [school, date, classId],
   );
   const day = holidays[0]?.kind;
@@ -63,6 +63,8 @@ export async function processEvent(
 ): Promise<EventResult> {
   return transaction(pool, { schoolId: d.schoolId, actorType: 'DEVICE', requestId }, async (tx) => {
     // Revocation/location are rechecked inside every event transaction, including long batches.
+    if (!(await tx.query('SELECT app.lock_active_device($1) AS locked', [d.id])).rows[0]?.locked)
+      throw new Error('DEVICE_UNAVAILABLE');
     const { rows: devices } = await tx.query(
       "SELECT d.*,l.location_type,l.is_active,s.timezone FROM devices d JOIN schools s ON s.id=d.school_id LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.id=$1 AND d.status='ACTIVE'",
       [d.id],
@@ -139,6 +141,12 @@ export async function processEvent(
       device_action: 'DELETE',
     };
     const save = async () => {
+      if (['REJECTED_CARD_BLOCKED', 'QUARANTINED_TIMESTAMP'].includes(result.outcome || ''))
+        await tx.query('SELECT app.queue_device_security_alert($1,$2,$3)', [
+          result.outcome,
+          id,
+          d.id,
+        ]);
       await tx.query(
         'UPDATE attendance_events SET status=$2,outcome=$3,result=$4,processed_at=now() WHERE id=$1',
         [id, result.status, result.outcome, result],

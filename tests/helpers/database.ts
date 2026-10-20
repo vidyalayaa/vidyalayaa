@@ -3,8 +3,10 @@ import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { citext } from '@electric-sql/pglite/contrib/citext';
 import { readFileSync, readdirSync } from 'node:fs';
-import type pg from 'pg';
+import pg from 'pg';
 export async function portableDatabase() {
+  if (process.env.NATIVE_FIXTURE_DATABASE_URL)
+    return nativeFixtureDatabase(process.env.NATIVE_FIXTURE_DATABASE_URL);
   const db = new PGlite({ extensions: { btree_gist, citext, pgcrypto } });
   await db.exec(
     "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
@@ -12,6 +14,44 @@ export async function portableDatabase() {
   for (const file of readdirSync('db/migrations').sort())
     await db.exec(readFileSync(`db/migrations/${file}`, 'utf8'));
   return db;
+}
+async function nativeFixtureDatabase(connection: string): Promise<PGlite> {
+  const source = new URL(connection);
+  if (!source.pathname.endsWith('_test') || !['127.0.0.1', 'localhost'].includes(source.hostname))
+    throw new Error('NATIVE_FIXTURES_REQUIRE_LOCAL_DISPOSABLE_TEST_DATABASE');
+  const owner = new pg.Client({ connectionString: connection, ssl: false });
+  await owner.connect();
+  const name = 'vidyalayaa_fixture_' + crypto.randomUUID().replaceAll('-', '') + '_test';
+  await owner.query(`CREATE DATABASE ${name}`);
+  source.pathname = '/' + name;
+  const client = new pg.Client({ connectionString: source.toString(), ssl: false });
+  await client.connect();
+  const db = {
+    exec: async (sql: string) => client.query(sql),
+    query: async (sql: string, args?: unknown[]) => {
+      const result = await client.query(sql, args);
+      return { ...result, affectedRows: result.rowCount };
+    },
+    close: async () => {
+      await client.end();
+      try {
+        await owner.query(`DROP DATABASE ${name} WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  } as unknown as PGlite;
+  try {
+    await db.exec(
+      "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
+    );
+    for (const file of readdirSync('db/migrations').sort())
+      await db.exec(readFileSync(`db/migrations/${file}`, 'utf8'));
+    return db;
+  } catch (e) {
+    await db.close();
+    throw e;
+  }
 }
 // PGlite is real PostgreSQL compiled to WASM, with one backend. The mutex represents
 // its one connection; multi-connection row-lock tests use the separate CI pg suite.
@@ -30,7 +70,7 @@ export function poolAdapters(db: PGlite) {
         const unlock = await lock();
         return {
           async query(sql: string, args?: unknown[]) {
-            if (sql === 'BEGIN' || sql === 'BEGIN READ ONLY') {
+            if (sql.startsWith('BEGIN')) {
               await db.exec(`${sql};SET LOCAL ROLE ${role}`);
               return { rows: [], rowCount: 0 };
             }

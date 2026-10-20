@@ -2094,3 +2094,53 @@ tbody tr:hover {
 .login-footer {
   color: #4d602c;
 }
+
+/* Keep records readable and controls reachable on phones. */
+@media (max-width: 640px) {
+  .table-scroll table,
+  .table-scroll tbody,
+  .table-scroll tr,
+  .table-scroll td {
+    display: block;
+    width: 100%;
+  }
+  .table-scroll thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .table-scroll tr {
+    border-bottom: 1px solid #e6e9df;
+    padding: 12px;
+  }
+  .table-scroll td {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border: 0;
+    text-align: right;
+  }
+  .table-scroll td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    text-align: left;
+    color: #59644f;
+  }
+  .table-scroll button,
+  .tabs a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

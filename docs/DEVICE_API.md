@@ -10,7 +10,7 @@ Transport is HTTPS TLS 1.2+ with certificate-chain validation. Never use insecur
 | POST /api/v1/device/sync-ack | 4 KiB | 30 |
 | POST /api/v1/device/ota/status | 4 KiB | 12 |
 
-These limits are per API instance. Use a shared limiter before relying on global rate accuracy across scaled instances.
+These device limits are enforced through shared PostgreSQL counters across API replicas. A per-instance ingress guard also applies. Embedded firmware development and physical acceptance are deferred by the owner until website completion.
 
 ## Batch request
 

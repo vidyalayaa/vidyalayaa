@@ -1,3 +1,4 @@
+import { firmwareRouter } from './modules/devices/ota.js';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -11,11 +12,15 @@ import type { Config } from './lib/config.js';
 import { asyncRoute, errorHandler, ApiError } from './lib/errors.js';
 import { makePool } from './lib/db.js';
 import { userAuth, requireSchool, loadEntitlements } from './middleware/auth.js';
+import { exportsRouter } from './modules/school/exports.js';
+import { supportRouter } from './modules/school/support.js';
+import { workflowsRouter } from './modules/school/workflows.js';
 import { bulkRouter } from './modules/school/bulk.js';
 import { schoolRouter, schoolAccess } from './modules/school/router.js';
 import { deviceRouter, managementRouter } from './modules/devices/router.js';
 import { billingRouter } from './modules/platform/billing.js';
 import { platformRouter, supportApprovalRouter } from './modules/platform/router.js';
+import { sharedRateLimit, auditDenied } from './middleware/security-events.js';
 import { recipientInvitationRouter } from './modules/identity/invitations.js';
 export interface Dependencies {
   api: pg.Pool;
@@ -76,6 +81,20 @@ export function createApp(config: Config, deps: Dependencies) {
       maxAge: 600,
     }),
   );
+  app.get(
+    '/health/worker',
+    asyncRoute(async (_req, res) => {
+      const release = process.env.RENDER_GIT_COMMIT || 'development';
+      try {
+        const ready =
+          (await deps.api.query('SELECT app.worker_release_ready($1) AS ready', [release])).rows[0]
+            ?.ready === true;
+        res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', release });
+      } catch {
+        res.status(503).json({ status: 'degraded', release });
+      }
+    }),
+  );
   app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
   app.get(
     '/health/ready',
@@ -101,10 +120,38 @@ export function createApp(config: Config, deps: Dependencies) {
         }),
     }),
   );
-  app.use('/api/v1/device', deviceRouter(deps.device));
-  app.use('/api/v1/billing/webhook', billingRouter(deps.platform, config.BILLING_WEBHOOK_SECRET));
+  app.use(
+    '/api/v1/device',
+    deviceRouter(deps.device, deps.supabase, config.FIRMWARE_RELEASE_PUBLIC_KEY),
+  );
+  app.use('/api/v1/billing/webhook', billingRouter(deps.platform));
   app.use(express.json({ limit: '1mb' }));
+  if (config.NODE_ENV !== 'test')
+    app.use(
+      '/api/v1',
+      sharedRateLimit(deps.api, config.TOKEN_ENCRYPTION_KEY, 600, (req) => 'ip:' + req.ip),
+    );
   app.use('/api/v1', userAuth(deps.api, deps.supabase));
+  if (config.NODE_ENV !== 'test') {
+    app.use(
+      '/api/v1',
+      sharedRateLimit(
+        deps.api,
+        config.TOKEN_ENCRYPTION_KEY,
+        120,
+        (_req, res) => 'user:' + res.locals.actor.id,
+      ),
+    );
+    app.use(
+      ['/api/v1/reports', '/api/v1/marks/bulk', '/api/v1/imports'],
+      sharedRateLimit(
+        deps.api,
+        config.TOKEN_ENCRYPTION_KEY,
+        5,
+        (_req, res) => 'bulk:' + res.locals.actor.id,
+      ),
+    );
+  }
   app.get(
     '/api/v1/me',
     asyncRoute(async (_req, res) => {
@@ -112,13 +159,27 @@ export function createApp(config: Config, deps: Dependencies) {
       const e = a.active
         ? await loadEntitlements(deps.api, a)
         : { features: {}, limits: {}, subscription_status: null };
-      const { context: _context, aal2: _aal, active, ...me } = a;
+      const {
+        context: _context,
+        aal2: _aal,
+        securityPolicy: _policy,
+        recentVerification: _recent,
+        active,
+        ...me
+      } = a;
       res.json({ ...me, ...e, school: active });
     }),
   );
   app.use('/api/v1/invitations', recipientInvitationRouter(deps.api));
+  app.use(
+    '/api/v1/platform',
+    firmwareRouter(deps.platform, deps.supabase, config.FIRMWARE_RELEASE_PUBLIC_KEY),
+  );
   app.use('/api/v1/platform', platformRouter(deps.platform, deps.api, deps.supabase, config));
   app.use('/api/v1', requireSchool, schoolAccess(deps.api));
+  app.use('/api/v1', exportsRouter(deps.api, deps.supabase, config.TOKEN_ENCRYPTION_KEY));
+  app.use('/api/v1', workflowsRouter(deps.api));
+  app.use('/api/v1', supportRouter(deps.api));
   app.use('/api/v1', bulkRouter(deps.api));
   app.use('/api/v1/devices', managementRouter(deps.api));
   app.use('/api/v1/support-grants', supportApprovalRouter(deps.api));
@@ -126,6 +187,7 @@ export function createApp(config: Config, deps: Dependencies) {
   app.use((_req, _res, next) =>
     next(new ApiError(404, 'NOT_FOUND', 'The requested endpoint was not found.')),
   );
+  app.use(auditDenied(deps.api, deps.platform));
   app.use(errorHandler);
   return app;
 }

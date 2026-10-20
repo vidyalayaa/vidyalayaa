@@ -19,10 +19,17 @@ export default function Pagination({
         Page {page} · {total} records
       </span>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page === 1} onClick={() => onPage(page - 1)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={page === 1}
+          onClick={() => onPage(page - 1)}
+        >
           Previous
         </Button>
         <Button
+          type="button"
           variant="outline"
           size="sm"
           disabled={hasNext === undefined ? page * pageSize >= total : !hasNext}

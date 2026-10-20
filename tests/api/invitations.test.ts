@@ -26,6 +26,30 @@ async function identity(email: string, confirmed = true) {
   ]);
   return id;
 }
+async function schoolRecord(email: string, role = 'teacher', sid = f.schoolA) {
+  const id = crypto.randomUUID();
+  if (role === 'student')
+    await db.query(
+      "INSERT INTO students(id,school_id,student_code,first_name,email) VALUES($1,$2,$3,'Existing student',$4)",
+      [id, sid, id, email],
+    );
+  else if (role === 'parent') {
+    await db.query(
+      "INSERT INTO parents(id,school_id,full_name,email) VALUES($1,$2,'Existing parent',$3)",
+      [id, sid, email],
+    );
+    if (sid === f.schoolA)
+      await db.query(
+        "INSERT INTO student_parents(school_id,student_id,parent_id,relationship) VALUES($1,$2,$3,'GUARDIAN')",
+        [sid, f.student, id],
+      );
+  } else
+    await db.query(
+      "INSERT INTO teachers(id,school_id,staff_code,full_name,email,staff_role) VALUES($1,$2,$3,'Existing staff',$4,$5)",
+      [id, sid, id, email, role],
+    );
+  return id;
+}
 async function emptySchool() {
   const id = crypto.randomUUID();
   await db.query(
@@ -446,6 +470,7 @@ it('lets an existing identity accept another school without altering its previou
     email: 'existing-person@example.invalid',
     full_name: 'Existing colleague',
     role: 'principal',
+    record_id: await schoolRecord('existing-person@example.invalid', 'principal'),
   });
   expect(invited.status).toBe(201);
   expect(invited.body.status).toBe('READY');
@@ -467,6 +492,7 @@ it('lets an existing identity accept another school without altering its previou
         email: 'existing-person@example.invalid',
         full_name: 'Existing colleague',
         role: 'school_admin',
+        record_id: await schoolRecord('existing-person@example.invalid', 'school_admin'),
       })
     ).status,
   ).toBe(409);
@@ -474,6 +500,7 @@ it('lets an existing identity accept another school without altering its previou
 
 it('records provider failures, retries safely and supports cancellation', async () => {
   const body = {
+    record_id: await schoolRecord('retry-invite@example.invalid'),
     email: 'retry-invite@example.invalid',
     full_name: 'Retry colleague',
     role: 'teacher',
@@ -507,6 +534,7 @@ it('records provider failures, retries safely and supports cancellation', async 
 it('allows recipients to decline and prevents loss of the last active school administrator', async () => {
   const uid = await identity('decline@example.invalid');
   const invited = await call('post', '/invitations', f.admin, f.schoolA).send({
+    record_id: await schoolRecord('decline@example.invalid', 'parent'),
     email: 'decline@example.invalid',
     full_name: 'Declining colleague',
     role: 'parent',
@@ -534,4 +562,223 @@ it('allows recipients to decline and prevents loss of the last active school adm
     ]),
   ).rejects.toMatchObject({ code: '23514', message: 'LAST_SCHOOL_ADMIN' });
   expect((await call('get', '/me', f.admin, f.schoolA)).body.school.role).toBe('school_admin');
+});
+
+it('requires a same-school record with the matching email and staff role before any email is sent', async () => {
+  const email = 'record-check@example.invalid',
+    before = mailed;
+  const record = await schoolRecord(email, 'teacher');
+  const body = { email, full_name: 'Untrusted client label', role: 'teacher', record_id: record };
+  expect(
+    (await call('post', '/invitations', f.admin, f.schoolA).send({ ...body, record_id: undefined }))
+      .status,
+  ).toBe(422);
+  expect(
+    (
+      await call('post', '/invitations', f.admin, f.schoolA).send({
+        ...body,
+        record_id: crypto.randomUUID(),
+      })
+    ).status,
+  ).toBe(422);
+  expect(
+    (
+      await call('post', '/invitations', f.admin, f.schoolA).send({
+        ...body,
+        email: 'wrong-address@example.invalid',
+      })
+    ).status,
+  ).toBe(422);
+  expect(
+    (await call('post', '/invitations', f.admin, f.schoolA).send({ ...body, role: 'principal' }))
+      .status,
+  ).toBe(422);
+  const foreign = await schoolRecord(email, 'teacher', f.schoolB);
+  expect(
+    (await call('post', '/invitations', f.admin, f.schoolA).send({ ...body, record_id: foreign }))
+      .status,
+  ).toBe(422);
+  expect(mailed).toBe(before);
+  expect(
+    (await db.query('SELECT id FROM school_invitations WHERE email=$1', [email])).rows,
+  ).toHaveLength(0);
+});
+
+it('shows only eligible records to school administrators and denies all other school roles', async () => {
+  const email = 'candidate@example.invalid',
+    record = await schoolRecord(email, 'principal');
+  const found = await call('get', '/invitation-candidates?role=principal', f.admin, f.schoolA);
+  expect(found.status).toBe(200);
+  expect(found.body.data).toContainEqual(expect.objectContaining({ id: record, email }));
+  const foreign = await schoolRecord('foreign-candidate@example.invalid', 'principal', f.schoolB);
+  expect(found.body.data.some((r: { id: string }) => r.id === foreign)).toBe(false);
+  for (const user of [f.parent, f.studentUser, f.teacher, f.principal])
+    expect(
+      (await call('get', '/invitation-candidates?role=principal', user, f.schoolA)).status,
+    ).toBe(403);
+});
+
+for (const role of ['student', 'parent', 'teacher', 'principal'] as const)
+  it(`links the existing ${role} record on acceptance and immediately scopes their data`, async () => {
+    const email = `linked-${role}@example.invalid`,
+      uid = await identity(email),
+      record = await schoolRecord(email, role);
+    if (role === 'teacher')
+      await db.query(
+        "INSERT INTO teacher_class_assignments(school_id,teacher_id,class_id,starts_on) VALUES($1,$2,$3,'2026-01-01')",
+        [f.schoolA, record, f.classId],
+      );
+    const invitation = await call('post', '/invitations', f.admin, f.schoolA).send({
+      email,
+      role,
+      full_name: 'Client cannot replace the record name',
+      record_id: record,
+    });
+    expect(invitation.status).toBe(201);
+    const table = role === 'student' ? 'students' : role === 'parent' ? 'parents' : 'teachers';
+    expect(
+      (await db.query(`SELECT user_id FROM ${table} WHERE id=$1`, [record])).rows[0].user_id,
+    ).toBeNull();
+    const accepted = await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({
+      accept: true,
+    });
+    expect(accepted.status).toBe(200);
+    expect(
+      (await db.query(`SELECT user_id FROM ${table} WHERE id=$1`, [record])).rows[0].user_id,
+    ).toBe(uid);
+    expect((await call('get', '/me', uid, f.schoolA)).body.school.role).toBe(role);
+    const records = await call('get', '/resources/students', uid, f.schoolA);
+    expect(records.status).toBe(200);
+    const ids = records.body.data.map((r: { id: string }) => r.id);
+    if (role === 'student') expect(ids).toEqual([record]);
+    else if (role === 'parent' || role === 'teacher') expect(ids).toEqual([f.student]);
+    else expect(ids).toContain(f.student);
+    expect(ids).not.toContain(f.foreignStudent);
+    expect(
+      (await db.query('SELECT full_name FROM school_invitations WHERE id=$1', [invitation.body.id]))
+        .rows[0].full_name,
+    ).not.toContain('Client cannot');
+  });
+
+it('requires a child link for parents and rechecks it before acceptance', async () => {
+  const email = 'unlinked-parent@example.invalid',
+    uid = await identity(email),
+    record = await schoolRecord(email, 'parent');
+  await db.query('DELETE FROM student_parents WHERE parent_id=$1', [record]);
+  const body = { email, full_name: 'Existing parent', role: 'parent', record_id: record };
+  const blocked = await call('post', '/invitations', f.admin, f.schoolA).send(body);
+  expect(blocked.status).toBe(422);
+  expect(blocked.body.error.code).toBe('PARENT_CHILD_REQUIRED');
+  await db.query(
+    "INSERT INTO student_parents(school_id,student_id,parent_id,relationship) VALUES($1,$2,$3,'GUARDIAN')",
+    [f.schoolA, f.student, record],
+  );
+  const invitation = await call('post', '/invitations', f.admin, f.schoolA).send(body);
+  expect(invitation.status).toBe(201);
+  await db.query("UPDATE student_parents SET status='REVOKED' WHERE parent_id=$1", [record]);
+  expect(
+    (await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({ accept: true }))
+      .status,
+  ).toBe(422);
+  expect(
+    (await db.query('SELECT user_id FROM parents WHERE id=$1', [record])).rows[0].user_id,
+  ).toBeNull();
+  expect((await call('get', '/me', uid)).body.memberships).toEqual([]);
+  expect(
+    (await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({ accept: false }))
+      .status,
+  ).toBe(200);
+});
+
+it('never steals a record linked to another identity and rolls back membership activation', async () => {
+  const email = 'claimed-student@example.invalid',
+    uid = await identity(email),
+    record = await schoolRecord(email, 'student');
+  const invitation = await call('post', '/invitations', f.admin, f.schoolA).send({
+    email,
+    full_name: 'Existing student',
+    role: 'student',
+    record_id: record,
+  });
+  expect(invitation.status).toBe(201);
+  const other = await identity('different-record-owner@example.invalid');
+  await db.query('UPDATE students SET user_id=$2 WHERE id=$1', [record, other]);
+  const denied = await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({
+    accept: true,
+  });
+  expect(denied.status).toBe(409);
+  expect(
+    (await db.query('SELECT user_id FROM students WHERE id=$1', [record])).rows[0].user_id,
+  ).toBe(other);
+  expect(
+    (await db.query('SELECT status FROM school_invitations WHERE id=$1', [invitation.body.id]))
+      .rows[0].status,
+  ).toBe('READY');
+  expect((await call('get', '/me', uid)).body.memberships).toEqual([]);
+});
+
+it('rechecks retirement and rejects pre-migration unbound invitations without auto-matching email', async () => {
+  const email = 'retired-record@example.invalid',
+    uid = await identity(email),
+    record = await schoolRecord(email);
+  const invitation = await call('post', '/invitations', f.admin, f.schoolA).send({
+    email,
+    full_name: 'Existing staff',
+    role: 'teacher',
+    record_id: record,
+  });
+  expect(invitation.status).toBe(201);
+  await db.query("UPDATE teachers SET status='INACTIVE' WHERE id=$1", [record]);
+  expect(
+    (await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({ accept: true }))
+      .status,
+  ).toBe(422);
+  await db.query("UPDATE teachers SET status='ACTIVE' WHERE id=$1", [record]);
+  await db.query("UPDATE teachers SET staff_role='principal' WHERE id=$1", [record]);
+  expect(
+    (await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({ accept: true }))
+      .status,
+  ).toBe(422);
+  await db.query(
+    "UPDATE teachers SET staff_role='teacher',email='changed-invitation@example.invalid' WHERE id=$1",
+    [record],
+  );
+  expect(
+    (await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({ accept: true }))
+      .status,
+  ).toBe(422);
+  const retarget = await call('post', '/invitations', f.admin, f.schoolA).send({
+    email: 'changed-invitation@example.invalid',
+    full_name: 'Existing staff',
+    role: 'teacher',
+    record_id: record,
+  });
+  expect(retarget.status).toBe(409);
+  expect(retarget.body.error.code).toBe('INVITATION_RECORD_BUSY');
+  await db.query('UPDATE teachers SET email=$2 WHERE id=$1', [record, email]);
+
+  await db.query('UPDATE school_invitations SET teacher_id=NULL WHERE id=$1', [invitation.body.id]);
+  const legacy = await call('post', `/invitations/${invitation.body.id}/respond`, uid).send({
+    accept: true,
+  });
+  expect(legacy.status).toBe(422);
+  expect(legacy.body.error.code).toBe('INVITATION_RECORD_REQUIRED');
+  expect(
+    (await db.query('SELECT user_id FROM teachers WHERE id=$1', [record])).rows[0].user_id,
+  ).toBeNull();
+});
+
+it('does not grant application roles access to unbound invitation functions', async () => {
+  for (const signature of [
+    'app.begin_unbound_school_invitation(uuid,text,text,text,boolean)',
+    'app.finish_unbound_school_invitation(uuid,uuid,uuid,boolean)',
+    'app.respond_unbound_school_invitation(uuid,boolean)',
+  ])
+    expect(
+      (
+        await db.query("SELECT has_function_privilege('app_api',$1,'EXECUTE') AS allowed", [
+          signature,
+        ])
+      ).rows[0].allowed,
+    ).toBe(false);
 });

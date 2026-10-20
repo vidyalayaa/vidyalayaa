@@ -87,7 +87,7 @@ export function completeGoogleSignIn() {
     return googleReturnTo;
   })());
 }
-export async function getSignInFactor() {
+export async function getSignInFactor(force = false) {
   if (!supabase) throw new Error('Sign in to continue.');
   const result = await supabase.auth.mfa.listFactors();
   if (result.error) throw new Error('Could not check account security. Please sign in again.');
@@ -96,7 +96,7 @@ export async function getSignInFactor() {
   const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (assurance.error || !assurance.data.currentLevel)
     throw new Error('Could not check account security. Please sign in again.');
-  return assurance.data.currentLevel === 'aal2' ? '' : factor.id;
+  return assurance.data.currentLevel === 'aal2' && !force ? '' : factor.id;
 }
 let setupCompletion: Promise<Pick<User, 'id' | 'email'>> | undefined;
 export function completePasswordSetup() {
@@ -175,8 +175,19 @@ export async function api<T = Record<string, unknown>>(
   const headers = new Headers(options.headers);
   if (session) headers.set('Authorization', `Bearer ${session.access_token}`);
   if (requestSchool) headers.set('X-School-Id', requestSchool);
-  if (options.body) headers.set('Content-Type', 'application/json');
+  if (options.body && !(options.body instanceof FormData))
+    headers.set('Content-Type', 'application/json');
   const response = await fetch(`${base}/api/v1${path}`, { ...options, headers });
+  const latest = await supabase.auth.getSession();
+  if (
+    selectedSchool !== requestSchool ||
+    (latest.data.session?.user.id !== session?.user.id && response.status !== 401)
+  )
+    throw new HttpError(
+      'CONTEXT_CHANGED',
+      409,
+      'Your account or school changed. Reopen this page.',
+    );
   if (response.status === 401 && refresh) {
     const current = await supabase.auth.getSession();
     if (
@@ -209,6 +220,15 @@ export async function api<T = Record<string, unknown>>(
   }
   if (response.status === 204) return undefined as T;
   const body = await response.json();
+  if (
+    !response.ok &&
+    ['MFA_STEP_UP_REQUIRED', 'MFA_ENROLLMENT_REQUIRED'].includes(body.error?.code)
+  )
+    window.dispatchEvent(
+      new CustomEvent('vidyalayaa:step-up', {
+        detail: { enroll: body.error.code === 'MFA_ENROLLMENT_REQUIRED' },
+      }),
+    );
   if (!response.ok)
     throw new HttpError(
       body.error?.code || 'REQUEST_FAILED',
@@ -299,6 +319,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
     staleTime: 30000,
   });
+  useEffect(() => {
+    if (
+      !session ||
+      !me.data?.school ||
+      me.data.school.role !== 'parent' ||
+      typeof Notification === 'undefined' ||
+      Notification.permission !== 'granted'
+    )
+      return;
+    let current = true;
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine)
+        import('./push')
+          .then((m) => m.enablePush({ requestPermission: false, isCurrent: () => current }))
+          .catch(() => {});
+    };
+    refresh();
+    const timer = setInterval(refresh, 15 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      current = false;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('online', refresh);
+    };
+  }, [session?.user.id, me.data?.school?.school_id, me.data?.school?.role]);
   const setSchool = (value: string) => {
     clearDrafts();
     selectedSchool = value;
@@ -311,9 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reauthenticationSchool = undefined;
     if (supabase) {
       try {
-        const token_hash = sessionStorage.getItem('vidyalayaa.push_hash');
-        if (token_hash)
-          await api('/push-tokens', { method: 'DELETE', body: JSON.stringify({ token_hash }) });
+        await (await import('./push')).disablePush();
       } catch {
         /* logout continues */
       }
@@ -352,7 +397,9 @@ export function usePermission(code: string) {
   return !!useAuth().me?.school?.permissions.includes(code);
 }
 
-export async function downloadReport(url: string) {
+export async function downloadReport(url: string, filename = 'vidyalayaa-report.pdf') {
+  if (!/^\/((reports|materials)\/[0-9a-f-]+\/file|exports\/[0-9a-f-]+\/files\/\d+)\?/.test(url))
+    throw new Error('The download address is invalid.');
   if (!supabase) throw new Error('Sign in first.');
   const {
     data: { session },
@@ -367,7 +414,7 @@ export async function downloadReport(url: string) {
     object = URL.createObjectURL(blob),
     a = document.createElement('a');
   a.href = object;
-  a.download = 'vidyalayaa-report.pdf';
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(object), 1000);
 }

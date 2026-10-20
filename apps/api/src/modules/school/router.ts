@@ -10,6 +10,8 @@ import {
   reportSchema,
   inviteSchema,
   uuid,
+  date,
+  attendanceStatuses,
   type Resource,
   retentionPolicySchema,
 } from '@vidyalayaa/contracts';
@@ -32,6 +34,8 @@ import {
 } from './resources.js';
 import { queue } from '../attendance/service.js';
 import { localParts } from '../attendance/engine.js';
+import { authorizeReport } from './report-access.js';
+import { scheduleAnnouncement } from './announcements.js';
 import { signedDownload, verifyDownload } from '../../lib/downloads.js';
 import { hash, encrypt } from '../../lib/crypto.js';
 import type { Config } from '../../lib/config.js';
@@ -93,20 +97,66 @@ export function schoolAccess(pool: pg.Pool) {
   return asyncRoute(async (req, res, next) => {
     const a = res.locals.actor;
     Object.assign(a, await loadEntitlements(pool, a));
-    if (
-      ['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(a.subscription_status || '') &&
-      !(
-        a.active!.role === 'school_admin' &&
-        (req.path.startsWith('/reports') ||
-          req.path === '/subscription' ||
-          req.path === '/school/retention')
-      )
-    )
+    const window = await transaction(
+      pool,
+      a.context,
+      async (tx) =>
+        (
+          await tx.query(
+            "SELECT export_until FROM school_offboarding WHERE school_id=$1 AND status IN ('CLOSED','PURGE_REQUESTED','PURGING','PURGED') ORDER BY created_at DESC LIMIT 1",
+            [a.context.schoolId],
+          )
+        ).rows[0],
+      true,
+    );
+    const terminal = ['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(a.subscription_status || '');
+    const administration =
+      a.active!.role === 'school_admin' &&
+      /^\/(subscription|support-requests|offboarding)(\/|$)/.test(req.path);
+    if (administration) {
+      next();
+      return;
+    }
+    if (window && req.method === 'POST' && req.path === '/reports')
       throw new ApiError(
         403,
-        'SUBSCRIPTION_RESTRICTED',
-        'School administrator billing and data export access only.',
+        'SCHOOL_OFFBOARDED',
+        'Use School exports to export the closed school during its approved window.',
       );
+    if (window || terminal) {
+      if (a.active!.role !== 'school_admin' || !/^\/(exports|reports)(\/|$)/.test(req.path))
+        throw new ApiError(
+          403,
+          window ? 'SCHOOL_OFFBOARDED' : 'SUBSCRIPTION_RESTRICTED',
+          'School administrator billing, support and approved data exports only.',
+        );
+      const until =
+        window?.export_until ||
+        (await transaction(
+          pool,
+          a.context,
+          async (tx) =>
+            (
+              await tx.query(
+                'SELECT export_until FROM subscriptions WHERE school_id=$1 ORDER BY created_at DESC LIMIT 1',
+                [a.context.schoolId],
+              )
+            ).rows[0]?.export_until,
+          true,
+        ));
+      if (!until)
+        throw new ApiError(
+          403,
+          'EXPORT_WINDOW_REQUIRED',
+          'Contact platform support to record the approved contractual export deadline.',
+        );
+      if (new Date(until).getTime() <= Date.now())
+        throw new ApiError(
+          403,
+          'EXPORT_WINDOW_ENDED',
+          'The school export window has ended. Contact platform support about the approved retention policy.',
+        );
+    }
     next();
   });
 }
@@ -191,6 +241,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   );
   router.get(
     '/support-access',
+    permission('users.manage'),
     asyncRoute(async (_req, res) => {
       const a = res.locals.actor;
       res.json(
@@ -265,6 +316,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   );
   router.get(
     '/dashboard',
+    permission('students.read'),
     asyncRoute(async (_req, res) => {
       const a = res.locals.actor;
       const data = await transaction(
@@ -347,6 +399,209 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     }),
   );
   router.get(
+    '/students/:id/overview',
+    permission('students.read'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      const data = await transaction(
+        pool,
+        a.context,
+        async (tx) => {
+          await assertStudent(tx, a, id);
+          const student = (
+            await tx.query('SELECT t.* FROM students t WHERE t.school_id=$1 AND t.id=$2', [
+              a.context.schoolId,
+              id,
+            ])
+          ).rows[0];
+          if (!student) throw notFound();
+
+          const enrollment =
+            (
+              await tx.query(
+                `SELECT e.id, e.class_id, e.roll_number, e.starts_on, c.grade, c.section, s.name as session_name
+                 FROM enrollments e
+                 JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id
+                 JOIN academic_sessions s ON s.school_id=e.school_id AND s.id=e.academic_session_id
+                 WHERE e.school_id=$1 AND e.student_id=$2 AND e.status='ACTIVE'
+                 ORDER BY e.starts_on DESC LIMIT 1`,
+                [a.context.schoolId, id],
+              )
+            ).rows[0] || null;
+
+          const card =
+            (
+              await tx.query(
+                `SELECT id, card_uid, status, issued_at, blocked_reason FROM nfc_cards
+                 WHERE school_id=$1 AND student_id=$2 ORDER BY created_at DESC LIMIT 1`,
+                [a.context.schoolId, id],
+              )
+            ).rows[0] || null;
+
+          const parents = (
+            await tx.query(
+              `SELECT sp.id, sp.relationship, sp.is_primary_contact, sp.can_receive_alerts, sp.status,
+                      p.id as parent_id, p.full_name, p.email, p.phone
+               FROM student_parents sp
+               JOIN parents p ON p.school_id=sp.school_id AND p.id=sp.parent_id
+               WHERE sp.school_id=$1 AND sp.student_id=$2 AND sp.status='ACTIVE'`,
+              [a.context.schoolId, id],
+            )
+          ).rows;
+
+          const dateStr = localParts(new Date(), a.active!.timezone).date;
+          const todayAttendance =
+            (
+              await tx.query(
+                `SELECT attendance_status, movement_status, first_arrival_at, last_departure_at, needs_review
+                 FROM daily_attendance WHERE school_id=$1 AND student_id=$2 AND attendance_date=$3`,
+                [a.context.schoolId, id, dateStr],
+              )
+            ).rows[0] || null;
+
+          const statsRow = (
+            await tx.query(
+              `SELECT
+                 count(*)::int as total,
+                 count(*) FILTER (WHERE attendance_status IN ('PRESENT','LATE','HALF_DAY'))::int as present,
+                 count(*) FILTER (WHERE attendance_status = 'LATE')::int as late,
+                 count(*) FILTER (WHERE attendance_status = 'ABSENT')::int as absent
+               FROM daily_attendance
+               WHERE school_id=$1 AND student_id=$2 AND attendance_date >= current_date - 30`,
+              [a.context.schoolId, id],
+            )
+          ).rows[0];
+
+          const marks = (
+            await tx.query(
+              `SELECT m.id, m.score, m.remarks, ex.name as exam_name, ex.max_score, ex.exam_type, sub.name as subject_name
+               FROM marks m
+               JOIN exams ex ON ex.school_id=m.school_id AND ex.id=m.exam_id
+               JOIN subjects sub ON sub.school_id=m.school_id AND sub.id=m.subject_id
+               WHERE m.school_id=$1 AND m.student_id=$2 ${['parent', 'student'].includes(a.active!.role) ? "AND ex.status='PUBLISHED'" : ''}
+               ORDER BY ex.created_at DESC, m.created_at DESC LIMIT 10`,
+              [a.context.schoolId, id],
+            )
+          ).rows;
+
+          const feeSummary = (
+            await tx.query(
+              `SELECT
+                 coalesce(sum(amount_due), 0)::numeric as total_due,
+                 coalesce(sum(amount_paid), 0)::numeric as total_paid,
+                 coalesce(sum(amount_due - amount_paid), 0)::numeric as balance,
+                 count(*) FILTER (WHERE status = 'UNPAID')::int as unpaid_count
+               FROM fee_records WHERE school_id=$1 AND student_id=$2`,
+              [a.context.schoolId, id],
+            )
+          ).rows[0];
+
+          const fees = (
+            await tx.query(
+              `SELECT id, fee_type, amount_due, amount_paid, due_on, status, currency
+               FROM fee_records WHERE school_id=$1 AND student_id=$2 ORDER BY due_on DESC LIMIT 10`,
+              [a.context.schoolId, id],
+            )
+          ).rows;
+
+          return {
+            student,
+            enrollment,
+            card,
+            parents,
+            attendance: {
+              today: todayAttendance,
+              summary: {
+                total: statsRow?.total || 0,
+                present: statsRow?.present || 0,
+                late: statsRow?.late || 0,
+                absent: statsRow?.absent || 0,
+                percentage:
+                  (statsRow?.total || 0) > 0
+                    ? Math.round(((statsRow?.present || 0) / statsRow.total) * 100)
+                    : 100,
+              },
+            },
+            marks,
+            fees: {
+              summary: feeSummary,
+              records: fees,
+            },
+          };
+        },
+        true,
+      );
+      res.json(data);
+    }),
+  );
+  router.post(
+    '/cards/issue',
+    permission('cards.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        b = z
+          .object({
+            student_id: uuid,
+            card_uid: z.string().regex(/^[0-9A-F]{8,32}$/),
+          })
+          .strict()
+          .parse(req.body);
+      const result = await transaction(pool, a.context, async (tx) => {
+        await requireWrite(tx, a, 'nfc_attendance');
+        await assertStudent(tx, a, b.student_id);
+        await tx.query(
+          "UPDATE nfc_cards SET status='RETIRED', blocked_reason='Replaced with new card' WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'",
+          [a.context.schoolId, b.student_id],
+        );
+        const card = (
+          await tx.query(
+            "INSERT INTO nfc_cards(school_id, student_id, card_uid, status, issued_by) VALUES($1,$2,$3,'ACTIVE',$4) RETURNING *",
+            [a.context.schoolId, b.student_id, b.card_uid, a.id],
+          )
+        ).rows[0];
+        await audit(tx, a.context.schoolId, a.id, 'card.issued', 'nfc_cards', card.id);
+        return card;
+      });
+      res.status(201).json(result);
+    }),
+  );
+  router.post(
+    '/cards/:id/block',
+    permission('cards.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            reason: z.string().min(2).max(500),
+            status: z.enum(['BLOCKED', 'LOST', 'RETIRED']).default('BLOCKED'),
+          })
+          .strict()
+          .parse(req.body);
+      const card = await transaction(pool, a.context, async (tx) => {
+        await requireWrite(tx, a, 'nfc_attendance');
+        const c = (
+          await tx.query(
+            'UPDATE nfc_cards SET status=$3, blocked_reason=$4 WHERE school_id=$1 AND id=$2 RETURNING *',
+            [a.context.schoolId, id, b.status, b.reason],
+          )
+        ).rows[0];
+        if (!c) throw notFound();
+        await audit(
+          tx,
+          a.context.schoolId,
+          a.id,
+          `card.${b.status.toLowerCase()}:${b.reason}`,
+          'nfc_cards',
+          id,
+        );
+        return c;
+      });
+      res.json(card);
+    }),
+  );
+  router.get(
     '/resources/:resource',
     asyncRoute(async (req, res) => {
       const name = validName(String(req.params.resource)),
@@ -377,6 +632,13 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           ) {
             params.push(q.class_id);
             where += ` AND t.class_id=$${params.length}`;
+          }
+          if (
+            q.student_id &&
+            ['enrollments', 'student_parents', 'marks', 'fee_records', 'nfc_cards'].includes(name)
+          ) {
+            params.push(q.student_id);
+            where += ` AND t.student_id=$${params.length}`;
           }
           const total = Number(
             (await tx.query(`SELECT count(*) FROM ${name} t WHERE ${where}`, params)).rows[0].count,
@@ -472,14 +734,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
               [a.context.schoolId, ...keys.map((k) => values[k])],
             )
           ).rows[0];
-          if (name === 'announcements' && values.published_at)
-            await queue(tx, a.context.schoolId, null, 'ANNOUNCEMENT', `ANNOUNCEMENT:${row.id}`, {
-              announcement_id: row.id,
-              class_id: row.class_id,
-              audience: row.audience,
-              title: row.title,
-              event_time: row.published_at,
-            });
+          if (name === 'announcements') await scheduleAnnouncement(tx, a.context.schoolId, row);
           await audit(tx, a.context.schoolId, a.id, `${name}.create`, name, row.id);
           return row;
         });
@@ -518,6 +773,18 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             'UPDATE academic_sessions SET is_current=false WHERE school_id=$1 AND is_current AND id<>$2',
             [a.context.schoolId, id],
           );
+        if (name === 'students' && old.status !== 'ACTIVE' && merged.status === 'ACTIVE') {
+          const count = Number(
+            (
+              await tx.query(
+                "SELECT count(*) FROM students WHERE school_id=$1 AND status='ACTIVE'",
+                [a.context.schoolId],
+              )
+            ).rows[0].count,
+          );
+          if (count >= (a.limits.max_students ?? 0))
+            throw new ApiError(409, 'PLAN_LIMIT_REACHED', 'The student limit has been reached.');
+        }
         const keys = Object.keys(patch);
         const updated = (
           await tx.query(
@@ -525,6 +792,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             [a.context.schoolId, id, ...keys.map((k) => patch[k])],
           )
         ).rows[0];
+        if (name === 'announcements') await scheduleAnnouncement(tx, a.context.schoolId, updated);
         await audit(tx, a.context.schoolId, a.id, `${name}.update`, name, id);
         return updated;
       });
@@ -625,6 +893,59 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         return updated;
       });
       res.json(row);
+    }),
+  );
+  router.post(
+    '/attendance/bulk',
+    permission('attendance.manual_write'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        b = z
+          .object({
+            class_id: uuid,
+            date: date,
+            records: z.array(
+              z.object({
+                student_id: uuid,
+                status: z.enum(attendanceStatuses),
+              }),
+            ),
+            reason: z.string().min(3).max(2000),
+          })
+          .strict()
+          .parse(req.body);
+      const results = await transaction(pool, a.context, async (tx) => {
+        await requireWrite(tx, a);
+        await assertClass(tx, a, b.class_id);
+        const session = (
+          await tx.query(
+            'SELECT id FROM academic_sessions WHERE school_id=$1 AND is_current LIMIT 1',
+            [a.context.schoolId],
+          )
+        ).rows[0];
+        const sessionId = session?.id || null;
+        for (const item of b.records) {
+          await assertStudent(tx, a, item.student_id);
+          await tx.query(
+            'INSERT INTO daily_attendance(school_id,student_id,attendance_date,class_id,academic_session_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(school_id,student_id,attendance_date) DO NOTHING',
+            [a.context.schoolId, item.student_id, b.date, b.class_id, sessionId],
+          );
+          await tx.query(
+            "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,version=version+1 WHERE school_id=$1 AND student_id=$3 AND attendance_date=$4",
+            [a.context.schoolId, item.status, item.student_id, b.date],
+          );
+        }
+        await audit(
+          tx,
+          a.context.schoolId,
+          a.id,
+          `attendance.bulk_marked:${b.class_id}:${b.date}`,
+          'daily_attendance',
+          b.class_id,
+        );
+        return { updated: b.records.length };
+      });
+      res.json(results);
     }),
   );
   router.get(
@@ -771,6 +1092,63 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
       );
     }),
   );
+  router.post(
+    '/fees/:id/pay',
+    permission('fees.write'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            amount: z.number().positive().max(999999999),
+            payment_method: z
+              .enum(['CASH', 'UPI', 'CHEQUE', 'BANK_TRANSFER', 'CARD', 'OTHER'])
+              .default('CASH'),
+            note: z.string().max(500).optional(),
+          })
+          .strict()
+          .parse(req.body);
+      const result = await transaction(pool, a.context, async (tx) => {
+        await requireWrite(tx, a);
+        const fee = (
+          await tx.query('SELECT * FROM fee_records WHERE school_id=$1 AND id=$2 FOR UPDATE', [
+            a.context.schoolId,
+            id,
+          ])
+        ).rows[0];
+        if (!fee) throw notFound();
+        const currentPaid = Number(fee.amount_paid) || 0;
+        const totalDue = Number(fee.amount_due) || 0;
+        const newPaid = Math.min(totalDue, currentPaid + b.amount);
+        const newStatus = newPaid >= totalDue ? 'PAID' : 'PARTIAL';
+        const updated = (
+          await tx.query(
+            'UPDATE fee_records SET amount_paid=$2, status=$3 WHERE school_id=$1 AND id=$4 RETURNING *',
+            [a.context.schoolId, newPaid, newStatus, id],
+          )
+        ).rows[0];
+        await audit(
+          tx,
+          a.context.schoolId,
+          a.id,
+          `fee.payment_received:${b.payment_method}:${b.amount}`,
+          'fee_records',
+          id,
+        );
+        return {
+          ...updated,
+          receipt: {
+            receipt_no: `REC-${Date.now().toString().slice(-6)}`,
+            amount_paid_now: b.amount,
+            payment_method: b.payment_method,
+            note: b.note || '',
+            date: new Date().toISOString(),
+          },
+        };
+      });
+      res.json(result);
+    }),
+  );
   router.get(
     '/subscription',
     permission('subscription.read'),
@@ -806,6 +1184,47 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
                   [a.context.schoolId],
                   req.query,
                 ),
+          true,
+        ),
+      );
+    }),
+  );
+  router.get(
+    '/invitation-candidates',
+    permission('users.manage'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor;
+      const role = z
+        .enum(['school_admin', 'principal', 'teacher', 'parent', 'student'])
+        .parse(req.query.role);
+      const table = role === 'student' ? 'students' : role === 'parent' ? 'parents' : 'teachers';
+      const label = role === 'student' ? "concat_ws(' ',t.first_name,t.last_name)" : 't.full_name';
+      const code =
+        role === 'student' ? 't.student_code' : role === 'parent' ? "''::text" : 't.staff_code';
+      const extra =
+        table === 'teachers'
+          ? ' AND t.staff_role=$2'
+          : role === 'parent'
+            ? " AND EXISTS(SELECT FROM student_parents sp JOIN students child ON child.school_id=sp.school_id AND child.id=sp.student_id WHERE sp.school_id=t.school_id AND sp.parent_id=t.id AND sp.status='ACTIVE' AND child.status='ACTIVE')"
+            : '';
+      const values: unknown[] =
+        table === 'teachers' ? [a.context.schoolId, role] : [a.context.schoolId];
+      const search = pageSchema.parse(req.query).search?.trim();
+      const filter = search
+        ? ` AND (t.email::text ILIKE $${values.length + 1} OR ${label} ILIKE $${values.length + 1} OR ${code} ILIKE $${values.length + 1})`
+        : '';
+      if (search) values.push(`%${search}%`);
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          (tx) =>
+            paged(
+              tx,
+              `SELECT t.id,${label} AS full_name,t.email,${code} AS code FROM ${table} t WHERE t.school_id=$1 AND t.status='ACTIVE' AND t.user_id IS NULL AND t.email IS NOT NULL${extra}${filter} ORDER BY t.email,t.id`,
+              values,
+              req.query,
+            ),
           true,
         ),
       );
@@ -861,7 +1280,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         await requireWrite(tx, a);
         return (
           await tx.query(
-            'SELECT email,full_name,role_code FROM school_invitations WHERE id=$1 AND school_id=$2',
+            'SELECT email,full_name,role_code,coalesce(student_id,parent_id,teacher_id) AS record_id FROM school_invitations WHERE id=$1 AND school_id=$2',
             [id, a.context.schoolId],
           )
         ).rows[0];
@@ -877,6 +1296,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             email: item.email,
             full_name: item.full_name,
             role: item.role_code,
+            record_id: item.record_id ?? undefined,
           },
           config.WEB_ORIGINS.split(',')[0].trim() + '/auth/callback',
           true,
@@ -1015,7 +1435,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              'SELECT id,kind,status,student_id,class_id,created_at,error_code FROM report_documents WHERE school_id=$1 AND requested_by=$2 ORDER BY created_at DESC,id',
+              "SELECT id,kind,status,student_id,class_id,created_at,error_code FROM report_documents WHERE school_id=$1 AND requested_by=$2 AND (status IN ('PENDING','PROCESSING','FAILED','EXPIRED') OR (authorization_version=(SELECT access_version FROM schools WHERE id=$1) AND authorization_scope=app.report_scope_fingerprint($2) AND authorization_role=(SELECT r.code FROM school_memberships m JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE'))) ORDER BY created_at DESC,id",
               [a.context.schoolId, a.id],
               req.query,
             ),
@@ -1041,8 +1461,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             )
           ).rows[0];
           if (!r) throw notFound();
-          if (r.student_id) await assertStudent(tx, a, r.student_id);
-          if (r.class_id) await assertClass(tx, a, r.class_id);
+          await authorizeReport(tx, a, r);
           return r;
         },
         true,
@@ -1080,8 +1499,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           )
         ).rows[0];
         if (!r) throw notFound();
-        if (r.student_id) await assertStudent(tx, a, r.student_id);
-        if (r.class_id) await assertClass(tx, a, r.class_id);
+        await authorizeReport(tx, a, r);
         const needed =
           r.kind === 'FEES'
             ? 'fees.read'
@@ -1095,10 +1513,13 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
       const object = await storage.storage.from('school-documents').download(report.storage_path);
       if (object.error)
         throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Report storage is unavailable.');
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Type',
+        report.parameters?.format === 'CSV' ? 'text/csv' : 'application/pdf',
+      );
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="vidyalayaa-${report.kind.toLowerCase()}.pdf"`,
+        `attachment; filename="vidyalayaa-${report.kind.toLowerCase()}.${report.parameters?.format === 'CSV' ? 'csv' : 'pdf'}"`,
       );
       res.send(Buffer.from(await object.data.arrayBuffer()));
     }),
@@ -1145,12 +1566,62 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           true,
         );
       if (!r?.storage_path) throw notFound();
-      const signed = await storage.storage
-        .from('school-documents')
-        .createSignedUrl(r.storage_path, 60);
-      if (signed.error)
-        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Material storage is unavailable.');
-      res.json({ url: signed.data.signedUrl });
+      if (!a.features.assignments)
+        throw new ApiError(
+          403,
+          'SUBSCRIPTION_FEATURE_UNAVAILABLE',
+          'Your plan does not include study materials.',
+        );
+      await transaction(pool, a.context, (tx) =>
+        audit(tx, a.context.schoolId, a.id, 'material.download', 'assignments', id),
+      );
+      res.json(
+        signedDownload(
+          config.TOKEN_ENCRYPTION_KEY,
+          `/materials/${id}/file`,
+          a.id,
+          a.context.schoolId,
+        ),
+      );
+    }),
+  );
+  router.get(
+    '/materials/:id/file',
+    permission('assignments.read'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      verifyDownload(
+        config.TOKEN_ENCRYPTION_KEY,
+        `/materials/${id}/file`,
+        a.id,
+        a.context.schoolId,
+        req.query.expires,
+        req.query.signature,
+      );
+      if (!a.features.assignments)
+        throw new ApiError(
+          403,
+          'SUBSCRIPTION_FEATURE_UNAVAILABLE',
+          'Your plan does not include study materials.',
+        );
+      const row = await transaction(pool, a.context, async (tx) => {
+        const item = (
+          await tx.query(
+            `SELECT t.storage_path FROM assignments t WHERE t.school_id=$1 AND t.id=$3 AND ${resourceScope('assignments', a)}`,
+            [a.context.schoolId, a.id, id],
+          )
+        ).rows[0];
+        if (!item?.storage_path) throw notFound();
+        await audit(tx, a.context.schoolId, a.id, 'material.download', 'assignments', id);
+        return item;
+      });
+      const object = await storage.storage.from('school-documents').download(row.storage_path);
+      if (object.error)
+        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'This material is unavailable.');
+      res.setHeader('Content-Type', object.data.type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment; filename="learning-material"');
+      res.send(Buffer.from(await object.data.arrayBuffer()));
     }),
   );
   router.get(
@@ -1165,7 +1636,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) => {
             const select =
                 'SELECT d.id,d.channel,d.status,d.created_at,d.sent_at,d.last_error,t.kind,t.payload FROM notification_deliveries d JOIN notification_outbox t ON t.school_id=d.school_id AND t.id=d.outbox_id',
-              where = `WHERE d.school_id=$1 ${a.active!.role === 'parent' ? `AND EXISTS(SELECT 1 FROM parents p WHERE p.school_id=d.school_id AND p.id=d.parent_id AND p.user_id=$2 AND p.status='ACTIVE') AND (t.student_id IS NULL OR ${studentScope(a, 't.student_id', '$2')}) AND (t.payload->>'class_id' IS NULL OR ${classScope(a, "(t.payload->>'class_id')::uuid", '$2')})` : 'AND $2::uuid IS NOT NULL'}`;
+              where = `WHERE d.school_id=$1 ${a.active!.role === 'parent' ? `AND EXISTS(SELECT 1 FROM parents p WHERE p.school_id=d.school_id AND p.id=d.parent_id AND p.user_id=$2 AND p.status='ACTIVE') AND (t.student_id IS NULL OR ${studentScope(a, 't.student_id', '$2')}) AND (t.kind<>'ANNOUNCEMENT' OR (t.payload->>'audience' IN ('SCHOOL','CLASS','PARENTS') AND EXISTS(SELECT 1 FROM announcements an WHERE an.school_id=t.school_id AND an.id=(t.payload->>'announcement_id')::uuid AND an.published_at<=now() AND an.audience<>'STAFF'))) AND (t.payload->>'class_id' IS NULL OR ${classScope(a, "(t.payload->>'class_id')::uuid", '$2')})` : 'AND $2::uuid IS NOT NULL'}`;
             return req.query.cursor === '1'
               ? cursorPage(
                   tx,
@@ -1202,16 +1673,11 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           .strict()
           .parse(req.body);
       await transaction(pool, a.context, async (tx) => {
-        await tx.query(
-          'INSERT INTO push_tokens(school_id,user_id,token_hash,token_encrypted,platform) VALUES($1,$2,$3,$4,$5) ON CONFLICT(token_hash) DO UPDATE SET is_active=true,last_seen_at=now(),token_encrypted=EXCLUDED.token_encrypted WHERE push_tokens.school_id=$1 AND push_tokens.user_id=$2',
-          [
-            a.context.schoolId,
-            a.id,
-            hash(b.token),
-            encrypt(b.token, config.TOKEN_ENCRYPTION_KEY),
-            b.platform,
-          ],
-        );
+        await tx.query('SELECT app.register_push_endpoint($1,$2,$3)', [
+          hash(b.token),
+          encrypt(b.token, config.TOKEN_ENCRYPTION_KEY),
+          b.platform,
+        ]);
       });
       res.status(204).end();
     }),
@@ -1226,10 +1692,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           .safeParse(req.body);
       if (b.success)
         await transaction(pool, a.context, (tx) =>
-          tx.query(
-            'UPDATE push_tokens SET is_active=false WHERE school_id=$1 AND user_id=$2 AND token_hash=$3',
-            [a.context.schoolId, a.id, b.data.token_hash],
-          ),
+          tx.query('SELECT app.unregister_push_endpoint($1)', [b.data.token_hash]),
         );
       res.status(204).end();
     }),

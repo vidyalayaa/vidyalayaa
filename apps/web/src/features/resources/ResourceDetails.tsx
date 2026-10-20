@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Resource } from '@vidyalayaa/contracts';
 import { Download } from 'lucide-react';
-import { api, useAuth } from '../../lib/auth';
+import { api, useAuth, downloadReport } from '../../lib/auth';
 import { display, label } from '../../lib/utils';
 import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
@@ -31,6 +31,15 @@ export default function ResourceDetails({
     setError('');
     try {
       const result = await api<{ url: string }>(`/materials/${id}/download`);
+      if (result.url.startsWith('/materials/')) {
+        await downloadReport(
+          result.url,
+          String(query.data?.storage_path || 'learning-material')
+            .split('/')
+            .at(-1),
+        );
+        return;
+      }
       const url = new URL(result.url),
         origin = new URL(import.meta.env.VITE_SUPABASE_URL).origin;
       if (

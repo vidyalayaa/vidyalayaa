@@ -9,6 +9,9 @@ import { PageHeading, Panel, Badge } from '../../components/common';
 import { ActionDialog } from '../../components/ActionDialog';
 import AuthenticatorSetup from '../auth/AuthenticatorSetup';
 import PendingInvitations from '../auth/PendingInvitations';
+import { FamilyProfile } from './SchoolTools';
+import NotificationPrivacy from './NotificationPrivacy';
+import SecurityPolicy from './SecurityPolicy';
 import RetentionPanel from './RetentionPanel';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/auth';
@@ -117,6 +120,9 @@ export default function Settings() {
           <AuthenticatorSetup />
         </Panel>
       </div>
+      {a.me?.school?.permissions.includes('school.manage') && <SecurityPolicy />}
+      {a.me?.school?.role === 'parent' && <NotificationPrivacy />}
+      <FamilyProfile />
       <PendingInvitations />
       {a.me?.school?.permissions.includes('school.manage') && <RetentionPanel />}
       {a.me?.school?.permissions.includes('subscription.read') && (

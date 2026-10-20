@@ -7,7 +7,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci --no-audit --no-fund
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production

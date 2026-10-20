@@ -10,3 +10,18 @@ export function schoolPath(path: string, role?: Role) {
   if (!role || path === '/platform' || path === '/login' || path.startsWith('/auth/')) return path;
   return `/${portals[role]}${path === '/' ? '' : path}`;
 }
+
+export const platformSections = [
+  'schools',
+  'devices',
+  'plans',
+  'support-grants',
+  'health',
+  'audit',
+  'organizations',
+  'usage',
+  'offboarding',
+  'support-requests',
+  'notices',
+  'firmware',
+] as const;

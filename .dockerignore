@@ -13,3 +13,22 @@ firmware/.pio
 
 docs/source
 output
+
+Vidyalayaa_Architecture*
+.tools
+
+firmware-production/secrets
+firmware-production/build
+firmware-production/sdkconfig
+firmware-production/sdkconfig.old
+
+backups
+**/*.vbackup
+**/*.dump
+**/*.zip
+**/*.pem
+
+**/node_modules
+**/.pio
+**/__pycache__
+**/*.tsbuildinfo

@@ -14,6 +14,7 @@ export const configSchema = z.object({
   DB_CA_CERT: z.string().optional(),
   DB_POOL_SIZE: z.coerce.number().int().min(1).max(50).default(10),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
+  FIRMWARE_RELEASE_PUBLIC_KEY: z.string().max(10000).optional(),
   BILLING_WEBHOOK_SECRET: z.string().min(32).optional(),
 });
 export type Config = z.infer<typeof configSchema>;

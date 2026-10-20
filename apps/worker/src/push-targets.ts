@@ -23,7 +23,7 @@ export async function sendPushTargets(
       );
       return (
         await tx.query(
-          'SELECT status,provider_message_id FROM push_delivery_targets WHERE school_id=$1 AND delivery_id=$2 AND token_id=$3',
+          'SELECT status,provider_message_id,EXISTS(SELECT FROM push_tokens t JOIN notification_deliveries d ON d.school_id=t.school_id LEFT JOIN parents p ON p.school_id=d.school_id AND p.id=d.parent_id WHERE t.school_id=$1 AND t.id=$3 AND t.is_active AND d.id=$2 AND t.user_id=coalesce(d.recipient_user_id,p.user_id)) AS active FROM push_delivery_targets WHERE school_id=$1 AND delivery_id=$2 AND token_id=$3',
           [schoolId, deliveryId, target.id],
         )
       ).rows[0];
@@ -32,7 +32,7 @@ export async function sendPushTargets(
       sent = true;
       continue;
     }
-    if (row.status === 'DEAD') continue;
+    if (row.status === 'DEAD' || !row.active) continue;
     try {
       const wait = Number(
         (

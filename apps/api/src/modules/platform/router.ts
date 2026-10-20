@@ -1,7 +1,8 @@
 import { Router } from 'express';
+import { platformAuditSnapshot } from './audit.js';
 import type pg from 'pg';
 import { z } from 'zod';
-import { uuid, firstAdminSchema } from '@vidyalayaa/contracts';
+import { uuid, firstAdminSchema, supportResponseSchema } from '@vidyalayaa/contracts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Config } from '../../lib/config.js';
 import { inviteMember, invitationError } from '../identity/invitations.js';
@@ -18,6 +19,245 @@ export function platformRouter(
 ) {
   const r = Router();
   r.use(platformOnly);
+  r.get(
+    '/audit',
+    asyncRoute(async (req, res) => {
+      const page = await platformTx(platform, res.locals.actor.id, (tx) =>
+        paged(
+          tx,
+          "SELECT id,occurred_at,actor_type,actor_id,action,entity_type,entity_id,request_id,before,after,after->>'reason' AS reason FROM audit_logs WHERE (school_id IS NULL OR entity_type IN ('schools','devices','subscriptions','subscription_plans','support_access_grants','authentication','device_ota_assignments')) ORDER BY occurred_at DESC,id DESC",
+          [],
+          req.query,
+        ),
+      );
+      res.json({
+        ...page,
+        data: page.data.map((row) => ({
+          ...row,
+          before: platformAuditSnapshot(String(row.entity_type), row.before),
+          after: platformAuditSnapshot(String(row.entity_type), row.after),
+        })),
+      });
+    }),
+  );
+
+  r.get(
+    '/support-requests',
+    asyncRoute(async (req, res) =>
+      res.json(
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT t.*,s.name AS school_name FROM support_requests t JOIN schools s ON s.id=t.school_id ORDER BY t.updated_at DESC,t.id',
+            [],
+            req.query,
+          ),
+        ),
+      ),
+    ),
+  );
+  r.patch(
+    '/support-requests/:id',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id),
+        b = supportResponseSchema.parse(req.body);
+      await platformTx(platform, res.locals.actor.id, async (tx) => {
+        const row = await tx.query(
+          'UPDATE support_requests SET status=$2,response=$3,responded_by=$4 WHERE id=$1 RETURNING id',
+          [id, b.status, b.response, res.locals.actor.id],
+        );
+        if (!row.rowCount) throw notFound();
+      });
+      res.status(204).end();
+    }),
+  );
+  r.get(
+    '/notices',
+    asyncRoute(async (req, res) =>
+      res.json(
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT n.id,n.school_id,s.name AS school_name,n.kind,n.created_at FROM platform_notices n JOIN schools s ON s.id=n.school_id ORDER BY n.created_at DESC,n.id',
+            [],
+            req.query,
+          ),
+        ),
+      ),
+    ),
+  );
+  r.get(
+    '/offboarding',
+    asyncRoute(async (req, res) =>
+      res.json(
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT o.*,s.name AS school_name FROM school_offboarding o JOIN schools s ON s.id=o.school_id ORDER BY o.created_at DESC,o.id',
+            [],
+            req.query,
+          ),
+        ),
+      ),
+    ),
+  );
+  r.post(
+    '/schools/:id/offboarding',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            policy_ref: z.string().min(5).max(200),
+            reason: z.string().min(10).max(2000),
+            export_until: z.string().datetime(),
+            delete_after: z.string().datetime(),
+          })
+          .strict()
+          .refine(
+            (v) =>
+              new Date(v.export_until).getTime() > Date.now() + 86400000 &&
+              v.delete_after >= v.export_until,
+            'Allow at least one day for export, then the approved retention period.',
+          )
+          .parse(req.body);
+      const result = await platformTx(
+        platform,
+        res.locals.actor.id,
+        async (tx) =>
+          (
+            await tx.query(
+              'INSERT INTO school_offboarding(school_id,requested_by,policy_ref,reason,export_until,delete_after) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,status',
+              [id, res.locals.actor.id, b.policy_ref, b.reason, b.export_until, b.delete_after],
+            )
+          ).rows[0],
+      );
+      res.status(201).json(result);
+    }),
+  );
+  r.post(
+    '/offboarding/:id/close',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id);
+      z.object({ confirm: z.literal('CLOSE_SCHOOL') })
+        .strict()
+        .parse(req.body);
+      await platformTx(platform, res.locals.actor.id, (tx) =>
+        tx.query('SELECT app.close_approved_school($1)', [id]),
+      );
+      res.status(204).end();
+    }),
+  );
+  r.post(
+    '/offboarding/:id/hold',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            enabled: z.boolean(),
+            reason: z.string().min(10).max(2000),
+            policy_ref: z.string().min(5).max(200),
+          })
+          .strict()
+          .parse(req.body);
+      await platformTx(platform, res.locals.actor.id, async (tx) => {
+        const row = await tx.query(
+          "UPDATE school_offboarding SET legal_hold=$2,reason=reason||E'\nLegal hold decision: '||$3 WHERE id=$1 AND policy_ref=$4 AND status NOT IN ('PURGED','CANCELLED') RETURNING id",
+          [id, b.enabled, b.reason, b.policy_ref],
+        );
+        if (!row.rowCount) throw notFound();
+      });
+      res.status(204).end();
+    }),
+  );
+  r.post(
+    '/offboarding/:id/purge',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id),
+        b = z
+          .object({
+            confirm: z.literal('DELETE_SCHOOL_DATA'),
+            policy_ref: z.string().min(5).max(200),
+            reason: z.string().min(10).max(2000),
+          })
+          .strict()
+          .parse(req.body);
+      await platformTx(platform, res.locals.actor.id, async (tx) => {
+        const row = await tx.query(
+          "UPDATE school_offboarding SET status='PURGE_REQUESTED',purge_requested_by=$2,reason=reason||E'\nPurge request: '||$4 WHERE id=$1 AND status='CLOSED' AND policy_ref=$3 AND legal_hold=false AND delete_after<=now() AND export_until<=now() RETURNING id",
+          [id, res.locals.actor.id, b.policy_ref, b.reason],
+        );
+        if (!row.rowCount)
+          throw new ApiError(
+            409,
+            'PURGE_NOT_APPROVED',
+            'The export/retention window, school approval and legal hold must be resolved first.',
+          );
+      });
+      res.status(202).json({ status: 'PURGE_REQUESTED' });
+    }),
+  );
+  r.get(
+    '/organizations',
+    asyncRoute(async (req, res) =>
+      res.json(
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(tx, 'SELECT id,name,created_at FROM organizations ORDER BY name,id', [], req.query),
+        ),
+      ),
+    ),
+  );
+  r.post(
+    '/organizations',
+    asyncRoute(async (req, res) => {
+      const b = z
+        .object({ name: z.string().trim().min(2).max(200) })
+        .strict()
+        .parse(req.body);
+      res
+        .status(201)
+        .json(
+          await platformTx(
+            platform,
+            res.locals.actor.id,
+            async (tx) =>
+              (
+                await tx.query('INSERT INTO organizations(name) VALUES($1) RETURNING id,name', [
+                  b.name,
+                ])
+              ).rows[0],
+          ),
+        );
+    }),
+  );
+  r.patch(
+    '/schools/:id/organization',
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id),
+        b = z
+          .object({ organization_id: uuid.nullable(), reason: z.string().min(5).max(1000) })
+          .strict()
+          .parse(req.body);
+      await platformTx(platform, res.locals.actor.id, (tx) =>
+        tx.query('SELECT app.set_school_organization($1,$2,$3)', [id, b.organization_id, b.reason]),
+      );
+      res.status(204).end();
+    }),
+  );
+  r.get(
+    '/usage',
+    asyncRoute(async (req, res) =>
+      res.json(
+        await platformTx(platform, res.locals.actor.id, (tx) =>
+          paged(
+            tx,
+            'SELECT u.*,s.name AS school_name FROM school_usage_snapshots u JOIN schools s ON s.id=u.school_id ORDER BY u.on_date DESC,u.school_id',
+            [],
+            req.query,
+          ),
+        ),
+      ),
+    ),
+  );
   r.get(
     '/operations',
     asyncRoute(async (_req, res) =>
@@ -41,7 +281,7 @@ export function platformRouter(
         await platformTx(platform, res.locals.actor.id, (tx) =>
           paged(
             tx,
-            'SELECT s.*,app.platform_bootstrap_status(s.id) AS admin_onboarding,p.name AS plan,p.code AS plan_code,sub.plan_id,sub.status AS subscription_status,sub.current_period_end,sub.grace_ends_at,sub.limit_overrides FROM schools s LEFT JOIN LATERAL(SELECT * FROM subscriptions WHERE school_id=s.id ORDER BY created_at DESC LIMIT 1) sub ON true LEFT JOIN subscription_plans p ON p.id=sub.plan_id WHERE s.name ILIKE $1 OR s.school_code ILIKE $1 ORDER BY s.name,s.id',
+            'SELECT s.*,app.platform_bootstrap_status(s.id) AS admin_onboarding,p.name AS plan,p.code AS plan_code,sub.plan_id,sub.status AS subscription_status,sub.current_period_end,sub.grace_ends_at,sub.limit_overrides,sub.billing_ref,sub.export_until FROM schools s LEFT JOIN LATERAL(SELECT * FROM subscriptions WHERE school_id=s.id ORDER BY created_at DESC LIMIT 1) sub ON true LEFT JOIN subscription_plans p ON p.id=sub.plan_id WHERE s.name ILIKE $1 OR s.school_code ILIKE $1 ORDER BY s.name,s.id',
             [`%${typeof req.query.search === 'string' ? req.query.search : ''}%`],
             req.query,
           ),
@@ -198,6 +438,8 @@ export function platformRouter(
         id = uuid.parse(req.params.id),
         b = z
           .object({
+            billing_ref: z.string().trim().min(3).max(200).nullable().optional(),
+            export_until: z.string().datetime().nullable().optional(),
             plan_id: uuid.optional(),
             plan_code: z.enum(['BASIC', 'PROFESSIONAL', 'ENTERPRISE']).optional(),
             status: z.enum([
@@ -243,11 +485,19 @@ export function platformRouter(
             Object.keys(b.limit_overrides).some((key) => !(key in plan.limits))
           )
             throw new ApiError(422, 'INVALID_LIMIT', 'Choose a limit defined by this plan.');
+          const exportUntil =
+            b.export_until === undefined ? (sub?.export_until ?? null) : b.export_until;
+          if (['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(b.status) && !exportUntil)
+            throw new ApiError(
+              422,
+              'EXPORT_WINDOW_REQUIRED',
+              'Record the approved contractual export deadline before ending this subscription.',
+            );
           const row = (
             await tx.query(
               sub
-                ? 'UPDATE subscriptions SET plan_id=$2,status=$3,current_period_end=$4,grace_ends_at=$5,limit_overrides=$6 WHERE id=$1 RETURNING *'
-                : 'INSERT INTO subscriptions(school_id,plan_id,status,current_period_end,grace_ends_at,limit_overrides) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
+                ? 'UPDATE subscriptions SET plan_id=$2,status=$3,current_period_end=$4,grace_ends_at=$5,limit_overrides=$6,billing_ref=$7,export_until=$8 WHERE id=$1 RETURNING *'
+                : 'INSERT INTO subscriptions(school_id,plan_id,status,current_period_end,grace_ends_at,limit_overrides,billing_ref,export_until) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
               [
                 sub?.id || school.id,
                 plan.id,
@@ -257,12 +507,23 @@ export function platformRouter(
                 b.limit_overrides === undefined
                   ? (sub?.limit_overrides ?? null)
                   : JSON.stringify(b.limit_overrides),
+                b.billing_ref === undefined ? (sub?.billing_ref ?? null) : b.billing_ref,
+                exportUntil,
               ],
             )
           ).rows[0];
           await tx.query(
             'INSERT INTO subscription_events(school_id,subscription_id,previous_status,new_status,reason,actor_id) VALUES($1,$2,$3,$4,$5,$6)',
             [id, row.id, sub?.status ?? null, b.status, b.reason, a.id],
+          );
+          await tx.query(
+            "INSERT INTO audit_logs(school_id,actor_type,actor_id,action,entity_type,entity_id,after) VALUES($1,'USER',$2,'subscription.manual_change','subscriptions',$3,$4)",
+            [
+              id,
+              a.id,
+              row.id,
+              { reason: b.reason, billing_ref: row.billing_ref, billing_mode: 'MANUAL' },
+            ],
           );
           return row;
         }),
@@ -365,6 +626,7 @@ export function platformRouter(
           .parse(req.body),
         credential = secret();
       await platformTx(platform, a.id, async (tx) => {
+        await tx.query("SELECT set_config('app.change_reason',$1,true)", [b.reason]);
         const d = (await tx.query('SELECT * FROM devices WHERE id=$1 FOR UPDATE', [id])).rows[0];
         if (!d) throw notFound();
         await tx.query(

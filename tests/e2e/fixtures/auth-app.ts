@@ -27,11 +27,17 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
     { auto: true },
   ],
   authAppURL: [
-    async ({}, use, workerInfo) => {
+    async ({ browser }, use, workerInfo) => {
       const root = fileURLToPath(new URL('../../../apps/web', import.meta.url));
       const contentRoot = root.replaceAll('\\', '/');
       const server = await createServer({
         root,
+        cacheDir: fileURLToPath(
+          new URL(
+            `../../../node_modules/.vite-audit/auth-app-${workerInfo.parallelIndex}`,
+            import.meta.url,
+          ),
+        ),
         envFile: false,
         define: {
           'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://mfa-qr.test'),
@@ -66,12 +72,26 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
       const address = server.httpServer!.address();
       if (!address || typeof address === 'string')
         throw new Error('Auth test server did not start.');
+      // Each fixture/worker has its own dependency cache. Finish the initial
+      // browser dependency load outside individual workflow timing.
+      const warmContext = await browser.newContext();
+      try {
+        const warmPage = await warmContext.newPage();
+        await warmPage.route('https://mfa-qr.test/**', (route) => route.abort());
+        await warmPage.goto(`http://127.0.0.1:${address.port}/login`, {
+          waitUntil: 'load',
+          timeout: 90000,
+        });
+        await warmPage.getByRole('heading', { level: 1 }).first().waitFor();
+      } finally {
+        await warmContext.close();
+      }
       try {
         await use(`http://127.0.0.1:${address.port}`);
       } finally {
         await server.close();
       }
     },
-    { scope: 'worker' },
+    { scope: 'worker', timeout: 120000 },
   ],
 });

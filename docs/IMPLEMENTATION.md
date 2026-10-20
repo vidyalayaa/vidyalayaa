@@ -34,9 +34,13 @@ docs              API, decisions, deployment, production readiness and traceabil
 - Platform and school data use separate database roles/pools. Device authentication uses a narrow security-definer lookup; ordinary queries remain subject to forced RLS.
 - A student is a seeded `student` membership linked by `students.user_id`; its scope is self only, consistent with section 12.1.5.
 - The example attendance schedule is configurable school data, never silently installed as an approved production schedule.
-- Payment provider selection remains open in the SAS. Fee recording and subscription administration are implemented; actual online payment collection is not represented as complete.
+- The owner selected manual billing. Fee recording and audited Super Admin subscription administration are implemented; bank checkout is outside the current scope.
 - Fabric Grotesk is used when a licensed font is supplied at `apps/web/public/fonts/FabricGrotesk.woff2`; the app falls back to system sans-serif. No unlicensed font is downloaded.
 - Notification delivery is at least once. Database deduplication cannot guarantee exactly once at an external provider without provider idempotency support; this is documented and tested at the job boundary.
+
+## Audit implementation update
+
+The 20 October role audit drives the current implementation. All work packages use GPT-6.1 Sol, including those originally recommended for Astra. The owner deferred all firmware development until website completion. New security/workflow/exports/support modules and migrations 010-022 are tracked in AUDIT_IMPLEMENTATION.md. The original audit is historical evidence; it is not a current claim that a fix remains absent.
 
 ## Evidence and external gates
 

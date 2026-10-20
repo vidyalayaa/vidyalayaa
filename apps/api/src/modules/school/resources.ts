@@ -165,19 +165,27 @@ export function studentScope(a: Actor, column: string, param: string) {
   if (r === 'student')
     return `EXISTS(SELECT 1 FROM students own WHERE own.school_id=t.school_id AND own.id=${column} AND own.user_id=${param} AND own.status='ACTIVE')`;
   if (r === 'teacher')
-    return `EXISTS(SELECT 1 FROM enrollments en JOIN teacher_class_assignments ta ON ta.school_id=en.school_id AND ta.class_id=en.class_id JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id WHERE en.school_id=t.school_id AND en.student_id=${column} AND en.status='ACTIVE' AND te.user_id=${param} AND te.status='ACTIVE' AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date))`;
-  return `${param}::uuid IS NOT NULL`;
+    return `EXISTS(SELECT 1 FROM enrollments en JOIN teacher_class_assignments ta ON ta.school_id=en.school_id AND ta.class_id=en.class_id JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id WHERE en.school_id=t.school_id AND en.student_id=${column} AND en.status='ACTIVE' AND te.user_id=${param} AND te.status='ACTIVE' AND EXISTS(SELECT 1 FROM classes cl JOIN academic_sessions ac ON ac.school_id=cl.school_id AND ac.id=cl.academic_session_id WHERE cl.school_id=ta.school_id AND cl.id=ta.class_id AND ac.is_current AND ac.retired_at IS NULL AND cl.retired_at IS NULL) AND ta.retired_at IS NULL AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date))`;
+  return ['school_admin', 'principal'].includes(a.active!.role)
+    ? `${param}::uuid IS NOT NULL`
+    : 'FALSE';
 }
 export function classScope(a: Actor, column: string, param: string, subject?: string) {
   if (a.active!.role === 'teacher')
-    return `EXISTS(SELECT 1 FROM teacher_class_assignments ta JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id WHERE ta.school_id=t.school_id AND ta.class_id=${column} AND te.user_id=${param} AND te.status='ACTIVE' AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date)${subject ? ` AND (ta.subject_id IS NULL OR ta.subject_id=${subject})` : ''})`;
+    return `EXISTS(SELECT 1 FROM teacher_class_assignments ta JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id WHERE ta.school_id=t.school_id AND ta.class_id=${column} AND te.user_id=${param} AND te.status='ACTIVE' AND EXISTS(SELECT 1 FROM classes cl JOIN academic_sessions ac ON ac.school_id=cl.school_id AND ac.id=cl.academic_session_id WHERE cl.school_id=ta.school_id AND cl.id=ta.class_id AND ac.is_current AND ac.retired_at IS NULL AND cl.retired_at IS NULL) AND ta.retired_at IS NULL AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date)${subject ? ` AND (ta.subject_id IS NULL OR ta.subject_id=${subject})` : ''})`;
   if (['parent', 'student'].includes(a.active!.role))
     return `EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=t.school_id AND en.class_id=${column} AND en.status='ACTIVE' AND ${studentScope(a, 'en.student_id', param)})`;
-  return `${param}::uuid IS NOT NULL`;
+  return ['school_admin', 'principal'].includes(a.active!.role)
+    ? `${param}::uuid IS NOT NULL`
+    : 'FALSE';
 }
 export function resourceScope(name: Resource, a: Actor, param = '$2') {
+  if (!['school_admin', 'principal', 'teacher', 'parent', 'student'].includes(a.active!.role))
+    return 'FALSE';
   const d = definitions[name];
-  let scope = `${param}::uuid IS NOT NULL`;
+  let scope = ['school_admin', 'principal', 'teacher', 'parent', 'student'].includes(a.active!.role)
+    ? `${param}::uuid IS NOT NULL`
+    : 'FALSE';
   if (d.scope === 'student') scope = studentScope(a, `t.${d.studentColumn || 'student_id'}`, param);
   if (d.scope === 'class')
     scope = `(t.${d.classColumn || 'class_id'} IS NULL OR ${classScope(a, `t.${d.classColumn || 'class_id'}`, param, name === 'assignments' ? 't.subject_id' : undefined)})`;
@@ -190,10 +198,24 @@ export function resourceScope(name: Resource, a: Actor, param = '$2') {
     scope = `EXISTS(SELECT 1 FROM parents p WHERE p.school_id=t.school_id AND p.id=t.parent_id AND p.user_id=${param} AND p.status='ACTIVE')`;
   if (d.scope === 'announcement') {
     const isFamily = ['parent', 'student'].includes(a.active!.role);
-    scope = `(t.class_id IS NULL OR ${classScope(a, 't.class_id', param)})${isFamily ? ` AND t.published_at<=now() AND t.audience IN ('SCHOOL','CLASS','PARENTS')` : ''}`;
+    scope = `(t.class_id IS NULL OR ${classScope(a, 't.class_id', param)})${isFamily ? ` AND t.published_at<=now() AND t.audience IN (${a.active!.role === 'parent' ? "'SCHOOL','CLASS','PARENTS'" : "'SCHOOL','CLASS'"})` : ''}`;
   }
+  if (
+    [
+      'academic_sessions',
+      'classes',
+      'subjects',
+      'exams',
+      'assignments',
+      'timetable_entries',
+      'school_holidays',
+      'announcements',
+      'teacher_class_assignments',
+    ].includes(name)
+  )
+    scope += ' AND t.retired_at IS NULL';
   if (name === 'marks')
-    scope += ` AND EXISTS(SELECT 1 FROM exams ex WHERE ex.school_id=t.school_id AND ex.id=t.exam_id AND ${classScope(a, 'ex.class_id', param, 't.subject_id')}${['parent', 'student'].includes(a.active!.role) ? " AND ex.status='PUBLISHED'" : ''})`;
+    scope += ` AND EXISTS(SELECT 1 FROM exams ex WHERE ex.school_id=t.school_id AND ex.id=t.exam_id AND ${classScope(a, 'ex.class_id', param, 't.subject_id')}${['parent', 'student'].includes(a.active!.role) ? " AND ex.status='PUBLISHED' AND ex.retired_at IS NULL" : ''})`;
   if (name === 'exams' && ['parent', 'student'].includes(a.active!.role))
     scope += " AND t.status='PUBLISHED'";
   return scope;
@@ -241,7 +263,12 @@ export async function validateBusiness(
     if (!p.rowCount) throw notFound();
   }
   if (values.user_id) {
-    const role = name === 'parents' ? 'parent' : name === 'teachers' ? 'teacher' : 'student';
+    const role =
+      name === 'parents'
+        ? 'parent'
+        : name === 'teachers'
+          ? String(values.staff_role || 'teacher')
+          : 'student';
     const m = await tx.query(
       "SELECT m.id FROM school_memberships m JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE' AND r.code=$3",
       [a.context.schoolId, values.user_id, role],
@@ -253,6 +280,7 @@ export async function validateBusiness(
         `Invite this account as ${role} before linking it.`,
       );
   }
+
   if (name === 'marks') {
     const ex = (
       await tx.query('SELECT * FROM exams WHERE school_id=$1 AND id=$2 FOR UPDATE', [
@@ -290,12 +318,19 @@ export async function validateBusiness(
   }
   if (name === 'assignments' && values.storage_path) {
     const path = String(values.storage_path);
-    if (!path.startsWith(`${a.context.schoolId}/materials/`) || path.includes('..'))
-      throw new ApiError(422, 'INVALID_STORAGE_PATH', 'Material path must belong to this school.');
+    if (
+      !path.startsWith(`${a.context.schoolId}/materials/${values.class_id}/`) ||
+      path.includes('..')
+    )
+      throw new ApiError(
+        422,
+        'INVALID_STORAGE_PATH',
+        'Material path must belong to the selected school and class.',
+      );
   }
   if (name === 'timetable_entries') {
     const conflict = await tx.query(
-      'SELECT id FROM timetable_entries WHERE school_id=$1 AND weekday=$2 AND (teacher_id=$3 OR class_id=$4) AND starts_at<$6::time AND ends_at>$5::time AND id<>coalesce($7::uuid,gen_random_uuid()) FOR UPDATE',
+      'SELECT id FROM timetable_entries WHERE school_id=$1 AND retired_at IS NULL AND weekday=$2 AND (teacher_id=$3 OR class_id=$4) AND starts_at<$6::time AND ends_at>$5::time AND id<>coalesce($7::uuid,gen_random_uuid()) FOR UPDATE',
       [
         a.context.schoolId,
         values.weekday,

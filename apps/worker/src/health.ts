@@ -11,8 +11,8 @@ export async function monitorWorker(pool: pg.Pool) {
     writing = true;
     try {
       await pool.query(
-        'INSERT INTO worker_instances(id,state,last_success_at,last_error_code) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET last_seen_at=now(),state=$2,last_success_at=$3,last_error_code=$4',
-        [id, state, success, error],
+        'INSERT INTO worker_instances(id,state,last_success_at,last_error_code,release) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET last_seen_at=now(),state=$2,last_success_at=$3,last_error_code=$4,release=$5',
+        [id, state, success, error, process.env.RENDER_GIT_COMMIT || 'development'],
       );
     } finally {
       writing = false;

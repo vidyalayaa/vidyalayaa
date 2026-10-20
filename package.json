@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.12 <25"
   },
   "scripts": {
     "dev": "concurrently -n web,api,worker \"npm run dev -w @vidyalayaa/web\" \"npm run dev -w @vidyalayaa/api\" \"npm run dev -w @vidyalayaa/worker\"",
@@ -25,7 +25,10 @@
     "guide:pdf": "python scripts/build-guide.py",
     "predev": "npm run build -w @vidyalayaa/contracts",
     "pretest": "npm run build -w @vidyalayaa/contracts",
-    "precontracts": "npm run build -w @vidyalayaa/contracts"
+    "precontracts": "npm run build -w @vidyalayaa/contracts",
+    "lint": "node scripts/lint.mjs",
+    "backup:create": "tsx scripts/backup.ts create",
+    "backup:restore-test": "tsx scripts/backup.ts restore-test"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

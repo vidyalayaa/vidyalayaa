@@ -6,7 +6,7 @@ The interface contains no simulated students, fees, devices or attendance. Witho
 
 ## Start
 
-Requires Node.js 24 LTS and npm. From this directory:
+Requires Node.js 24.12 or a later supported 24.x LTS patch and npm. From this directory:
 
 ```powershell
 npm ci
@@ -27,12 +27,13 @@ npm run dev
 ## Validate
 
 ```powershell
+npm run lint
 npm run typecheck
 npm test
 npm run build
 npm run contracts
 npm run check:secrets
-npx playwright test tests/e2e/workspace.spec.ts tests/e2e/mfa.spec.ts tests/e2e/auth-callback.spec.ts tests/e2e/google-login.spec.ts tests/e2e/onboarding.spec.ts tests/e2e/school-workflows.spec.ts tests/e2e/platform.spec.ts --workers=2
+npx playwright test tests/e2e/workspace.spec.ts tests/e2e/mfa.spec.ts tests/e2e/auth-callback.spec.ts tests/e2e/google-login.spec.ts tests/e2e/onboarding.spec.ts tests/e2e/school-workflows.spec.ts tests/e2e/platform.spec.ts tests/e2e/audit-workflows.spec.ts --workers=2
 ```
 
 Browser tests use installed Chrome locally; set PLAYWRIGHT_CHANNEL=chromium after `npx playwright install chromium` on Linux. The portable database tests execute PostgreSQL in WASM with forced RLS and real SQL. The separate multi-connection PostgreSQL suite requires a dedicated `_test` database:
@@ -57,11 +58,14 @@ An invitation does not expose school records until acceptance. Teacher assignmen
 ## Find your way
 
 - [Implementation checklist and structure](docs/IMPLEMENTATION.md)
-- [Completion audit and remaining work](docs/REMAINING_FEATURES.md)
+- [Audit implementation evidence](docs/AUDIT_IMPLEMENTATION.md) and [remaining acceptance](docs/REMAINING_FEATURES.md)
+- [Architecture and owner decisions](docs/DECISIONS.md)
 - [Deployment and operational guide](docs/DEPLOYMENT.md)
 - [API documentation](docs/API.md) and [generated OpenAPI](docs/api/openapi.json)
 - [NFC device contracts](docs/DEVICE_API.md) and [firmware example](firmware/README.md)
 - [Readiness and verification evidence](docs/READINESS.md)
 - [Requirement traceability](docs/TRACEABILITY.csv)
 
-Production deployment needs your Supabase/Firebase/Render/GitHub projects, secrets, verified notification providers and an approved school schedule. Actual online payment collection is deliberately not claimed: SAS v1 leaves payment-provider selection open. Firmware is an explicit prototype example; production signed OTA and secure provisioning remain implementation gates; hardware power-failure acceptance also requires physical validation. See the readiness ledger for precise limits.
+Production deployment needs your Supabase/Firebase/Render/GitHub projects, secrets, verified notification providers and an approved school schedule. Billing remains manual by the owner’s decision. Firmware development and physical acceptance are deferred until the website is complete. Supabase remains the authentication and database provider; Firebase supplies Hosting and push messaging. See the readiness ledger for precise limits.
+
+Account onboarding: see [Existing-record invitations](docs/ACCOUNT_ONBOARDING.md) for adding students, family links and school staff before inviting their accounts, automatic linking on acceptance, and migration 023.

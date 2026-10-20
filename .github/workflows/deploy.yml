@@ -46,14 +46,14 @@ jobs:
           API_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
           WORKER_HOOK: ${{ secrets.RENDER_WORKER_DEPLOY_HOOK }}
         run: |
-          curl --fail --silent --show-error -X POST "$API_HOOK" > /dev/null
-          curl --fail --silent --show-error -X POST "$WORKER_HOOK" > /dev/null
-      - name: Wait for operator-confirmed API release
+          curl --fail --silent --show-error -X POST "${API_HOOK}&ref=${GITHUB_SHA}" > /dev/null
+          curl --fail --silent --show-error -X POST "${WORKER_HOOK}&ref=${GITHUB_SHA}" > /dev/null
+      - name: Wait for the identical API and worker release
         env:
           API_URL: ${{ vars.VITE_API_URL }}
         run: |
           for attempt in $(seq 1 30); do
-            if curl --fail --silent "$API_URL/health/ready" | jq -e --arg sha "$GITHUB_SHA" '(.status == "ok") and (.release == $sha)' > /dev/null; then exit 0; fi
+            if curl --fail --silent "$API_URL/health/ready" | jq -e --arg sha "$GITHUB_SHA" '(.status == "ok") and (.release == $sha)' > /dev/null && curl --fail --silent "$API_URL/health/worker" | jq -e --arg sha "$GITHUB_SHA" '(.status == "ok") and (.release == $sha)' > /dev/null; then exit 0; fi
             sleep 10
           done
           exit 1

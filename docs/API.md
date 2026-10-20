@@ -59,9 +59,9 @@ Teachers see assigned classes and student rosters; subject writes and academic r
 | DELETE /push-tokens | token_hash; deactivate this user's current device token |
 | POST /materials/upload | class_id, filename (PDF/PNG/JPEG); scoped signed upload to private materials path |
 | GET /materials/{assignment_id}/download | Authorized short-lived private material download |
-| GET/POST /reports | Own report list / kind ATTENDANCE/ACADEMIC/FEES, from/to, optional student_id/class_id |
+| GET/POST /reports | Own report list / kind ATTENDANCE/ACADEMIC/FEES, from/to, optional student_id/class_id and format PDF/CSV (CSV requires advanced_reporting) |
 | GET /reports/{id}/download | 60-second application-signed URL bound to actor, school and report |
-| GET /reports/{id}/file | Requires the same JWT, membership, report scope, expiry and signature; streams private PDF |
+| GET /reports/{id}/file | Requires the same JWT, membership, report scope, expiry and signature; streams private PDF/CSV |
 | GET /support-grants | School administrator reviews time-boxed support requests |
 | GET /support-access | Own-school active approved support grants for the security notice; users.manage |
 | POST /support-grants/{id}/decision | approve boolean; grant revocation is immediate |
@@ -84,12 +84,62 @@ POST `/platform/devices` takes school_id, device_code, name, hardware_serial. Re
 
 POST `/platform/support-grants`: school_id, reason, ticket_ref, scope array (`students`, `attendance`, `marks`, `fees`), minutes 1-1440. School Admin approval is mandatory. GET `/platform/support-grants/{id}/{feature}` reads up to 100 permitted rows while approved/unexpired. The live grant is revalidated and locked in the same tenant transaction that reads and separately audits every returned record. Revocation prevents the next read and waits for an already authorized read transaction to finish. The browser hides the support view on expiry or failed authorization refresh.
 
-## Provider-neutral billing webhook
+## Manual billing
 
-`POST /billing/webhook` is disabled without BILLING_WEBHOOK_SECRET. It is an adapter contract, not a claim of integration with any selected payment vendor. A chosen vendor adapter must verify its vendor signature before transforming to `{id,school_id,status:ACTIVE|PAST_DUE|CANCELLED,current_period_end}`. Send X-Webhook-Timestamp (Unix seconds) and X-Webhook-Signature (hex HMAC-SHA256 of `timestamp + '.' + raw JSON bytes`). The API checks a five-minute replay window and constant-time signature, then applies an idempotent metadata-only database function. Identical event IDs cannot change payloads. Fee payment collection and vendor invoices remain outside SAS v1's selected-provider scope.
+The owner selected manual billing. The mounted billing webhook is disabled regardless of the legacy adapter secret setting. Super Admin subscription changes require MFA, a reason and, optionally, a billing_ref. Terminal statuses also require an explicit export_until deadline. A school cannot modify these entitlements.
+
+The following is an inactive adapter contract retained for a future owner-selected integration:
+
+`POST /billing/webhook` is not enabled in this release. It is an adapter contract, not a claim of integration with any selected payment vendor. A chosen vendor adapter must verify its vendor signature before transforming to `{id,school_id,status:ACTIVE|PAST_DUE|CANCELLED,current_period_end}`. Send X-Webhook-Timestamp (Unix seconds) and X-Webhook-Signature (hex HMAC-SHA256 of `timestamp + '.' + raw JSON bytes`). The API checks a five-minute replay window and constant-time signature, then applies an idempotent metadata-only database function. Identical event IDs cannot change payloads. Fee payment collection and vendor invoices remain outside SAS v1's selected-provider scope.
 
 ## Health and limits
 
-`GET /health/live` is process liveness; `/health/ready` checks database connectivity. Production TLS terminates at Render. The API uses an explicit origin allowlist and verified database TLS. User data is not logged. Per-instance in-memory throttling must be moved to a shared store before scaling API instances where aggregate limits are required. See `docs/DEVICE_API.md` for NFC-specific bodies, per-event commit semantics and firmware behavior.
+`GET /health/live` is process liveness; `/health/ready` checks database connectivity. Production TLS terminates at Render. The API uses an explicit origin allowlist and verified database TLS. User data is not logged. PostgreSQL-backed HMAC-keyed counters enforce shared user/IP/bulk and device quotas across API replicas. The early in-memory limiter is an additional per-instance guard. Configure public Supabase Auth rate/abuse controls separately. See `docs/DEVICE_API.md` for NFC-specific bodies, per-event commit semantics and firmware behavior.
 
-The Render worker has no public HTTP listener. Its private database heartbeat is checked by `npm run health:live -w @vidyalayaa/worker` and `npm run health:ready -w @vidyalayaa/worker`: liveness requires a recent heartbeat, readiness additionally requires a RUNNING worker with a successful cycle within five minutes. Provider/channel rate buckets are shared in PostgreSQL. Each push token has its own result; invalid tokens are disabled independently, successfully sent targets are not repeated on transient retries, and recipient errors do not trip the provider outage circuit. English/Hindi message templates omit child names from provider text by default.
+The Render worker has no public HTTP listener. Its private database heartbeat is checked by `npm run health:live -w @vidyalayaa/worker` and `npm run health:ready -w @vidyalayaa/worker`: liveness requires a recent heartbeat, readiness additionally requires a RUNNING worker with a successful cycle within five minutes. Provider/channel rate buckets are shared in PostgreSQL. Each push token has its own result; invalid tokens are disabled independently, successfully sent targets are not repeated on transient retries, and recipient errors do not trip the provider outage circuit. English/Hindi push messages omit names on the lock screen by default unless the parent changes that preference; email/SMS remain subject to the approved notification policy.
+
+
+## Audit additions and ownership
+
+| Method/path | Authority and behavior |
+|---|---|
+| GET/PUT /school/security | school.manage; changing policy requires MFA and policy_ref |
+| GET /analytics?student_id= | marks.read; published marks and current class/child/self scope |
+| GET /attendance/events | attendance.read; scoped immutable movement history, optional date/student/review filter |
+| GET /attendance/reviews | correction approver's reconciliation queue |
+| POST /attendance/events/{id}/reconcile | reason; correction approval permission; never rewrites raw timestamp |
+| GET /profile/family | parent or student; permitted profile and authorized children/self |
+| GET/PUT /profile/preferences | current parent's no_names_on_lock_screen preference |
+| POST /imports/{resource} | users.manage plus resource write; rows (1-500), validate_only; atomic commit and Idempotency-Key |
+| POST /resources/{resource}/{id}/retire | resource write; reason; retire/end/cancel without deleting history |
+| GET/POST /exports | School Admin only; JSON/CSV, reason; at most two pending exports per school |
+| GET /exports/{id} | authorized manifest/files with SHA-256; current export window applies |
+| GET /exports/{id}/files/{index} | private file stream, JWT plus signed ticket, current School Admin/window |
+| GET /offboarding | School Admin's closure proposal |
+| POST /offboarding/{id}/approve | approve, policy_ref; distinct school approval |
+| GET /usage | own persisted school usage |
+| GET /organization/campuses | current explicit memberships within the selected Enterprise organization |
+| POST /notifications/{id}/retry | School Admin, reason; sent push targets stay deduplicated |
+| GET/POST /support-requests | school administrative intake, subject/category/description; no implicit support grant |
+| GET /platform/support-requests | MFA-protected metadata support queue |
+| PATCH /platform/support-requests/{id} | OPEN/IN_PROGRESS/RESOLVED and response |
+| GET /platform/notices | device/commercial metadata escalations |
+| GET /platform/audit | safe metadata only; no child-record directory |
+| GET /platform/usage | persisted per-school usage |
+| GET/POST /platform/organizations | campus group metadata/name |
+| PATCH /platform/schools/{id}/organization | organization_id or null, reason; Enterprise cap; no implicit membership |
+| GET /platform/offboarding | closure metadata queue |
+| POST /platform/schools/{id}/offboarding | reason, policy_ref, export_until, delete_after; legal hold defaults on |
+| POST /platform/offboarding/{id}/close | confirm=CLOSE_SCHOOL; school approval and drained-reader guard |
+| POST /platform/offboarding/{id}/hold | enabled, policy_ref, reason; explicit hold decision |
+| POST /platform/offboarding/{id}/purge | confirm=DELETE_SCHOOL_DATA, policy_ref, reason; final export/date/hold guards |
+
+Downloads are reauthorized even after URL issuance. Saved report provenance binds school authorization revision, current role and scope fingerprint; a demotion or removed family/teaching link invalidates the old artifact. The worker rechecks the requester before generation. CSV neutralizes spreadsheet formulas and streams in 500-row pages; the 19 MiB output bound fits the private 20 MiB bucket. Material upload remains independently capped and MIME-whitelisted.
+
+School closure/export/deletion uses separate proposal, approval and worker transitions. SUSPENDED/CANCELLED/EXPIRED subscriptions never imply deletion. The School Admin retains billing/support access; a contractual export deadline is mandatory for exports. A closed school cannot queue a normal report that its worker will never process; use full-school exports.
+
+Firmware-specific release metadata is gated and retained for future integration. All embedded development is deferred by the owner; those endpoints do not establish hardware readiness.
+
+## Record-bound invitations
+
+School invitations now require an existing `record_id`, matching email and role. `GET /invitation-candidates?role=...` supplies paginated eligible school records. Acceptance atomically links that exact student/parent/staff record to the verified account; parent-child links and current class assignments scope the resulting data. Principal records are staff records with `staff_role=principal`. See ACCOUNT_ONBOARDING.md for prerequisites, first-administrator exception and migration 023. No roll-number sign-in is added.

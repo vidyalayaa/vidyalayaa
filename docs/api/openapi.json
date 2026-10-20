@@ -24,6 +24,306 @@
       }
     },
     "schemas": {
+      "FirmwareManifest": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "pattern": "^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "PILOT",
+              "STABLE"
+            ]
+          },
+          "hardware_model": {
+            "const": "ESP32_ECO3_4MB"
+          },
+          "security_version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]{512}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "pipeline_ref": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "version",
+          "channel",
+          "hardware_model",
+          "security_version",
+          "signature",
+          "sha256",
+          "pipeline_ref"
+        ],
+        "additionalProperties": false
+      },
+      "FirmwareApproval": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1000
+          },
+          "acceptance_ref": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "enabled",
+          "reason",
+          "acceptance_ref"
+        ],
+        "additionalProperties": false
+      },
+      "HardwareVerification": {
+        "type": "object",
+        "properties": {
+          "hardware_model": {
+            "const": "ESP32_ECO3_4MB"
+          },
+          "chip_revision": {
+            "type": "integer",
+            "minimum": 300
+          },
+          "flash_bytes": {
+            "const": 4194304
+          },
+          "verification_ref": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "hardware_model",
+          "chip_revision",
+          "flash_bytes",
+          "verification_ref"
+        ],
+        "additionalProperties": false
+      },
+      "FirmwareAssignment": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1000
+          },
+          "acceptance_ref": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$"
+          }
+        },
+        "required": [
+          "enabled",
+          "reason",
+          "acceptance_ref",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "SchoolSecurity": {
+        "type": "object",
+        "properties": {
+          "require_privileged_mfa": {
+            "type": "boolean"
+          },
+          "student_login_enabled": {
+            "type": "boolean"
+          },
+          "step_up_sensitive": {
+            "type": "boolean"
+          },
+          "device_offline_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "policy_ref": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "require_privileged_mfa",
+          "student_login_enabled",
+          "step_up_sensitive",
+          "device_offline_minutes",
+          "policy_ref"
+        ],
+        "additionalProperties": false
+      },
+      "SchoolExport": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "JSON",
+              "CSV"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "format",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "Reconciliation": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "Retirement": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPrivacy": {
+        "type": "object",
+        "properties": {
+          "no_names_on_lock_screen": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "no_names_on_lock_screen"
+        ],
+        "additionalProperties": false
+      },
+      "CampusAssociation": {
+        "type": "object",
+        "properties": {
+          "organization_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "organization_id",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "SupportRequest": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ACCOUNT",
+              "BILLING",
+              "DEVICE",
+              "OTHER"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "subject",
+          "category",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "SupportResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "IN_PROGRESS",
+              "RESOLVED"
+            ]
+          },
+          "response": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "status",
+          "response"
+        ],
+        "additionalProperties": false
+      },
       "DeviceEvent": {
         "type": "object",
         "properties": {
@@ -665,6 +965,13 @@
               "FEES"
             ]
           },
+          "format": {
+            "type": "string",
+            "enum": [
+              "PDF",
+              "CSV"
+            ]
+          },
           "student_id": {
             "type": "string",
             "format": "uuid"
@@ -692,6 +999,10 @@
       "Invitation": {
         "type": "object",
         "properties": {
+          "record_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "email": {
             "type": "string",
             "format": "email",
@@ -714,6 +1025,7 @@
           }
         },
         "required": [
+          "record_id",
           "email",
           "full_name",
           "role"
@@ -894,6 +1206,18 @@
             "minLength": 1,
             "maxLength": 500
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "first_name": {
             "type": "string",
             "minLength": 1,
@@ -1011,6 +1335,27 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "staff_role": {
+            "type": "string",
+            "enum": [
+              "teacher",
+              "principal",
+              "school_admin"
+            ],
+            "default": "teacher"
           },
           "full_name": {
             "type": "string",
@@ -2063,6 +2408,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -2272,6 +2626,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -2483,6 +2846,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -2692,6 +3064,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -2903,6 +3284,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -3112,6 +3502,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -3323,6 +3722,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -3532,6 +3940,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -3743,6 +4160,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -3952,6 +4378,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -4163,6 +4598,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -4372,6 +4816,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -4583,6 +5036,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -4792,6 +5254,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -5003,6 +5474,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -5212,6 +5692,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -5423,6 +5912,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -5632,6 +6130,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -5843,6 +6350,15 @@
         ],
         "parameters": [
           {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "schema": {
@@ -6052,6 +6568,15 @@
           }
         ],
         "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "Idempotency-Key",
             "in": "header",
@@ -6623,7 +7148,7 @@
     },
     "/invitations": {
       "post": {
-        "summary": "Invite school member",
+        "summary": "Invite an existing same-school record; requires record_id and matching email/role",
         "security": [
           {
             "UserJWT": []
@@ -6679,6 +7204,53 @@
       },
       "get": {
         "summary": "Paginated school invitations; users.manage",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/invitation-candidates": {
+      "get": {
+        "summary": "Eligible existing records; users.manage; role required; optional page, page_size and search",
         "security": [
           {
             "UserJWT": []
@@ -8727,6 +9299,2975 @@
           },
           "503": {
             "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/support-requests": {
+      "get": {
+        "summary": "Own school support requests; no implied support grant",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "post": {
+        "summary": "School Admin support intake",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/support-requests": {
+      "get": {
+        "summary": "School support queue",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/support-requests/{id}": {
+      "patch": {
+        "summary": "Platform support response",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportResponse"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/notices": {
+      "get": {
+        "summary": "Metadata-only lifecycle and device escalations",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/school/security": {
+      "get": {
+        "summary": "Read approved school security policy",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "put": {
+        "summary": "Set policy; school.manage and verified MFA",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolSecurity"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/analytics": {
+      "get": {
+        "summary": "Current authorized academic and attendance aggregates",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/events": {
+      "get": {
+        "summary": "Scoped raw movement history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/events/{id}/reconcile": {
+      "post": {
+        "summary": "Request review without rewriting the raw event",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reconciliation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/reviews": {
+      "get": {
+        "summary": "Scoped review queue",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/profile/family": {
+      "get": {
+        "summary": "Own permitted family profile",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/profile/preferences": {
+      "get": {
+        "summary": "Parent lock-screen privacy",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update parent privacy",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPrivacy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/exports": {
+      "get": {
+        "summary": "School Admin exports",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "post": {
+        "summary": "Request consistent full-school export",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolExport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/exports/{id}": {
+      "get": {
+        "summary": "Current authorized export manifest",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/exports/{id}/files/{index}": {
+      "get": {
+        "summary": "Authorized private export object",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/offboarding": {
+      "get": {
+        "summary": "Own school closure proposal",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/offboarding/{id}/approve": {
+      "post": {
+        "summary": "School Admin contractual approval",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/usage": {
+      "get": {
+        "summary": "Own persisted daily usage",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/organization/campuses": {
+      "get": {
+        "summary": "Same organization campuses with explicit membership",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/retry": {
+      "post": {
+        "summary": "Admin retry with reason",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reconciliation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/devices/{id}/health": {
+      "get": {
+        "summary": "Paginated device health history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/audit": {
+      "get": {
+        "summary": "Platform metadata audit only",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/usage": {
+      "get": {
+        "summary": "Persisted platform usage",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/organizations": {
+      "get": {
+        "summary": "Campus groups",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create campus group",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/schools/{id}/organization": {
+      "patch": {
+        "summary": "Associate Enterprise campus; never grants membership",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampusAssociation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/offboarding": {
+      "get": {
+        "summary": "School closure review",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/schools/{id}/offboarding": {
+      "post": {
+        "summary": "Propose contractual export/retention windows",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/offboarding/{id}/close": {
+      "post": {
+        "summary": "Close after distinct school approval and device synchronization",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/offboarding/{id}/hold": {
+      "post": {
+        "summary": "Record legal hold decision",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/offboarding/{id}/purge": {
+      "post": {
+        "summary": "Queue approved operational-data deletion",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/imports/students": {
+      "post": {
+        "summary": "Validate or atomically import up to 500 named records",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/imports/parents": {
+      "post": {
+        "summary": "Validate or atomically import up to 500 named records",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/imports/teachers": {
+      "post": {
+        "summary": "Validate or atomically import up to 500 named records",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/imports/student_parents": {
+      "post": {
+        "summary": "Validate or atomically import up to 500 named records",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/imports/teacher_class_assignments": {
+      "post": {
+        "summary": "Validate or atomically import up to 500 named records",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/academic_sessions/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/classes/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/subjects/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/exams/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/assignments/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/timetable_entries/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/school_holidays/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/announcements/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/resources/teacher_class_assignments/{id}/retire": {
+      "post": {
+        "summary": "Retire record; preserve history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Retirement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/firmware-releases": {
+      "get": {
+        "summary": "Paginated immutable signed release metadata; platform MFA",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "post": {
+        "summary": "Publish disabled signed image; approved RSA-3072 public key required",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Immutable release published, enabled=false"
+          },
+          "403": {
+            "description": "Platform MFA required"
+          },
+          "413": {
+            "description": "Image exceeds application partition size"
+          },
+          "422": {
+            "description": "Invalid manifest, hash, signature or image"
+          },
+          "503": {
+            "description": "Signing configuration or private storage unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "image",
+                  "manifest"
+                ],
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "ESP-IDF signed app image; 1024..1245184 bytes"
+                  },
+                  "manifest": {
+                    "type": "string",
+                    "description": "JSON encoding of FirmwareManifest"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/platform/firmware-releases/{version}": {
+      "patch": {
+        "summary": "Enable accepted release or disable future offers",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirmwareApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/devices/{id}/hardware": {
+      "patch": {
+        "summary": "Record physical hardware verification; never infer from device name",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareVerification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/devices/{id}/ota": {
+      "post": {
+        "summary": "Assign accepted release or withdraw reader assignment",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirmwareAssignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/device/ota/image/{version}": {
+      "get": {
+        "summary": "Assigned reader authenticated image download; SHA-256 checked",
+        "security": [
+          {
+            "DeviceCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Device-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private signed application bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No matching active assignment"
+          },
+          "503": {
+            "description": "Storage unavailable or integrity failed"
           }
         }
       }
