@@ -112,18 +112,18 @@ og.paste(v_og, (logo_x, logo_y), v_og)
 # Right content
 text_x = 510
 # Title
-draw_og.text((text_x, 150), "Vidyalayaa", fill=(40, 50, 35, 255), font=font_title)
+draw_og.text((text_x, 175), "Vidyalayaa", fill=(40, 50, 35, 255), font=font_title)
 
 # Tagline
-draw_og.text((text_x, 255), "Your school, in sync.", fill=(65, 80, 55, 255), font=font_subtitle)
+draw_og.text((text_x, 275), "Your school, in sync.", fill=(65, 80, 55, 255), font=font_subtitle)
 
 # Sub description
-draw_og.text((text_x, 305), "Smart management, NFC attendance & real-time sync", fill=(85, 100, 75, 255), font=font_badge)
+draw_og.text((text_x, 330), "Smart management, NFC attendance & real-time sync", fill=(85, 100, 75, 255), font=font_badge)
 
 # Pill badges
 badges = ["NFC Attendance", "Live Analytics", "Parent & Teacher Portal"]
 curr_x = text_x
-pill_y = 370
+pill_y = 395
 for b in badges:
     bbox = draw_og.textbbox((curr_x, pill_y), b, font=font_badge)
     pw = bbox[2] - bbox[0] + 28
@@ -132,10 +132,5 @@ for b in badges:
     draw_og.text((curr_x + 14, pill_y + 8), b, fill=(50, 65, 45, 255), font=font_badge)
     curr_x += pw + 12
 
-# Domain pill at bottom
-domain_box = [text_x, 445, text_x + 360, 495]
-draw_og.rounded_rectangle(domain_box, radius=12, fill=(45, 58, 40, 255))
-draw_og.text((text_x + 20, 455), "https://vidyalayaa-tech.web.app", fill=(210, 250, 115, 255), font=font_url)
-
 og.convert("RGB").save(os.path.join(OUT_DIR, "og-image.png"), quality=95)
-print("Updated asset generation complete!")
+print("Updated asset generation complete without URL link!")
