@@ -10,10 +10,11 @@ try {
     assertRuntimeRole(deps.device, 'app_device'),
     assertRuntimeRole(deps.platform, 'app_platform'),
   ]);
-} catch {
+} catch (err) {
   await Promise.all([deps.api.end(), deps.device.end(), deps.platform.end()]);
   console.error(
     'DATABASE_ROLE_VALIDATION_FAILED: verify runtime logins, TLS and connectivity. Never use a migration-owner connection.',
+    err,
   );
   process.exit(1);
 }
