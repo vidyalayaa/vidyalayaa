@@ -1,7 +1,15 @@
 import type { Resource, Role } from '@vidyalayaa/contracts';
 export interface Field {
   key: string;
-  type?: 'text' | 'date' | 'datetime-local' | 'number' | 'checkbox' | 'textarea' | 'select';
+  type?:
+    | 'text'
+    | 'email'
+    | 'date'
+    | 'datetime-local'
+    | 'number'
+    | 'checkbox'
+    | 'textarea'
+    | 'select';
   options?: string[];
   ref?: Resource;
   optional?: boolean;
@@ -16,23 +24,23 @@ const select = (key: string, options: string[]): Field => ({ key, type: 'select'
 export const fields: Record<Resource, Field[]> = {
   students: [
     { key: 'student_code' },
+    { key: 'email', type: 'email', optional: true },
     { key: 'first_name' },
     { key: 'last_name', optional: true },
     { key: 'date_of_birth', type: 'date', optional: true },
-    { key: 'user_id', accountRole: 'student', optional: true },
     select('status', ['ACTIVE', 'TRANSFERRED', 'GRADUATED', 'WITHDRAWN']),
   ],
   parents: [
     { key: 'full_name' },
-    { key: 'email', optional: true },
+    { key: 'email', type: 'email', optional: true },
     { key: 'phone', optional: true },
-    { key: 'user_id', accountRole: 'parent', optional: true },
     select('status', ['ACTIVE', 'INACTIVE']),
   ],
   teachers: [
     { key: 'staff_code' },
+    { key: 'email', type: 'email', optional: true },
+    select('staff_role', ['teacher', 'principal', 'school_admin']),
     { key: 'full_name' },
-    { key: 'user_id', accountRole: 'teacher', optional: true },
     select('status', ['ACTIVE', 'INACTIVE']),
   ],
   academic_sessions: [
@@ -184,11 +192,12 @@ export const resourceInfo: Record<
     columns: ['full_name', 'email', 'phone', 'status'],
   },
   teachers: {
-    title: 'Teachers',
-    description: 'Your school’s people, working together.',
+    title: 'School staff',
+    description:
+      'Add teachers, principals and school administrators before inviting their accounts.',
     permission: 'teachers.read',
     write: 'teachers.write',
-    columns: ['staff_code', 'full_name', 'status'],
+    columns: ['staff_code', 'full_name', 'email', 'staff_role', 'status'],
   },
   academic_sessions: {
     title: 'Academic sessions',
