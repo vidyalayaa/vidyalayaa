@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, useAuth } from '../lib/auth';
+import { api, useAuth, HttpError } from '../lib/auth';
 import { Button } from './ui/button';
 import { Dialog } from './ui/dialog';
 import { label, fromDateTimeLocal } from '../lib/utils';
@@ -67,14 +67,27 @@ export function ActionDialog({
         body: encoded,
       });
     },
-    onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: [a.school] });
-      onResult?.(r);
+    onSuccess: async (r) => {
+      await qc.invalidateQueries({ queryKey: [a.school] });
+      await onResult?.(r);
       setDirty(false);
       deleteDraft(draftKey);
       close();
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      const err = e as Partial<HttpError>;
+      if (Array.isArray(err.details) && err.details.length) {
+        const issues = (err.details as Array<{ path?: (string | number)[]; message?: string }>)
+          .map((i) => {
+            const field = i.path?.length ? label(String(i.path[i.path.length - 1])) : '';
+            return field ? `${field}: ${i.message}` : i.message;
+          })
+          .filter(Boolean);
+        setError(issues.join('. ') || err.message || 'Validation error');
+      } else {
+        setError(err.message || 'The request failed.');
+      }
+    },
   });
   return (
     <Dialog

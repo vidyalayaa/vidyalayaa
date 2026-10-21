@@ -208,6 +208,13 @@ export interface Page<T = Record<string, unknown>> {
   page_size: number;
   total: number;
 }
+export interface TeachingClass {
+  id: string;
+  grade: string;
+  section: string;
+  is_class_teacher: boolean;
+  subjects: { id: string; name: string; code: string }[];
+}
 export const pageSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(100).default(25),
@@ -215,6 +222,8 @@ export const pageSchema = z.object({
   date: date.optional(),
   class_id: uuid.optional(),
   student_id: uuid.optional(),
+  exam_id: uuid.optional(),
+  assessment_kind: z.enum(['OFFICIAL', 'SUBJECT_TEST']).optional(),
 });
 export const resourceSchemas = {
   students: z
@@ -255,7 +264,7 @@ export const resourceSchemas = {
       academic_session_id: uuid,
       grade: text,
       section: text,
-      class_teacher_id: uuid.nullable().optional(),
+      class_teacher_id: uuid,
     })
     .strict(),
   subjects: z.object({ code: text, name: text }).strict(),
@@ -284,7 +293,7 @@ export const resourceSchemas = {
     .object({
       teacher_id: uuid,
       class_id: uuid,
-      subject_id: uuid.nullable().optional(),
+      subject_id: uuid,
       starts_on: date,
       ends_on: date.nullable().optional(),
     })
@@ -292,6 +301,8 @@ export const resourceSchemas = {
   exams: z
     .object({
       class_id: uuid,
+      assessment_kind: z.enum(['OFFICIAL', 'SUBJECT_TEST']).default('OFFICIAL'),
+      subject_id: uuid.nullable().optional(),
       name: text,
       exam_type: z.enum(['UNIT', 'MIDTERM', 'FINAL', 'PRACTICAL']),
       starts_on: date.nullable().optional(),
@@ -403,11 +414,73 @@ export const resourceSchemas = {
 export type Resource = keyof typeof resourceSchemas;
 export type ResourceInput<K extends Resource> = z.infer<(typeof resourceSchemas)[K]>;
 export const resourceNames = Object.keys(resourceSchemas) as Resource[];
+export const classSubjectSchema = z
+  .object({
+    subject_id: uuid.optional(),
+    subject: resourceSchemas.subjects.optional(),
+    teacher_id: uuid,
+    starts_on: date,
+    ends_on: date.nullable().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (!!v.subject_id === !!v.subject)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['subject_id'],
+        message: 'Choose an existing subject or enter one new subject.',
+      });
+    if (v.ends_on && v.ends_on < v.starts_on)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ends_on'],
+        message: 'The end date must be on or after the start date.',
+      });
+  });
 export const correctionSchema = z
   .object({
     daily_attendance_id: uuid,
     requested_status: z.enum(attendanceStatuses),
     reason: z.string().min(5).max(2000),
+  })
+  .strict();
+export const classAttendanceSchema = z
+  .object({
+    class_id: uuid,
+    date,
+    reason: z.string().trim().min(5).max(2000),
+    records: z
+      .array(
+        z
+          .object({
+            student_id: uuid,
+            status: z.enum(['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED']),
+            expected_version: z.number().int().nonnegative().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+  })
+  .strict()
+  .refine(
+    (b) => new Set(b.records.map((r) => r.student_id)).size === b.records.length,
+    'Include each student only once.',
+  );
+export const feePaymentSchema = z
+  .object({
+    amount: z
+      .number()
+      .min(0.01)
+      .max(999999999)
+      .refine(
+        (value) => Math.abs(value * 100 - Math.round(value * 100)) < 0.00001,
+        'Use at most two decimal places.',
+      ),
+    payment_method: z
+      .enum(['CASH', 'UPI', 'CHEQUE', 'BANK_TRANSFER', 'CARD', 'OTHER'])
+      .default('CASH'),
+    note: z.string().trim().max(500).optional(),
   })
   .strict();
 export const reportSchema = z
@@ -473,6 +546,7 @@ export const manualSchema = z
 
 export { bulkMarksSchema } from './bulk.js';
 export * from './operations.js';
+export * from './academics.js';
 
 export interface InvitationCandidate {
   id: string;

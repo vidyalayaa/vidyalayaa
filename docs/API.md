@@ -1,5 +1,9 @@
 # Vidyalayaa REST API
 
+School Admin's expandable [class-wise Academics workspace](CLASS_WISE_ACADEMICS.md) uses `/academics/classes` and its paginated subjects, enrollments and unconfigured-assignment child endpoints. `POST /academics/classes/{id}/subjects` atomically creates or selects a subject and assigns its required teacher to that section. Other actions reuse existing resource write APIs; no duplicate class/subject/enrollment store is introduced.
+
+Teacher class/subject assignment and Class Teacher examination contracts are described in [Teacher assignments](TEACHER_ASSIGNMENTS.md). This includes the additive assessment-kind migration and scoped teaching lookups.
+
 Base: `/api/v1`. The generated `docs/api/openapi.json` describes shared Zod request schemas; regenerate with `npm run contracts`. Server refinements enforce window ordering, relationship scope, plan limits and exam locking in addition to the generated JSON Schema.
 
 ## Identity and school selection
@@ -18,7 +22,7 @@ All list endpoints use bounded `page` and `page_size` (1-100) where documented. 
 
 `GET /invitations/pending` and `POST /invitations/{id}/respond` (`{accept:boolean}`) are authenticated identity endpoints that do not require an existing school membership or X-School-Id. They operate only on the verified recipient email. New identities first complete Supabase invitation verification/password setup; existing verified identities keep their current account and accept the invitation in Settings.
 
-School `GET /invitations`, `POST /invitations` (`email,full_name,role`), `POST /invitations/{id}/resend` and `POST /invitations/{id}/cancel` require users.manage. Role is one of school_admin, principal, teacher, parent or student; SUPER_ADMIN cannot be invited through a school. Pending school membership remains INVITED. Acceptance creates ACTIVE access transactionally; decline/cancellation prevents acceptance. Membership PATCH cannot bypass acceptance or remove/demote the last ACTIVE School Admin.
+School `GET /invitations`, `POST /invitations` (`record_id,email,full_name,role`), `POST /invitations/{id}/resend` and `POST /invitations/{id}/cancel` require users.manage. Role is one of school_admin, principal, teacher, parent or student; SUPER_ADMIN cannot be invited through a school. Pending school membership remains INVITED. Acceptance creates ACTIVE access transactionally; decline/cancellation prevents acceptance. Membership PATCH cannot bypass acceptance or remove/demote the last ACTIVE School Admin.
 
 States are SENDING (dispatch lease), SENT (new account setup mail), READY (existing account), ACCEPTED, REVOKED and FAILED. Invitations expire after seven days. Repeated clicks reuse a valid in-flight lease; dispatch retries become available after two minutes. Expired/revoked/failed invitations can be intentionally resent while the sender still has authority. Responses distinguish sent setup email from in-app acceptance for existing accounts. A failed provider never appears as successfully sent.
 
@@ -34,37 +38,39 @@ Teachers see assigned classes and student rosters; subject writes and academic r
 
 ## Operational endpoints
 
-| Method/path | Contract / permission |
-|---|---|
-| GET /attendance?date=YYYY-MM-DD | Scoped paginated daily register, attendance.read |
-| POST /attendance/manual | student_id, date, status, reason, optional expected_version; manual_write |
-| GET/POST /corrections | Scoped requests / daily_attendance_id, requested_status, reason |
-| POST /corrections/{id}/decision | `{approve:boolean}`; correct_approve; another reviewer required |
-| POST /marks/bulk | exam_id and 1-500 `{student_id,subject_id,score,remarks?}`; atomic UPSERT; marks.write |
-| GET /devices | Own-school public device metadata; devices.read |
-| POST /devices/claim | device_code, claim_code, name, location_id; devices.manage |
-| PATCH /devices/{id} | name, location_id, ACTIVE/DISABLED/REVOKED status, reason, optional safe config |
-| POST /invitations | email, full_name, school role; users.manage; invitation through Supabase Auth |
-| GET/PATCH /memberships/{id?} | List accounts / role and status changes; users.manage; self-change prohibited |
-| PATCH /school | name, IANA timezone, en-IN/hi-IN locale; school.manage |
-| GET/PUT/DELETE /school/retention | Read, approve or disable future opt-in cleanup; school.manage; PUT needs approved=true, policy_ref, report_days and notification_days (7-3650) |
-| GET /lookups/accounts?role=teacher | Active named school accounts for teacher/parent/student profile linking; users.manage; paginated search |
-| GET /devices/{id}/configurations | Versioned configuration snapshots with reason/editor; devices.read; paginated |
-| GET /profile/parent | Own parent ID/name for notification preferences |
-| POST /fees/{id}/remind | Outstanding fee reminder, once daily per fee; fees.write |
-| GET /subscription | Effective flags/limits/state; subscription.read |
-| GET /audit | Paginated append-only school audit summaries; audit.read; optional cursor mode |
-| GET /notifications | Paginated delivery history; active linked parent scope rechecked immediately; optional cursor mode |
-| POST /push-tokens | token, WEB/ANDROID/IOS; stored encrypted, lookup hash; parent preferences permission |
-| DELETE /push-tokens | token_hash; deactivate this user's current device token |
-| POST /materials/upload | class_id, filename (PDF/PNG/JPEG); scoped signed upload to private materials path |
-| GET /materials/{assignment_id}/download | Authorized short-lived private material download |
-| GET/POST /reports | Own report list / kind ATTENDANCE/ACADEMIC/FEES, from/to, optional student_id/class_id and format PDF/CSV (CSV requires advanced_reporting) |
-| GET /reports/{id}/download | 60-second application-signed URL bound to actor, school and report |
-| GET /reports/{id}/file | Requires the same JWT, membership, report scope, expiry and signature; streams private PDF/CSV |
-| GET /support-grants | School administrator reviews time-boxed support requests |
-| GET /support-access | Own-school active approved support grants for the security notice; users.manage |
-| POST /support-grants/{id}/decision | approve boolean; grant revocation is immediate |
+| Method/path                             | Contract / permission                                                                                                                                                                              |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET /attendance?date=YYYY-MM-DD         | Scoped paginated daily register, attendance.read                                                                                                                                                   |
+| POST /attendance/manual                 | student_id, date, status, reason, optional expected_version; manual_write; optional Idempotency-Key                                                                                                |
+| POST /attendance/bulk                   | class_id, date, reason, 1-500 unique records `{student_id,status,expected_version?}`; manual_write; atomic enrollment/NFC/version checks; optional Idempotency-Key                                 |
+| GET/POST /corrections                   | Scoped requests / daily_attendance_id, requested_status, reason                                                                                                                                    |
+| POST /corrections/{id}/decision         | `{approve:boolean}`; correct_approve; another reviewer required                                                                                                                                    |
+| POST /marks/bulk                        | exam_id and 1-500 `{student_id,subject_id,score,remarks?}`; atomic UPSERT; marks.write                                                                                                             |
+| GET /devices                            | Own-school public device metadata; devices.read                                                                                                                                                    |
+| POST /devices/claim                     | device_code, claim_code, name, location_id; devices.manage                                                                                                                                         |
+| PATCH /devices/{id}                     | name, location_id, ACTIVE/DISABLED/REVOKED status, reason, optional safe config                                                                                                                    |
+| POST /invitations                       | existing record_id, matching email/full_name, school role; users.manage; invitation through Supabase Auth                                                                                          |
+| GET/PATCH /memberships/{id?}            | List accounts / role and status changes; users.manage; self-change prohibited                                                                                                                      |
+| PATCH /school                           | name, IANA timezone, en-IN/hi-IN locale; school.manage                                                                                                                                             |
+| GET/PUT/DELETE /school/retention        | Read, approve or disable future opt-in cleanup; school.manage; PUT needs approved=true, policy_ref, report_days and notification_days (7-3650)                                                     |
+| GET /lookups/accounts?role=teacher      | Active named school accounts for teacher/parent/student profile linking; users.manage; paginated search                                                                                            |
+| GET /devices/{id}/configurations        | Versioned configuration snapshots with reason/editor; devices.read; paginated                                                                                                                      |
+| GET /profile/parent                     | Own parent ID/name for notification preferences                                                                                                                                                    |
+| POST /fees/{id}/pay                     | amount (positive, up to two decimal places), payment_method, optional note; fees.write; required Idempotency-Key; exact outstanding balance enforcement; identical retries return original receipt |
+| POST /fees/{id}/remind                  | Outstanding fee reminder, once daily per fee; fees.write                                                                                                                                           |
+| GET /subscription                       | Effective flags/limits/state; subscription.read                                                                                                                                                    |
+| GET /audit                              | Paginated append-only school audit summaries; audit.read; optional cursor mode                                                                                                                     |
+| GET /notifications                      | Paginated delivery history; active linked parent scope rechecked immediately; optional cursor mode                                                                                                 |
+| POST /push-tokens                       | token, WEB/ANDROID/IOS; stored encrypted, lookup hash; parent preferences permission                                                                                                               |
+| DELETE /push-tokens                     | token_hash; deactivate this user's current device token                                                                                                                                            |
+| POST /materials/upload                  | class_id, filename (PDF/PNG/JPEG); scoped signed upload to private materials path                                                                                                                  |
+| GET /materials/{assignment_id}/download | Authorized short-lived private material download                                                                                                                                                   |
+| GET/POST /reports                       | Own report list / kind ATTENDANCE/ACADEMIC/FEES, from/to, optional student_id/class_id and format PDF/CSV (CSV requires advanced_reporting)                                                        |
+| GET /reports/{id}/download              | 60-second application-signed URL bound to actor, school and report                                                                                                                                 |
+| GET /reports/{id}/file                  | Requires the same JWT, membership, report scope, expiry and signature; streams private PDF/CSV                                                                                                     |
+| GET /support-grants                     | School administrator reviews time-boxed support requests                                                                                                                                           |
+| GET /support-access                     | Own-school active approved support grants for the security notice; users.manage                                                                                                                    |
+| POST /support-grants/{id}/decision      | approve boolean; grant revocation is immediate                                                                                                                                                     |
 
 Parents/students must choose a linked/self student when creating reports. Teachers' exports remain assigned-class/subject scoped. Report generation rechecks membership at processing time; downloads recheck it again. URLs are signed at the application boundary and also require JWT authorization, so copying another user's URL does not grant access. Raw storage report URLs are not exposed.
 
@@ -98,41 +104,41 @@ The following is an inactive adapter contract retained for a future owner-select
 
 The Render worker has no public HTTP listener. Its private database heartbeat is checked by `npm run health:live -w @vidyalayaa/worker` and `npm run health:ready -w @vidyalayaa/worker`: liveness requires a recent heartbeat, readiness additionally requires a RUNNING worker with a successful cycle within five minutes. Provider/channel rate buckets are shared in PostgreSQL. Each push token has its own result; invalid tokens are disabled independently, successfully sent targets are not repeated on transient retries, and recipient errors do not trip the provider outage circuit. English/Hindi push messages omit names on the lock screen by default unless the parent changes that preference; email/SMS remain subject to the approved notification policy.
 
-
 ## Audit additions and ownership
 
-| Method/path | Authority and behavior |
-|---|---|
-| GET/PUT /school/security | school.manage; changing policy requires MFA and policy_ref |
-| GET /analytics?student_id= | marks.read; published marks and current class/child/self scope |
-| GET /attendance/events | attendance.read; scoped immutable movement history, optional date/student/review filter |
-| GET /attendance/reviews | correction approver's reconciliation queue |
-| POST /attendance/events/{id}/reconcile | reason; correction approval permission; never rewrites raw timestamp |
-| GET /profile/family | parent or student; permitted profile and authorized children/self |
-| GET/PUT /profile/preferences | current parent's no_names_on_lock_screen preference |
-| POST /imports/{resource} | users.manage plus resource write; rows (1-500), validate_only; atomic commit and Idempotency-Key |
-| POST /resources/{resource}/{id}/retire | resource write; reason; retire/end/cancel without deleting history |
-| GET/POST /exports | School Admin only; JSON/CSV, reason; at most two pending exports per school |
-| GET /exports/{id} | authorized manifest/files with SHA-256; current export window applies |
-| GET /exports/{id}/files/{index} | private file stream, JWT plus signed ticket, current School Admin/window |
-| GET /offboarding | School Admin's closure proposal |
-| POST /offboarding/{id}/approve | approve, policy_ref; distinct school approval |
-| GET /usage | own persisted school usage |
-| GET /organization/campuses | current explicit memberships within the selected Enterprise organization |
-| POST /notifications/{id}/retry | School Admin, reason; sent push targets stay deduplicated |
-| GET/POST /support-requests | school administrative intake, subject/category/description; no implicit support grant |
-| GET /platform/support-requests | MFA-protected metadata support queue |
-| PATCH /platform/support-requests/{id} | OPEN/IN_PROGRESS/RESOLVED and response |
-| GET /platform/notices | device/commercial metadata escalations |
-| GET /platform/audit | safe metadata only; no child-record directory |
-| GET /platform/usage | persisted per-school usage |
-| GET/POST /platform/organizations | campus group metadata/name |
-| PATCH /platform/schools/{id}/organization | organization_id or null, reason; Enterprise cap; no implicit membership |
-| GET /platform/offboarding | closure metadata queue |
-| POST /platform/schools/{id}/offboarding | reason, policy_ref, export_until, delete_after; legal hold defaults on |
-| POST /platform/offboarding/{id}/close | confirm=CLOSE_SCHOOL; school approval and drained-reader guard |
-| POST /platform/offboarding/{id}/hold | enabled, policy_ref, reason; explicit hold decision |
-| POST /platform/offboarding/{id}/purge | confirm=DELETE_SCHOOL_DATA, policy_ref, reason; final export/date/hold guards |
+| Method/path                                    | Authority and behavior                                                                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET/PUT /school/security                       | school.manage; changing policy requires MFA and policy_ref                                                                                 |
+| GET /analytics?student_id=                     | marks.read; published marks and current class/child/self scope                                                                             |
+| GET /corrections?status=REQUESTED&reviewable=1 | attendance.read; status filter applies before pagination/count; reviewable=1 requires attendance.correct_approve and excludes own requests |
+| GET /attendance/events                         | attendance.read; scoped immutable movement history, optional date/student/review filter                                                    |
+| GET /attendance/reviews                        | correction approver's reconciliation queue                                                                                                 |
+| POST /attendance/events/{id}/reconcile         | reason; correction approval permission; never rewrites raw timestamp                                                                       |
+| GET /profile/family                            | parent or student; permitted profile and authorized children/self                                                                          |
+| GET/PUT /profile/preferences                   | current parent's no_names_on_lock_screen preference                                                                                        |
+| POST /imports/{resource}                       | users.manage plus resource write; rows (1-500), validate_only; atomic commit and Idempotency-Key                                           |
+| POST /resources/{resource}/{id}/retire         | resource write; reason; retire/end/cancel without deleting history                                                                         |
+| GET/POST /exports                              | School Admin only; JSON/CSV, reason; at most two pending exports per school                                                                |
+| GET /exports/{id}                              | authorized manifest/files with SHA-256; current export window applies                                                                      |
+| GET /exports/{id}/files/{index}                | private file stream, JWT plus signed ticket, current School Admin/window                                                                   |
+| GET /offboarding                               | School Admin's closure proposal                                                                                                            |
+| POST /offboarding/{id}/approve                 | approve, policy_ref; distinct school approval                                                                                              |
+| GET /usage                                     | own persisted school usage                                                                                                                 |
+| GET /organization/campuses                     | current explicit memberships within the selected Enterprise organization                                                                   |
+| POST /notifications/{id}/retry                 | School Admin, reason; sent push targets stay deduplicated                                                                                  |
+| GET/POST /support-requests                     | school administrative intake, subject/category/description; no implicit support grant                                                      |
+| GET /platform/support-requests                 | MFA-protected metadata support queue                                                                                                       |
+| PATCH /platform/support-requests/{id}          | OPEN/IN_PROGRESS/RESOLVED and response                                                                                                     |
+| GET /platform/notices                          | device/commercial metadata escalations                                                                                                     |
+| GET /platform/audit                            | safe metadata only; no child-record directory                                                                                              |
+| GET /platform/usage                            | persisted per-school usage                                                                                                                 |
+| GET/POST /platform/organizations               | campus group metadata/name                                                                                                                 |
+| PATCH /platform/schools/{id}/organization      | organization_id or null, reason; Enterprise cap; no implicit membership                                                                    |
+| GET /platform/offboarding                      | closure metadata queue                                                                                                                     |
+| POST /platform/schools/{id}/offboarding        | reason, policy_ref, export_until, delete_after; legal hold defaults on                                                                     |
+| POST /platform/offboarding/{id}/close          | confirm=CLOSE_SCHOOL; school approval and drained-reader guard                                                                             |
+| POST /platform/offboarding/{id}/hold           | enabled, policy_ref, reason; explicit hold decision                                                                                        |
+| POST /platform/offboarding/{id}/purge          | confirm=DELETE_SCHOOL_DATA, policy_ref, reason; final export/date/hold guards                                                              |
 
 Downloads are reauthorized even after URL issuance. Saved report provenance binds school authorization revision, current role and scope fingerprint; a demotion or removed family/teaching link invalidates the old artifact. The worker rechecks the requester before generation. CSV neutralizes spreadsheet formulas and streams in 500-row pages; the 19 MiB output bound fits the private 20 MiB bucket. Material upload remains independently capped and MIME-whitelisted.
 
@@ -143,3 +149,11 @@ Firmware-specific release metadata is gated and retained for future integration.
 ## Record-bound invitations
 
 School invitations now require an existing `record_id`, matching email and role. `GET /invitation-candidates?role=...` supplies paginated eligible school records. Acceptance atomically links that exact student/parent/staff record to the verified account; parent-child links and current class assignments scope the resulting data. Principal records are staff records with `staff_role=principal`. See ACCOUNT_ONBOARDING.md for prerequisites, first-administrator exception and migration 023. No roll-number sign-in is added.
+
+## School Admin workflow guarantees
+
+Class registers use the same write service as individual manual attendance: the student must be enrolled in the selected class on that date; the enrollment supplies the academic session; recorded NFC evidence requires a separate correction; expected versions reject stale updates. A failing row rolls back the entire batch and its notifications. The website loads all register pages up to the 500-record bound and preserves retry keys after a lost response. Attendance corrections require another reviewer.
+
+Fee payments require an `Idempotency-Key` of 8–200 safe characters. The key is scoped to the authenticated user and school and fingerprints both the fee ID and payment body. An identical retry returns its original UUID receipt without applying another payment; changed contents return 409. Paid/waived fees and overpayments return 409; sub-cent amounts return 422. The committed receipt, reference, amount and status are retained in append-only audit metadata. This records a manual school payment; it does not charge a gateway.
+
+Reader configuration changes retain a versioned snapshot and an explicit audit reason. `GET /devices/{id}/configurations` returns `reason` for changes recorded by the current API; older snapshots without that event return null. Historical reasons are not inferred. Student overview projections independently enforce fee/card/guardian permissions and the existing assessment subject/publication scope.

@@ -254,7 +254,7 @@ export default function StudentProfileDialog({
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex border-b border-stone-200 text-sm font-medium">
+          <div className="flex flex-wrap border-b border-stone-200 text-sm font-medium">
             <button
               className={`pb-3 px-4 transition-colors ${
                 tab === 'overview'
@@ -341,7 +341,10 @@ export default function StudentProfileDialog({
                           {p.email && (
                             <p className="flex items-center gap-2">
                               <Mail size={13} className="text-stone-400" />
-                              <a href={`mailto:${p.email}`} className="hover:underline text-stone-800">
+                              <a
+                                href={`mailto:${p.email}`}
+                                className="hover:underline text-stone-800"
+                              >
                                 {p.email}
                               </a>
                             </p>
@@ -414,7 +417,9 @@ export default function StudentProfileDialog({
 
               {d.attendance.today && (
                 <div className="rounded-xl border border-stone-200 bg-white p-4">
-                  <h4 className="font-semibold text-stone-900 text-sm">Today's Recorded Movement</h4>
+                  <h4 className="font-semibold text-stone-900 text-sm">
+                    Today's Recorded Movement
+                  </h4>
                   <div className="mt-2 grid grid-cols-2 gap-4 text-xs sm:grid-cols-4">
                     <div>
                       <span className="text-stone-500">Status</span>
@@ -428,11 +433,14 @@ export default function StudentProfileDialog({
                       <span className="text-stone-500">First Arrival</span>
                       <p className="mt-0.5 font-medium">
                         {d.attendance.today.first_arrival_at
-                          ? new Date(d.attendance.today.first_arrival_at).toLocaleTimeString('en-IN', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              timeZone: a.me?.school?.timezone,
-                            })
+                          ? new Date(d.attendance.today.first_arrival_at).toLocaleTimeString(
+                              'en-IN',
+                              {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                timeZone: a.me?.school?.timezone,
+                              },
+                            )
                           : '—'}
                       </p>
                     </div>
@@ -440,11 +448,14 @@ export default function StudentProfileDialog({
                       <span className="text-stone-500">Last Departure</span>
                       <p className="mt-0.5 font-medium">
                         {d.attendance.today.last_departure_at
-                          ? new Date(d.attendance.today.last_departure_at).toLocaleTimeString('en-IN', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              timeZone: a.me?.school?.timezone,
-                            })
+                          ? new Date(d.attendance.today.last_departure_at).toLocaleTimeString(
+                              'en-IN',
+                              {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                timeZone: a.me?.school?.timezone,
+                              },
+                            )
                           : '—'}
                       </p>
                     </div>
@@ -458,7 +469,7 @@ export default function StudentProfileDialog({
           {tab === 'academics' && (
             <div className="space-y-4">
               {d.marks.length ? (
-                <div className="overflow-hidden rounded-xl border border-stone-200">
+                <div className="overflow-x-auto rounded-xl border border-stone-200">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-stone-50 border-b border-stone-200 font-semibold text-stone-600">
                       <tr>
@@ -532,7 +543,7 @@ export default function StudentProfileDialog({
               </div>
 
               {d.fees.records.length ? (
-                <div className="overflow-hidden rounded-xl border border-stone-200">
+                <div className="overflow-x-auto rounded-xl border border-stone-200">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-stone-50 border-b border-stone-200 font-semibold text-stone-600">
                       <tr>

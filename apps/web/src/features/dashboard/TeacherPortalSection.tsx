@@ -13,6 +13,7 @@ import { api, useAuth } from '../../lib/auth';
 import { Button } from '../../components/ui/button';
 import { Badge, Loading } from '../../components/common';
 import ClassAttendanceSheet from '../operations/ClassAttendanceSheet';
+import { useTeachingClasses } from '../../lib/use-teaching-classes';
 
 interface ClassItem {
   id: string;
@@ -37,11 +38,7 @@ export default function TeacherPortalSection() {
   const [rollCallClassId, setRollCallClassId] = useState<string | null>(null);
 
   // Fetch teacher's assigned classes
-  const classesQuery = useQuery({
-    queryKey: [a.school, 'teacher-classes'],
-    queryFn: () => api<{ data: ClassItem[] }>('/resources/classes?page_size=20'),
-    enabled: !!a.school && a.me?.school?.role === 'teacher',
-  });
+  const classesQuery = useTeachingClasses();
 
   const classes = classesQuery.data?.data || [];
 
@@ -71,11 +68,16 @@ export default function TeacherPortalSection() {
             </a>
           </Button>
           <Button variant="outline" asChild>
-            <a href="/r/marks">
+            <a href="/subject-tests">
               <ClipboardList size={15} />
-              Record Marks
+              Subject tests & marks
             </a>
           </Button>
+          {classes.some((c) => c.is_class_teacher) && (
+            <Button variant="outline" asChild>
+              <a href="/official-results">Official exam results</a>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -95,7 +97,8 @@ export default function TeacherPortalSection() {
                     Grade {cls.grade} - Section {cls.section || 'A'}
                   </span>
                   <span className="flex size-8 items-center justify-center rounded-xl bg-white text-stone-700 shadow-xs border border-stone-200 text-xs font-semibold">
-                    {cls.grade}{cls.section || 'A'}
+                    {cls.grade}
+                    {cls.section || 'A'}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-stone-500">
@@ -108,10 +111,11 @@ export default function TeacherPortalSection() {
                   size="sm"
                   variant="lime"
                   className="w-full text-xs font-semibold"
+                  disabled={!cls.is_class_teacher}
                   onClick={() => setRollCallClassId(cls.id)}
                 >
                   <CalendarCheck2 size={14} />
-                  Take Class Roll Call
+                  {cls.is_class_teacher ? 'Take Class Roll Call' : 'Attendance is view only'}
                 </Button>
               </div>
             </div>

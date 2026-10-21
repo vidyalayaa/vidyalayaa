@@ -11,17 +11,27 @@ import { Dialog } from '../../components/ui/dialog';
 async function all(resource: string) {
   const rows: Record<string, unknown>[] = [];
   for (let page = 1; ; page++) {
-    const r = await api<Page>(`/resources/${resource}?page_size=100&page=${page}`);
+    const r = await api<Page>(
+      `/resources/${resource}${resource.includes('?') ? '&' : '?'}page_size=100&page=${page}`,
+    );
     rows.push(...r.data);
     if (rows.length >= r.total || !r.data.length) return rows;
   }
 }
-export default function BulkMarksDialog({ open, close }: { open: boolean; close: () => void }) {
+export default function BulkMarksDialog({
+  open,
+  close,
+  examId,
+}: {
+  open: boolean;
+  close: () => void;
+  examId?: string;
+}) {
   const a = useAuth();
-  const draftKey = `${a.me?.id}:${a.school}:marks-import`,
+  const draftKey = `${a.me?.id}:${a.school}:marks-import${examId ? ':' + examId : ''}`,
     draft = readDraft(draftKey);
   const [csv, setCsv] = useState(String(draft.csv || '')),
-    [exam, setExam] = useState(String(draft.exam || ''));
+    [exam, setExam] = useState(examId || String(draft.exam || ''));
   const dirty = !!csv;
   useUnsavedChanges(open && dirty);
   useEffect(() => {
@@ -57,7 +67,7 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
           setError('');
           setRowErrors([]);
           if (!csv) return;
-          const exam_id = String(new FormData(e.currentTarget).get('exam_id'));
+          const exam_id = examId || String(new FormData(e.currentTarget).get('exam_id'));
           setPending(true);
           try {
             if (new Blob([csv]).size > 512000) throw new Error('Choose a CSV smaller than 500 KB.');
@@ -67,7 +77,14 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
               throw new Error('Use columns: student_code,subject_code,score,remarks');
             if (rows.length > 500 || !rows.length)
               throw new Error('Include between 1 and 500 mark rows.');
-            const [students, subjects] = await Promise.all([all('students'), all('subjects')]);
+            const selected = exams.data?.find((e) => e.id === exam_id);
+            if (!selected) throw new Error('Choose an available examination.');
+            const [students, subjects] = await Promise.all([
+              all(`students?class_id=${selected.class_id}`),
+              all(
+                `subjects?class_id=${selected.class_id}${selected.assessment_kind === 'OFFICIAL' ? '&assessment_kind=OFFICIAL' : ''}`,
+              ),
+            ]);
             const entries = rows.map((r, i) => {
               const student = students.find((s) => s.student_code === r[0]?.trim()),
                 subject = subjects.find((s) => s.code === r[1]?.trim());
@@ -125,6 +142,7 @@ export default function BulkMarksDialog({ open, close }: { open: boolean; close:
             name="exam_id"
             className="input"
             required
+            disabled={!!examId}
             value={exam}
             onChange={(e) => {
               setExam(e.target.value);

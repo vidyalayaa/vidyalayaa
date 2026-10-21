@@ -625,8 +625,8 @@ for (const role of ['student', 'parent', 'teacher', 'principal'] as const)
       record = await schoolRecord(email, role);
     if (role === 'teacher')
       await db.query(
-        "INSERT INTO teacher_class_assignments(school_id,teacher_id,class_id,starts_on) VALUES($1,$2,$3,'2026-01-01')",
-        [f.schoolA, record, f.classId],
+        "INSERT INTO teacher_class_assignments(school_id,teacher_id,class_id,subject_id,starts_on) VALUES($1,$2,$3,$4,'2026-01-01')",
+        [f.schoolA, record, f.classId, f.subject],
       );
     const invitation = await call('post', '/invitations', f.admin, f.schoolA).send({
       email,

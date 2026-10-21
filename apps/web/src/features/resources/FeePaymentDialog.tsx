@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Receipt, Printer, X, CreditCard, ArrowRight } from 'lucide-react';
 import { Dialog } from '../../components/ui/dialog';
@@ -39,26 +39,31 @@ export default function FeePaymentDialog({
   const outstanding = Math.max(0, totalDue - currentPaid);
 
   const [amount, setAmount] = useState<number>(outstanding);
-  const [method, setMethod] = useState<'CASH' | 'UPI' | 'CHEQUE' | 'BANK_TRANSFER' | 'CARD' | 'OTHER'>('CASH');
+  const [method, setMethod] = useState<
+    'CASH' | 'UPI' | 'CHEQUE' | 'BANK_TRANSFER' | 'CARD' | 'OTHER'
+  >('CASH');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+  const retry = useRef({ body: '', key: crypto.randomUUID() });
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!fee) return null;
+      const body = JSON.stringify({
+        amount: Number(amount),
+        payment_method: method,
+        note: note.trim() || undefined,
+      });
+      if (retry.current.body !== body) retry.current = { body, key: crypto.randomUUID() };
       return api<{ receipt: PaymentReceipt }>(`/fees/${fee.id}/pay`, {
         method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({
-          amount: Number(amount),
-          payment_method: method,
-          note: note.trim() || undefined,
-        }),
+        headers: { 'Idempotency-Key': retry.current.key },
+        body,
       });
     },
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: [a.school] });
+    onSuccess: async (data) => {
+      await qc.invalidateQueries({ queryKey: [a.school] });
       if (data?.receipt) {
         setReceipt(data.receipt);
       } else {
@@ -81,7 +86,7 @@ export default function FeePaymentDialog({
       title={receipt ? 'Payment Receipt' : `Record Fee Payment - ${fee.fee_type}`}
     >
       {receipt ? (
-        <div className="space-y-5">
+        <div className="fee-receipt space-y-5">
           <div className="rounded-xl border border-lime-200 bg-lime-50/50 p-5 text-center">
             <span className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-lime-100 text-lime-700">
               <CheckCircle2 size={26} />
@@ -93,7 +98,9 @@ export default function FeePaymentDialog({
           <div className="rounded-xl border border-stone-200 bg-stone-50 p-5 text-sm space-y-3 font-mono">
             <div className="flex justify-between border-b border-stone-200 pb-2">
               <span className="text-stone-500 font-sans">Receipt No.</span>
-              <span className="font-bold text-stone-800">{receipt.receipt_no}</span>
+              <span className="min-w-0 break-all text-right font-bold text-stone-800">
+                {receipt.receipt_no}
+              </span>
             </div>
             <div className="flex justify-between border-b border-stone-200 pb-2">
               <span className="text-stone-500 font-sans">Fee Item</span>
@@ -125,7 +132,7 @@ export default function FeePaymentDialog({
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="receipt-actions flex justify-end gap-2 pt-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -150,7 +157,10 @@ export default function FeePaymentDialog({
           className="space-y-4"
         >
           {error && (
-            <div className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200" role="alert">
+            <div
+              className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -184,8 +194,8 @@ export default function FeePaymentDialog({
               id="pay-amount"
               type="number"
               step="0.01"
-              min="1"
-              max={outstanding || 999999}
+              min="0.01"
+              max={outstanding}
               required
               className="input text-base font-semibold"
               value={amount}

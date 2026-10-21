@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -49,6 +49,12 @@ const items = [
     permission: 'parents.read',
   },
   { to: '/r/teachers', text: 'School staff', icon: GraduationCap, permission: 'teachers.read' },
+  {
+    to: '/r/teacher_class_assignments',
+    text: 'Teacher assignments',
+    icon: GraduationCap,
+    permission: 'teachers.write',
+  },
   { to: '/attendance', text: 'Attendance', icon: CalendarCheck2, permission: 'attendance.read' },
   { to: '/r/classes', text: 'Academics', icon: BookOpen, permission: 'academics.read' },
   { to: '/r/assignments', text: 'Homework', icon: BookOpen, permission: 'assignments.read' },
@@ -76,7 +82,8 @@ export default function Layout() {
     [open, setOpen] = useState(false),
     [search, setSearch] = useState(''),
     [online, setOnline] = useState(navigator.onLine),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    location = useLocation();
   const support = useQuery({
     queryKey: [a.school, 'support-access'],
     queryFn: () =>
@@ -95,14 +102,17 @@ export default function Layout() {
       window.removeEventListener('offline', change);
     };
   }, []);
-  const name =
-      a.me?.school?.school_name ||
-      (a.me?.platform_role === 'SUPER_ADMIN' ? 'Vidyalayaa platform' : 'Your school'),
-    permissions = a.me?.school?.permissions || [],
+  const permissions = a.me?.school?.permissions || [],
     role = a.me?.school?.role,
-    family = role === 'parent' || role === 'student',
-    path = (value: string) => schoolPath(value, role);
-  const platformOnly = configured && a.me?.platform_role === 'SUPER_ADMIN' && !role;
+    family =
+      !location.pathname.startsWith('/platform') && (role === 'parent' || role === 'student');
+  const platformOnly =
+    configured &&
+    a.me?.platform_role === 'SUPER_ADMIN' &&
+    (!role || location.pathname.startsWith('/platform'));
+  const name = platformOnly ? 'Vidyalayaa platform' : a.me?.school?.school_name || 'Your school';
+  const path = (value: string) =>
+    platformOnly && value === '/' ? '/platform' : schoolPath(value, role);
   const navigation: typeof items = platformOnly
     ? [
         { to: '/platform/health', text: 'Overview', icon: LayoutDashboard },
@@ -118,7 +128,43 @@ export default function Layout() {
         { to: '/platform/usage', text: 'Usage', icon: Layers3 },
         { to: '/platform/offboarding', text: 'School closure', icon: ShieldCheck },
       ]
-    : items;
+    : a.me?.school?.role === 'teacher'
+      ? [
+          ...items.filter(
+            (i) =>
+              ![
+                '/r/students',
+                '/r/parents',
+                '/r/student_parents',
+                '/r/teachers',
+                '/r/classes',
+                '/r/marks',
+              ].includes(i.to),
+          ),
+          {
+            to: '/classroom',
+            text: 'Students & Parents',
+            icon: Users,
+            permission: 'classrooms.read',
+          },
+          {
+            to: '/subject-tests',
+            text: 'Subject tests',
+            icon: BookOpen,
+            permission: 'classrooms.read',
+          },
+          {
+            to: '/official-results',
+            text: 'Official exam results',
+            icon: GraduationCap,
+            permission: 'classrooms.read',
+          },
+        ]
+      : role === 'school_admin'
+        ? items
+            .filter((i) => i.to !== '/r/teacher_class_assignments')
+            .map((i) => (i.to === '/r/classes' ? { ...i, to: '/academics' } : i))
+        : items;
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -207,7 +253,7 @@ export default function Layout() {
               Platform console
             </NavLink>
           )}
-          {permissions.includes('users.manage') && (
+          {permissions.includes('users.manage') && !platformOnly && (
             <NavLink className="nav-item" to={path('/members')}>
               <Users size={18} />
               Members & invitations
@@ -256,12 +302,16 @@ export default function Layout() {
               className="global-search"
               onSubmit={(e) => {
                 e.preventDefault();
-                navigate(path('/r/students') + `?search=${encodeURIComponent(search)}`);
+                navigate(
+                  (platformOnly ? '/platform/schools' : path('/r/students')) +
+                    `?search=${encodeURIComponent(search)}`,
+                );
               }}
             >
               <Search size={16} />
               <input
-                aria-label="Search students"
+                aria-label={platformOnly ? 'Search schools' : 'Search students'}
+                maxLength={120}
                 placeholder="Find something…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -270,9 +320,11 @@ export default function Layout() {
             </form>
             <Link
               to={
-                permissions.includes('notifications.read') || !configured
-                  ? path('/notifications')
-                  : path('/r/announcements')
+                platformOnly
+                  ? '/platform/notices'
+                  : permissions.includes('notifications.read') || !configured
+                    ? path('/notifications')
+                    : path('/r/announcements')
               }
               className="notification-button"
               aria-label="Notifications"

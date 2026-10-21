@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { academicsRouter } from './academics.js';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -14,6 +15,8 @@ import {
   attendanceStatuses,
   type Resource,
   retentionPolicySchema,
+  classAttendanceSchema,
+  feePaymentSchema,
 } from '@vidyalayaa/contracts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inviteMember, invitationError } from '../identity/invitations.js';
@@ -25,6 +28,7 @@ import {
   definitions,
   resourceScope,
   resourceSelect,
+  resourceReadable,
   parseResource,
   validateBusiness,
   studentScope,
@@ -39,6 +43,11 @@ import { scheduleAnnouncement } from './announcements.js';
 import { signedDownload, verifyDownload } from '../../lib/downloads.js';
 import { hash, encrypt } from '../../lib/crypto.js';
 import type { Config } from '../../lib/config.js';
+import {
+  markManualAttendance,
+  assertClassTeacher,
+  attendanceEnrollment,
+} from './manual-attendance.js';
 const validName = (s: string) => {
   if (!resourceNames.includes(s as Resource)) throw notFound();
   return s as Resource;
@@ -162,6 +171,7 @@ export function schoolAccess(pool: pg.Pool) {
 }
 export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Config) {
   const router = Router();
+  router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.get(
     '/school/retention',
     permission('school.manage'),
@@ -289,6 +299,53 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             )
           ).rows[0];
         }),
+      );
+    }),
+  );
+  router.get(
+    '/lookups/class-teachers',
+    permission('academics.write'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        classId = uuid.parse(req.query.class_id);
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          (tx) =>
+            paged(
+              tx,
+              'SELECT t.id,t.full_name,t.staff_code FROM teachers t WHERE t.school_id=$1 AND app.valid_class_teacher(t.school_id,$2,t.id) ORDER BY t.full_name,t.id',
+              [a.context.schoolId, classId],
+              req.query,
+            ),
+          true,
+        ),
+      );
+    }),
+  );
+  router.get(
+    '/teaching/classes',
+    permission('classrooms.read'),
+    asyncRoute(async (_req, res) => {
+      const a = res.locals.actor;
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => ({
+            data: (
+              await tx.query(
+                `SELECT c.id,c.grade,c.section,app.is_class_teacher(c.school_id,c.id) AS is_class_teacher,
+       (SELECT coalesce(jsonb_agg(jsonb_build_object('id',sub.id,'name',sub.name,'code',sub.code) ORDER BY sub.name),'[]'::jsonb)
+        FROM subjects sub WHERE sub.school_id=c.school_id AND app.teacher_assigned(c.school_id,c.id,sub.id)) AS subjects
+       FROM classes c WHERE c.school_id=$1 AND app.teacher_assigned(c.school_id,c.id) ORDER BY c.grade,c.section,c.id`,
+                [a.context.schoolId],
+              )
+            ).rows,
+          }),
+          true,
+        ),
       );
     }),
   );
@@ -434,8 +491,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             (
               await tx.query(
                 `SELECT id, card_uid, status, issued_at, blocked_reason FROM nfc_cards
-                 WHERE school_id=$1 AND student_id=$2 ORDER BY created_at DESC LIMIT 1`,
-                [a.context.schoolId, id],
+                 WHERE school_id=$1 AND student_id=$2 AND $3::boolean ORDER BY created_at DESC LIMIT 1`,
+                [a.context.schoolId, id, a.active!.permissions.includes('cards.read')],
               )
             ).rows[0] || null;
 
@@ -445,8 +502,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
                       p.id as parent_id, p.full_name, p.email, p.phone
                FROM student_parents sp
                JOIN parents p ON p.school_id=sp.school_id AND p.id=sp.parent_id
-               WHERE sp.school_id=$1 AND sp.student_id=$2 AND sp.status='ACTIVE'`,
-              [a.context.schoolId, id],
+               WHERE sp.school_id=$1 AND sp.student_id=$2 AND sp.status='ACTIVE' AND p.status='ACTIVE' AND $3::boolean`,
+              [a.context.schoolId, id, a.active!.permissions.includes('parents.read')],
             )
           ).rows;
 
@@ -475,13 +532,13 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
 
           const marks = (
             await tx.query(
-              `SELECT m.id, m.score, m.remarks, ex.name as exam_name, ex.max_score, ex.exam_type, sub.name as subject_name
-               FROM marks m
-               JOIN exams ex ON ex.school_id=m.school_id AND ex.id=m.exam_id
-               JOIN subjects sub ON sub.school_id=m.school_id AND sub.id=m.subject_id
-               WHERE m.school_id=$1 AND m.student_id=$2 ${['parent', 'student'].includes(a.active!.role) ? "AND ex.status='PUBLISHED'" : ''}
-               ORDER BY ex.created_at DESC, m.created_at DESC LIMIT 10`,
-              [a.context.schoolId, id],
+              `SELECT t.id, t.score, t.remarks, ex.name as exam_name, ex.max_score, ex.exam_type, sub.name as subject_name
+               FROM marks t
+               JOIN exams ex ON ex.school_id=t.school_id AND ex.id=t.exam_id
+               JOIN subjects sub ON sub.school_id=t.school_id AND sub.id=t.subject_id
+               WHERE t.school_id=$1 AND t.student_id=$2 AND $4::boolean AND ${resourceScope('marks', a, '$3')}
+               ORDER BY ex.created_at DESC, t.created_at DESC LIMIT 10`,
+              [a.context.schoolId, id, a.id, a.active!.permissions.includes('marks.read')],
             )
           ).rows;
 
@@ -490,18 +547,18 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
               `SELECT
                  coalesce(sum(amount_due), 0)::numeric as total_due,
                  coalesce(sum(amount_paid), 0)::numeric as total_paid,
-                 coalesce(sum(amount_due - amount_paid), 0)::numeric as balance,
+                 coalesce(sum(CASE WHEN status='WAIVED' THEN 0 ELSE amount_due - amount_paid END), 0)::numeric as balance,
                  count(*) FILTER (WHERE status = 'UNPAID')::int as unpaid_count
-               FROM fee_records WHERE school_id=$1 AND student_id=$2`,
-              [a.context.schoolId, id],
+               FROM fee_records WHERE school_id=$1 AND student_id=$2 AND $3::boolean`,
+              [a.context.schoolId, id, a.active!.permissions.includes('fees.read')],
             )
           ).rows[0];
 
           const fees = (
             await tx.query(
               `SELECT id, fee_type, amount_due, amount_paid, due_on, status, currency
-               FROM fee_records WHERE school_id=$1 AND student_id=$2 ORDER BY due_on DESC LIMIT 10`,
-              [a.context.schoolId, id],
+               FROM fee_records WHERE school_id=$1 AND student_id=$2 AND $3::boolean ORDER BY due_on DESC LIMIT 10`,
+              [a.context.schoolId, id, a.active!.permissions.includes('fees.read')],
             )
           ).rows;
 
@@ -549,19 +606,31 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           .parse(req.body);
       const result = await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a, 'nfc_attendance');
-        await assertStudent(tx, a, b.student_id);
-        await tx.query(
-          "UPDATE nfc_cards SET status='RETIRED', blocked_reason='Replaced with new card' WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'",
-          [a.context.schoolId, b.student_id],
+        return withIdempotency(
+          tx,
+          a,
+          req.header('Idempotency-Key'),
+          { operation: 'card.issue', ...b },
+          async () => {
+            await assertStudent(tx, a, b.student_id);
+            await tx.query('SELECT id FROM students WHERE school_id=$1 AND id=$2 FOR UPDATE', [
+              a.context.schoolId,
+              b.student_id,
+            ]);
+            await tx.query(
+              "UPDATE nfc_cards SET status='RETIRED', blocked_reason='Replaced with new card' WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'",
+              [a.context.schoolId, b.student_id],
+            );
+            const card = (
+              await tx.query(
+                "INSERT INTO nfc_cards(school_id, student_id, card_uid, status, issued_by) VALUES($1,$2,$3,'ACTIVE',$4) RETURNING *",
+                [a.context.schoolId, b.student_id, b.card_uid, a.id],
+              )
+            ).rows[0];
+            await audit(tx, a.context.schoolId, a.id, 'card.issued', 'nfc_cards', card.id);
+            return card;
+          },
         );
-        const card = (
-          await tx.query(
-            "INSERT INTO nfc_cards(school_id, student_id, card_uid, status, issued_by) VALUES($1,$2,$3,'ACTIVE',$4) RETURNING *",
-            [a.context.schoolId, b.student_id, b.card_uid, a.id],
-          )
-        ).rows[0];
-        await audit(tx, a.context.schoolId, a.id, 'card.issued', 'nfc_cards', card.id);
-        return card;
       });
       res.status(201).json(result);
     }),
@@ -607,7 +676,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
       const name = validName(String(req.params.resource)),
         d = definitions[name],
         a = res.locals.actor;
-      if (!a.active!.permissions.includes(d.read))
+      if (!resourceReadable(name, a))
         throw new ApiError(403, 'FORBIDDEN', 'You cannot view these records.');
       if (d.feature && !a.features[d.feature])
         throw new ApiError(
@@ -622,6 +691,14 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         async (tx) => {
           const params: unknown[] = [a.context.schoolId, a.id];
           let where = `t.school_id=$1 AND ${resourceScope(name, a)}`;
+          if (name === 'teachers' && req.query.assignable === '1')
+            where += " AND t.staff_role='teacher' AND t.status='ACTIVE'";
+          if (a.active!.role === 'teacher' && req.query.class_teacher === '1') {
+            if (name === 'classes') where += ' AND app.is_class_teacher(t.school_id,t.id)';
+            if (name === 'students')
+              where +=
+                " AND EXISTS(SELECT FROM enrollments ce WHERE ce.school_id=t.school_id AND ce.student_id=t.id AND ce.status='ACTIVE' AND app.is_class_teacher(ce.school_id,ce.class_id))";
+          }
           if (q.search && d.search.length) {
             params.push(`%${q.search.replace(/[\\%_]/g, '\\$&')}%`);
             where += ` AND (${d.search.map((c) => `t.${c}::text ILIKE $${params.length}`).join(' OR ')})`;
@@ -639,6 +716,35 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           ) {
             params.push(q.student_id);
             where += ` AND t.student_id=$${params.length}`;
+          }
+          if (q.class_id && ['students', 'parents', 'student_parents'].includes(name)) {
+            await assertClass(tx, a, q.class_id);
+            params.push(q.class_id);
+            const child =
+              name === 'students'
+                ? 't.id'
+                : name === 'student_parents'
+                  ? 't.student_id'
+                  : 'sp.student_id';
+            where +=
+              name === 'parents'
+                ? ` AND EXISTS(SELECT 1 FROM student_parents sp JOIN enrollments en ON en.school_id=sp.school_id AND en.student_id=sp.student_id WHERE sp.school_id=t.school_id AND sp.parent_id=t.id AND sp.status='ACTIVE' AND en.status='ACTIVE' AND en.class_id=$${params.length})`
+                : ` AND EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=${child} AND en.status='ACTIVE' AND en.class_id=$${params.length})`;
+          }
+          if (q.exam_id && name === 'marks') {
+            params.push(q.exam_id);
+            where += ` AND t.exam_id=$${params.length}`;
+          }
+          if (q.assessment_kind && name === 'exams') {
+            params.push(q.assessment_kind);
+            where += ` AND t.assessment_kind=$${params.length}`;
+          }
+          if (q.class_id && name === 'subjects' && a.active!.role === 'teacher') {
+            params.push(q.class_id);
+            where +=
+              q.assessment_kind === 'OFFICIAL'
+                ? ` AND app.is_class_teacher(t.school_id,$${params.length})`
+                : ` AND app.teacher_assigned(t.school_id,$${params.length},t.id)`;
           }
           const total = Number(
             (await tx.query(`SELECT count(*) FROM ${name} t WHERE ${where}`, params)).rows[0].count,
@@ -659,8 +765,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     asyncRoute(async (req, res) => {
       const name = validName(String(req.params.resource)),
         a = res.locals.actor;
-      if (!a.active!.permissions.includes(definitions[name].read))
-        throw new ApiError(403, 'FORBIDDEN', 'Access denied.');
+      if (!resourceReadable(name, a)) throw new ApiError(403, 'FORBIDDEN', 'Access denied.');
       if (definitions[name].feature && !a.features[definitions[name].feature!])
         throw new ApiError(
           403,
@@ -726,6 +831,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           if (['assignments', 'announcements', 'attendance_rule_versions'].includes(name))
             values.created_by = a.id;
           if (name === 'marks') values.entered_by = a.id;
+          if (name === 'exams') values.created_by = a.id;
           if (name === 'nfc_cards') values.issued_by = a.id;
           const keys = Object.keys(values);
           const row = (
@@ -768,6 +874,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         const merged = { ...old, ...patch };
         await validateBusiness(tx, a, name, merged, true);
         if (!Object.keys(patch).length) return old;
+        if (name === 'marks') patch.entered_by = a.id;
         if (name === 'academic_sessions' && patch.is_current)
           await tx.query(
             'UPDATE academic_sessions SET is_current=false WHERE school_id=$1 AND is_current AND id<>$2',
@@ -837,60 +944,14 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         b = manualSchema.parse(req.body);
       const row = await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a);
-        await assertStudent(tx, a, b.student_id);
-        const en = (
-          await tx.query(
-            'SELECT * FROM enrollments WHERE school_id=$1 AND student_id=$2 AND starts_on<=$3 AND (ends_on IS NULL OR ends_on>=$3) ORDER BY starts_on DESC LIMIT 1',
-            [a.context.schoolId, b.student_id, b.date],
-          )
-        ).rows[0];
-        if (!en) throw new ApiError(422, 'ENROLLMENT_REQUIRED', 'No enrollment for this date.');
-        await tx.query(
-          'INSERT INTO daily_attendance(school_id,student_id,attendance_date,class_id,academic_session_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(school_id,student_id,attendance_date) DO NOTHING',
-          [a.context.schoolId, b.student_id, b.date, en.class_id, en.academic_session_id],
-        );
-        const day = (
-          await tx.query(
-            'SELECT * FROM daily_attendance WHERE school_id=$1 AND student_id=$2 AND attendance_date=$3 FOR UPDATE',
-            [a.context.schoolId, b.student_id, b.date],
-          )
-        ).rows[0];
-        if (b.expected_version !== undefined && day.version !== b.expected_version)
-          throw new ApiError(409, 'VERSION_CONFLICT', 'Attendance changed. Refresh before saving.');
-        if (day.source === 'NFC' && day.version > 0)
-          throw new ApiError(
-            409,
-            'CORRECTION_REQUIRED',
-            'Request a correction to change NFC attendance.',
-          );
-        const updated = (
-          await tx.query(
-            "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,version=version+1 WHERE id=$1 RETURNING *",
-            [day.id, b.status],
-          )
-        ).rows[0];
-        await audit(
+        await attendanceEnrollment(tx, a, b.student_id, b.date);
+        return withIdempotency(
           tx,
-          a.context.schoolId,
-          a.id,
-          `attendance.manual:${b.reason}`,
-          'daily_attendance',
-          day.id,
+          a,
+          req.header('Idempotency-Key'),
+          { operation: 'attendance.manual', ...b },
+          () => markManualAttendance(tx, a, b),
         );
-        if (day.attendance_status !== b.status)
-          await queue(
-            tx,
-            a.context.schoolId,
-            b.student_id,
-            'ATTENDANCE_CORRECTED',
-            `ATTENDANCE_CORRECTED:${day.id}:${updated.version}`,
-            {
-              attendance_status: b.status,
-              attendance_date: b.date,
-              event_time: new Date().toISOString(),
-            },
-          );
-        return updated;
       });
       res.json(row);
     }),
@@ -900,50 +961,37 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     permission('attendance.manual_write'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
-        b = z
-          .object({
-            class_id: uuid,
-            date: date,
-            records: z.array(
-              z.object({
-                student_id: uuid,
-                status: z.enum(attendanceStatuses),
-              }),
-            ),
-            reason: z.string().min(3).max(2000),
-          })
-          .strict()
-          .parse(req.body);
+        b = classAttendanceSchema.parse(req.body);
       const results = await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a);
         await assertClass(tx, a, b.class_id);
-        const session = (
-          await tx.query(
-            'SELECT id FROM academic_sessions WHERE school_id=$1 AND is_current LIMIT 1',
-            [a.context.schoolId],
-          )
-        ).rows[0];
-        const sessionId = session?.id || null;
-        for (const item of b.records) {
-          await assertStudent(tx, a, item.student_id);
-          await tx.query(
-            'INSERT INTO daily_attendance(school_id,student_id,attendance_date,class_id,academic_session_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(school_id,student_id,attendance_date) DO NOTHING',
-            [a.context.schoolId, item.student_id, b.date, b.class_id, sessionId],
-          );
-          await tx.query(
-            "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,version=version+1 WHERE school_id=$1 AND student_id=$3 AND attendance_date=$4",
-            [a.context.schoolId, item.status, item.student_id, b.date],
-          );
-        }
-        await audit(
+        await assertClassTeacher(tx, a, b.class_id);
+        return withIdempotency(
           tx,
-          a.context.schoolId,
-          a.id,
-          `attendance.bulk_marked:${b.class_id}:${b.date}`,
-          'daily_attendance',
-          b.class_id,
+          a,
+          req.header('Idempotency-Key'),
+          { operation: 'attendance.bulk', ...b },
+          async () => {
+            for (const item of [...b.records].sort((x, y) =>
+              x.student_id.localeCompare(y.student_id),
+            ))
+              await markManualAttendance(
+                tx,
+                a,
+                { ...item, date: b.date, reason: b.reason },
+                b.class_id,
+              );
+            await audit(
+              tx,
+              a.context.schoolId,
+              a.id,
+              `attendance.bulk_marked:${b.reason}`,
+              'classes',
+              b.class_id,
+            );
+            return { updated: b.records.length };
+          },
         );
-        return { updated: b.records.length };
       });
       res.json(results);
     }),
@@ -952,7 +1000,24 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     '/corrections',
     permission('attendance.read'),
     asyncRoute(async (req, res) => {
-      const a = res.locals.actor;
+      const a = res.locals.actor,
+        filters = z
+          .object({
+            status: z
+              .enum(['REQUESTED', 'APPROVED', 'REJECTED', 'APPLIED', 'CANCELLED'])
+              .optional(),
+            reviewable: z.enum(['1']).optional(),
+          })
+          .parse(req.query);
+      if (filters.reviewable && !a.active!.permissions.includes('attendance.correct_approve'))
+        throw new ApiError(403, 'FORBIDDEN', 'Correction approval permission required.');
+      const args: unknown[] = [a.context.schoolId, a.id];
+      let filter = '';
+      if (filters.status) {
+        args.push(filters.status);
+        filter += ` AND c.status=$${args.length}`;
+      }
+      if (filters.reviewable) filter += ' AND c.requested_by<>$2';
       res.json(
         await transaction(
           pool,
@@ -960,8 +1025,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              `SELECT c.*,t.student_id,t.attendance_date,s.first_name,s.last_name FROM attendance_corrections c JOIN daily_attendance t ON t.school_id=c.school_id AND t.id=c.daily_attendance_id JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id WHERE c.school_id=$1 AND ${studentScope(a, 't.student_id', '$2')} ORDER BY c.requested_at DESC,c.id`,
-              [a.context.schoolId, a.id],
+              `SELECT c.*,t.student_id,t.attendance_date,t.attendance_status AS current_status,s.student_code,s.first_name,s.last_name FROM attendance_corrections c JOIN daily_attendance t ON t.school_id=c.school_id AND t.id=c.daily_attendance_id JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id WHERE c.school_id=$1 AND ${studentScope(a, 't.student_id', '$2')}${filter} ORDER BY c.requested_at DESC,c.id`,
+              args,
               req.query,
             ),
           true,
@@ -985,6 +1050,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             )
           ).rows[0];
           if (!day) throw notFound();
+          await assertClassTeacher(tx, a, day.class_id);
           return (
             await tx.query(
               'INSERT INTO attendance_corrections(school_id,daily_attendance_id,requested_status,reason,requested_by) VALUES($1,$2,$3,$4,$5) RETURNING *',
@@ -1098,53 +1164,60 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
         id = uuid.parse(req.params.id),
-        b = z
-          .object({
-            amount: z.number().positive().max(999999999),
-            payment_method: z
-              .enum(['CASH', 'UPI', 'CHEQUE', 'BANK_TRANSFER', 'CARD', 'OTHER'])
-              .default('CASH'),
-            note: z.string().max(500).optional(),
-          })
-          .strict()
-          .parse(req.body);
+        b = feePaymentSchema.parse(req.body),
+        key = req.header('Idempotency-Key');
+      if (!key)
+        throw new ApiError(422, 'IDEMPOTENCY_KEY_REQUIRED', 'A payment retry key is required.');
       const result = await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a);
-        const fee = (
-          await tx.query('SELECT * FROM fee_records WHERE school_id=$1 AND id=$2 FOR UPDATE', [
-            a.context.schoolId,
-            id,
-          ])
-        ).rows[0];
-        if (!fee) throw notFound();
-        const currentPaid = Number(fee.amount_paid) || 0;
-        const totalDue = Number(fee.amount_due) || 0;
-        const newPaid = Math.min(totalDue, currentPaid + b.amount);
-        const newStatus = newPaid >= totalDue ? 'PAID' : 'PARTIAL';
-        const updated = (
-          await tx.query(
-            'UPDATE fee_records SET amount_paid=$2, status=$3 WHERE school_id=$1 AND id=$4 RETURNING *',
-            [a.context.schoolId, newPaid, newStatus, id],
-          )
-        ).rows[0];
-        await audit(
-          tx,
-          a.context.schoolId,
-          a.id,
-          `fee.payment_received:${b.payment_method}:${b.amount}`,
-          'fee_records',
-          id,
-        );
-        return {
-          ...updated,
-          receipt: {
-            receipt_no: `REC-${Date.now().toString().slice(-6)}`,
+        return withIdempotency(tx, a, key, { operation: 'fee.payment', id, ...b }, async () => {
+          const fee = (
+            await tx.query('SELECT * FROM fee_records WHERE school_id=$1 AND id=$2 FOR UPDATE', [
+              a.context.schoolId,
+              id,
+            ])
+          ).rows[0];
+          if (!fee) throw notFound();
+          const paid = Math.round(Number(fee.amount_paid) * 100),
+            due = Math.round(Number(fee.amount_due) * 100),
+            amount = Math.round(b.amount * 100);
+          if (['PAID', 'WAIVED'].includes(fee.status) || paid >= due)
+            throw new ApiError(409, 'FEE_SETTLED', 'This fee has no outstanding balance.');
+          if (amount > due - paid)
+            throw new ApiError(
+              409,
+              'PAYMENT_EXCEEDS_BALANCE',
+              'The payment exceeds the outstanding balance. Refresh the fee record.',
+            );
+          const updated = (
+            await tx.query(
+              'UPDATE fee_records SET amount_paid=$2,status=$3 WHERE school_id=$1 AND id=$4 RETURNING *',
+              [
+                a.context.schoolId,
+                (paid + amount) / 100,
+                paid + amount === due ? 'PAID' : 'PARTIAL',
+                id,
+              ],
+            )
+          ).rows[0];
+          const receipt = {
+            receipt_no: 'REC-' + crypto.randomUUID(),
             amount_paid_now: b.amount,
             payment_method: b.payment_method,
             note: b.note || '',
             date: new Date().toISOString(),
-          },
-        };
+          };
+          await tx.query(
+            "INSERT INTO audit_logs(school_id,actor_type,actor_id,action,entity_type,entity_id,after) VALUES($1,'USER',$2,'fee.payment_received','fee_records',$3,$4)",
+            [
+              a.context.schoolId,
+              a.id,
+              id,
+              { receipt, amount_paid: updated.amount_paid, status: updated.status },
+            ],
+          );
+          return { ...updated, receipt };
+        });
       });
       res.json(result);
     }),
@@ -1435,7 +1508,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              "SELECT id,kind,status,student_id,class_id,created_at,error_code FROM report_documents WHERE school_id=$1 AND requested_by=$2 AND (status IN ('PENDING','PROCESSING','FAILED','EXPIRED') OR (authorization_version=(SELECT access_version FROM schools WHERE id=$1) AND authorization_scope=app.report_scope_fingerprint($2) AND authorization_role=(SELECT r.code FROM school_memberships m JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE'))) ORDER BY created_at DESC,id",
+              "SELECT id,kind,status,student_id,class_id,created_at,error_code,coalesce(parameters->>'format','PDF') AS format FROM report_documents WHERE school_id=$1 AND requested_by=$2 AND (status IN ('PENDING','PROCESSING','FAILED','EXPIRED') OR (authorization_version=(SELECT access_version FROM schools WHERE id=$1) AND authorization_scope=app.report_scope_fingerprint($2) AND authorization_role=(SELECT r.code FROM school_memberships m JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE'))) ORDER BY created_at DESC,id",
               [a.context.schoolId, a.id],
               req.query,
             ),

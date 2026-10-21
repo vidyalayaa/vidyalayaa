@@ -6,7 +6,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ShieldCheck, Layers3 } from 'lucide-react';
 import type { Page, AdminOnboarding } from '@vidyalayaa/contracts';
 import FirstAdministratorDialog from './FirstAdministratorDialog';
-import { PlanEditor, PlatformHealth, SupportData, SubscriptionEditor } from './PlatformPanels';
+import {
+  PlanEditor,
+  PlatformHealth,
+  SupportData,
+  SubscriptionEditor,
+  SupportTicketResponse,
+} from './PlatformPanels';
 import { api, useAuth } from '../../lib/auth';
 import { toDateTimeLocal } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -58,7 +64,7 @@ export default function Platform() {
     [tab, setTab] = useState('schools'),
     [auditChange, setAuditChange] = useState<Record<string, unknown> | null>(null),
     [page, setPage] = useState(1),
-    [search, setSearch] = useState(''),
+    [search, setSearch] = useState(() => new URLSearchParams(location.search).get('search') || ''),
     [plan, setPlan] = useState<Record<string, unknown> | null>(null),
     [support, setSupport] = useState<Record<string, unknown> | null>(null),
     [action, setAction] = useState(''),
@@ -75,34 +81,19 @@ export default function Platform() {
       queryFn: () =>
         api<Page>(`/platform/${tab}?page=${page}&search=${encodeURIComponent(search)}`),
       enabled: !!a.session && !['health', 'firmware'].includes(tab),
+      refetchInterval: tab === 'offboarding' ? 30000 : false,
     });
   useEffect(() => {
     const current = location.pathname.split('/')[2] || 'schools';
     if (platformSections.some((section) => section === current)) {
       setTab(current);
       setPage(1);
-      setSearch('');
+      setSearch(new URLSearchParams(location.search).get('search') || '');
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
   return (
     <>
-      {ticket && (
-        <ActionDialog
-          open
-          close={() => setTicket(null)}
-          title={`Respond: ${ticket.subject}`}
-          endpoint={`/platform/support-requests/${ticket.id}`}
-          method="PATCH"
-          fields={[
-            {
-              key: 'status',
-              options: ['OPEN', 'IN_PROGRESS', 'RESOLVED'],
-              default: String(ticket.status),
-            },
-            { key: 'response', type: 'textarea', default: String(ticket.response || '') },
-          ]}
-        />
-      )}
+      {ticket && <SupportTicketResponse ticket={ticket} close={() => setTicket(null)} />}
       <PageHeading
         eyebrow="VIDYALAYAA PLATFORM"
         title="Every school. One clear view."
@@ -263,7 +254,7 @@ export default function Platform() {
                             )
                           : tab === 'offboarding'
                             ? (row) => (
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -278,7 +269,7 @@ export default function Platform() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={row.status === 'PURGED'}
+                                    disabled={['PURGED', 'CANCELLED'].includes(String(row.status))}
                                     onClick={() => {
                                       setClosure(row);
                                       setClosureAction('hold');
@@ -289,7 +280,15 @@ export default function Platform() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={row.status !== 'CLOSED' || !!row.legal_hold}
+                                    disabled={
+                                      row.status !== 'CLOSED' ||
+                                      !!row.legal_hold ||
+                                      !(
+                                        new Date(String(row.export_until)).getTime() <=
+                                          Date.now() &&
+                                        new Date(String(row.delete_after)).getTime() <= Date.now()
+                                      )
+                                    }
                                     onClick={() => {
                                       setClosure(row);
                                       setClosureAction('purge');
@@ -301,7 +300,7 @@ export default function Platform() {
                               )
                             : tab === 'devices'
                               ? (row) => (
-                                  <div className="flex gap-2">
+                                  <div className="flex flex-wrap gap-2">
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -330,35 +329,45 @@ export default function Platform() {
                               : undefined
               }
               columns={
-                tab === 'schools'
-                  ? ['school_code', 'name', 'timezone', 'plan', 'subscription_status']
-                  : tab === 'devices'
-                    ? ['device_code', 'name', 'school_name', 'status', 'last_seen_at']
-                    : tab === 'plans'
-                      ? ['code', 'name', 'features', 'limits']
-                      : tab === 'offboarding'
-                        ? [
-                            'school_name',
-                            'status',
-                            'policy_ref',
-                            'export_until',
-                            'delete_after',
-                            'legal_hold',
-                            'last_error',
-                          ]
-                        : tab === 'organizations'
-                          ? ['name', 'created_at']
-                          : tab === 'usage'
+                tab === 'support-requests'
+                  ? ['school_name', 'subject', 'category', 'status', 'response', 'updated_at']
+                  : tab === 'notices'
+                    ? ['school_name', 'kind', 'created_at']
+                    : tab === 'schools'
+                      ? ['school_code', 'name', 'timezone', 'plan', 'subscription_status']
+                      : tab === 'devices'
+                        ? ['device_code', 'name', 'school_name', 'status', 'last_seen_at']
+                        : tab === 'plans'
+                          ? ['code', 'name', 'features', 'limits']
+                          : tab === 'offboarding'
                             ? [
                                 'school_name',
-                                'on_date',
-                                'active_students',
-                                'devices',
-                                'notifications_sent',
+                                'status',
+                                'policy_ref',
+                                'export_until',
+                                'delete_after',
+                                'legal_hold',
+                                'last_error',
                               ]
-                            : tab === 'audit'
-                              ? ['occurred_at', 'actor_id', 'action', 'entity_type', 'reason']
-                              : ['school_id', 'ticket_ref', 'reason', 'expires_at', 'approved_by']
+                            : tab === 'organizations'
+                              ? ['name', 'created_at']
+                              : tab === 'usage'
+                                ? [
+                                    'school_name',
+                                    'on_date',
+                                    'active_students',
+                                    'devices',
+                                    'notifications_sent',
+                                  ]
+                                : tab === 'audit'
+                                  ? ['occurred_at', 'actor_id', 'action', 'entity_type', 'reason']
+                                  : [
+                                      'school_label',
+                                      'ticket_ref',
+                                      'reason',
+                                      'expires_at',
+                                      'approved_by',
+                                    ]
               }
             />
           ) : (
@@ -369,7 +378,7 @@ export default function Platform() {
               <span>
                 Page {page} · {query.data.total} records
               </span>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -489,6 +498,7 @@ export default function Platform() {
             {
               key: 'organization_id',
               lookup: '/platform/organizations',
+              default: String(campus.organization_id || ''),
               optional: true,
               nullable: true,
             },

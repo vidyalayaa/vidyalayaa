@@ -29,6 +29,9 @@ import {
   firstAdminSchema,
   deviceTuningSchema,
   retentionPolicySchema,
+  classAttendanceSchema,
+  feePaymentSchema,
+  classSubjectSchema,
 } from '@vidyalayaa/contracts';
 // Generate from the same schemas used by Express and the browser. Do not edit JSON by hand.
 function json(schema: z.ZodTypeAny): Record<string, unknown> {
@@ -115,6 +118,9 @@ const schemas = {
   AttendanceRules: ruleSchema,
   Correction: correctionSchema,
   ManualAttendance: manualSchema,
+  ClassAttendance: classAttendanceSchema,
+  FeePayment: feePaymentSchema,
+  ClassSubject: classSubjectSchema,
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
@@ -189,7 +195,58 @@ operation('/me', 'get', 'Verified identity, memberships, permissions and entitle
 operation('/dashboard', 'get', 'Role-scoped school dashboard');
 operation('/attendance', 'get', 'Paginated daily attendance');
 operation('/attendance/manual', 'post', 'Manual classroom attendance', 'ManualAttendance');
-operation('/corrections', 'get', 'Scoped correction requests');
+operation(
+  '/attendance/bulk',
+  'post',
+  'Atomic class register; enrollment, NFC and version checks; up to 500 unique students',
+  'ClassAttendance',
+  'UserJWT',
+  {
+    parameters: [{ name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } }],
+  },
+);
+operation(
+  '/fees/{id}/pay',
+  'post',
+  'Record an exact fee payment; retry returns the original receipt',
+  'FeePayment',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', minLength: 8, maxLength: 200 },
+      },
+    ],
+  },
+);
+operation(
+  '/corrections',
+  'get',
+  'Scoped correction requests; optional status and other-author reviewer filters',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'status',
+        in: 'query',
+        schema: {
+          type: 'string',
+          enum: ['REQUESTED', 'APPROVED', 'REJECTED', 'APPLIED', 'CANCELLED'],
+        },
+      },
+      {
+        name: 'reviewable',
+        in: 'query',
+        description: '1 excludes requests by the current reviewer; approval permission required.',
+        schema: { type: 'string', enum: ['1'] },
+      },
+    ],
+  },
+);
 operation('/corrections', 'post', 'Request a correction', 'Correction');
 operation('/corrections/{id}/decision', 'post', 'Approve/reject; self-approval prohibited');
 operation('/marks/bulk', 'post', 'Atomic, idempotent upload of up to 500 mark rows', 'BulkMarks');
@@ -229,6 +286,94 @@ operation(
   '/lookups/accounts',
   'get',
   'Paginated active school accounts, filtered by teacher/parent/student role; users.manage',
+);
+operation(
+  '/teaching/classes',
+  'get',
+  'Current teacher assigned classes, sections, subjects and Class Teacher designation; classrooms.read',
+);
+operation(
+  '/academics/classes',
+  'get',
+  'School Admin only; paginated class/section summaries with current student counts, distinct assigned subjects, Class Teacher and school sessions',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'session_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+    ],
+  },
+);
+operation(
+  '/academics/classes/{id}/subjects',
+  'post',
+  'School Admin only; atomically create or select a subject and assign its required teacher to this section; academics.write and teachers.write',
+  'ClassSubject',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      { name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } },
+    ],
+    description:
+      'Supply exactly one of subject_id or subject {code,name}. teacher_id and starts_on are required. Both records commit together; invalid teachers roll back new subjects. Other sections are unchanged.',
+  },
+);
+for (const child of ['subjects', 'enrollments', 'unconfigured-assignments'])
+  operation(
+    `/academics/classes/{id}/${child}`,
+    'get',
+    `School Admin only; school- and class-scoped ${child}`,
+    undefined,
+    'UserJWT',
+    {
+      parameters: [
+        {
+          name: 'X-School-Id',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+        ...(child === 'enrollments'
+          ? [
+              {
+                name: 'view',
+                in: 'query',
+                schema: { type: 'string', enum: ['current', 'all'], default: 'current' },
+              },
+            ]
+          : []),
+      ],
+    },
+  );
+operation(
+  '/lookups/class-teachers',
+  'get',
+  'Eligible active Teacher profiles for class_id designation, including new classes; academics.write',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'class_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+  },
 );
 operation(
   '/school',

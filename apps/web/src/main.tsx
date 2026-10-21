@@ -19,10 +19,12 @@ import { Loading, ErrorState, Empty } from './components/common';
 import AuthenticatorSetup from './features/auth/AuthenticatorSetup';
 import PendingInvitations from './features/auth/PendingInvitations';
 import { resourceInfo } from './features/resources/metadata';
+import { TeacherRoster, TeacherAssessments } from './features/operations/Teaching';
 
 import './styles.css';
 import { portals, schoolPath, platformSections } from './lib/portals';
 const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
+const Academics = lazy(() => import('./features/academics/Academics'));
 const AttendanceHistory = lazy(() =>
   import('./features/operations/SchoolTools').then((m) => ({ default: m.AttendanceHistory })),
 );
@@ -174,13 +176,31 @@ function ResourcePage() {
   const a = useAuth();
   if (!resourceNames.includes(resource as Resource)) return <Empty title="Page not found" />;
   const name = resource as Resource;
+  if (a.me?.school?.role === 'teacher') {
+    if (['students', 'parents', 'student_parents'].includes(name)) return <TeacherRoster />;
+    if (['marks', 'exams'].includes(name)) return <TeacherAssessments kind="SUBJECT_TEST" />;
+    if (['classes', 'academic_sessions', 'teacher_class_assignments'].includes(name))
+      return (
+        <Empty
+          title="Access unavailable"
+          description="Academic Administration belongs to School Admin. Use your teaching workspace."
+        />
+      );
+  }
   if (configured && !a.me?.school?.permissions.includes(resourceInfo[name].permission))
-    return (
-      <Empty
-        title="This area belongs to another role"
-        description="Your school administrator can help with access."
-      />
-    );
+    if (
+      !(
+        a.me?.school?.role === 'teacher' &&
+        name === 'school_holidays' &&
+        a.me.school.permissions.includes('classrooms.read')
+      )
+    )
+      return (
+        <Empty
+          title="This area belongs to another role"
+          description="Your school administrator can help with access."
+        />
+      );
   return <ResourceScreen key={name} resource={name} />;
 }
 function Permission({ code, children }: { code: string; children: React.ReactNode }) {
@@ -207,6 +227,38 @@ function schoolRoutes() {
   return (
     <>
       <Route index element={<Dashboard />} />
+      <Route
+        path="academics"
+        element={
+          <Permission code="academics.write">
+            <Academics />
+          </Permission>
+        }
+      />
+      <Route
+        path="classroom"
+        element={
+          <Permission code="classrooms.read">
+            <TeacherRoster />
+          </Permission>
+        }
+      />
+      <Route
+        path="subject-tests"
+        element={
+          <Permission code="classrooms.read">
+            <TeacherAssessments kind="SUBJECT_TEST" />
+          </Permission>
+        }
+      />
+      <Route
+        path="official-results"
+        element={
+          <Permission code="classrooms.read">
+            <TeacherAssessments kind="OFFICIAL" />
+          </Permission>
+        }
+      />
       <Route
         path="exports"
         element={

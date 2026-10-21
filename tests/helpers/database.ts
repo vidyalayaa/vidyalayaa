@@ -179,6 +179,9 @@ export async function fixture(db: Pick<PGlite, 'query'>) {
     "INSERT INTO teacher_class_assignments(school_id,teacher_id,class_id,subject_id,starts_on) VALUES($1,$2,$3,$4,'2026-01-01')",
     [schoolA, teacherId, classId, subject],
   );
+  await db.query("SELECT set_config('app.school_id',$1,false)", [schoolA]);
+  await db.query('UPDATE classes SET class_teacher_id=$1 WHERE id=$2', [teacherId, classId]);
+  await db.query("SELECT set_config('app.school_id','',false)");
   await db.query(
     "INSERT INTO parents(id,school_id,user_id,full_name,email) VALUES($1,$2,$3,'Parent Test','parent@example.invalid')",
     [parentId, schoolA, parent],
@@ -220,5 +223,6 @@ export async function fixture(db: Pick<PGlite, 'query'>) {
     deviceA,
     deviceB,
     parentId,
+    teacherId,
   };
 }

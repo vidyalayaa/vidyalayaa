@@ -3,7 +3,7 @@ import SupportRequests from './SupportRequests';
 import ClassAttendanceSheet from './ClassAttendanceSheet';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Download,
@@ -37,6 +37,7 @@ import { display, label } from '../../lib/utils';
 import { useRows } from '../../lib/use-records';
 import Pagination from '../../components/Pagination';
 import DeviceConfiguration from './DeviceConfiguration';
+import { useTeachingClasses } from '../../lib/use-teaching-classes';
 function Pages({ query }: { query: ReturnType<typeof useRows> }) {
   return query.automatic ? (
     <Pagination
@@ -63,6 +64,7 @@ function Rows({ query, columns }: { query: ReturnType<typeof useRows>; columns: 
   );
 }
 export function Attendance() {
+  const teaching = useTeachingClasses();
   const a = useAuth(),
     [date, setDate] = useState(
       new Intl.DateTimeFormat('en-CA', {
@@ -77,6 +79,11 @@ export function Attendance() {
     [action, setAction] = useState(''),
     [batchOpen, setBatchOpen] = useState(false),
     [correction, setCorrection] = useState<Record<string, unknown> | null>(null);
+  const teacher = a.me?.school?.role === 'teacher';
+  const canManage = (id?: unknown) =>
+    !teacher || !!teaching.data?.data.some((c) => c.is_class_teacher && (!id || c.id === id));
+  const manualAllowed =
+    a.me?.school?.permissions.includes('attendance.manual_write') && canManage(classId);
   return (
     <>
       <PageHeading
@@ -89,25 +96,23 @@ export function Attendance() {
                 Corrections <ArrowUpRight size={15} />
               </Link>
             </Button>
-            <Button
-              variant="outline"
-              disabled={!a.me?.school?.permissions.includes('attendance.manual_write')}
-              onClick={() => setBatchOpen(true)}
-            >
+            <Button variant="outline" disabled={!manualAllowed} onClick={() => setBatchOpen(true)}>
               <Users size={16} />
               Class Register
             </Button>
-            <Button
-              variant="lime"
-              disabled={!a.me?.school?.permissions.includes('attendance.manual_write')}
-              onClick={() => setAction('manual')}
-            >
+            <Button variant="lime" disabled={!manualAllowed} onClick={() => setAction('manual')}>
               <Plus size={16} />
               Mark attendance
             </Button>
           </>
         }
       />
+      {teacher && (
+        <p className="mb-4 text-sm text-stone-600">
+          Subject teachers can view assigned classes. Only the designated Class Teacher can manually
+          manage attendance.
+        </p>
+      )}
       <div className="tabs">
         <Link className="tab-active" to="/attendance">
           Daily attendance
@@ -171,11 +176,12 @@ export function Attendance() {
             ]}
             actions={
               a.me?.school?.permissions.includes('attendance.correct_request')
-                ? (row) => (
-                    <Button size="sm" variant="outline" onClick={() => setCorrection(row)}>
-                      Request correction
-                    </Button>
-                  )
+                ? (row) =>
+                    canManage(row.class_id) ? (
+                      <Button size="sm" variant="outline" onClick={() => setCorrection(row)}>
+                        Request correction
+                      </Button>
+                    ) : null
                 : undefined
             }
           />
@@ -212,7 +218,10 @@ export function Attendance() {
         title="Mark classroom attendance"
         endpoint="/attendance/manual"
         fields={[
-          { key: 'student_id', lookup: '/resources/students' },
+          {
+            key: 'student_id',
+            lookup: teacher ? '/resources/students?class_teacher=1' : '/resources/students',
+          },
           { key: 'date', type: 'date', default: date },
           { key: 'status', options: ['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED'] },
           { key: 'reason', type: 'textarea' },
@@ -324,12 +333,11 @@ export function Devices() {
             >
               Manage device <ArrowUpRight size={15} />
             </Button>
-            {a.me?.school?.permissions.includes('devices.manage') && (
+            {a.me?.school?.permissions.includes('devices.read') && (
               <Button
                 className="mt-2 w-full"
                 variant="outline"
                 size="sm"
-                disabled={d.status === 'REVOKED' || !d.location_id}
                 onClick={() => setConfiguration(d)}
               >
                 Reader settings & history
@@ -390,19 +398,35 @@ export function Devices() {
   );
 }
 export function Corrections() {
+  const [params, setParams] = useSearchParams();
   const a = useAuth(),
     qc = useQueryClient(),
-    query = useRows('/corrections'),
+    status = params.get('status') || '',
+    reviewable = params.get('reviewable') === '1',
+    query = useRows('/corrections' + (params.toString() ? '?' + params.toString() : '')),
+    [deciding, setDeciding] = useState(false),
     [error, setError] = useState('');
+  function filter(key: string, value: string) {
+    const next = new URLSearchParams(params);
+    next.delete('page');
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next);
+  }
   async function decide(id: unknown, approve: boolean) {
+    if (deciding) return;
+    setDeciding(true);
+    setError('');
     try {
       await api(`/corrections/${id}/decision`, {
         method: 'POST',
         body: JSON.stringify({ approve }),
       });
-      qc.invalidateQueries({ queryKey: [a.school] });
+      await qc.invalidateQueries({ queryKey: [a.school] });
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setDeciding(false);
     }
   }
   return (
@@ -429,6 +453,34 @@ export function Corrections() {
         </div>
       )}
       <Panel title="Correction requests">
+        <div className="table-toolbar flex flex-wrap gap-4">
+          <label className="text-sm">
+            Status
+            <select
+              aria-label="Correction status"
+              className="input mt-1"
+              value={status}
+              onChange={(e) => filter('status', e.target.value)}
+            >
+              <option value="">All statuses</option>
+              {['REQUESTED', 'APPLIED', 'REJECTED', 'APPROVED', 'CANCELLED'].map((value) => (
+                <option key={value} value={value}>
+                  {label(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {a.me?.school?.permissions.includes('attendance.correct_approve') && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={reviewable}
+                onChange={(e) => filter('reviewable', e.target.checked ? '1' : '')}
+              />
+              Requests from other people
+            </label>
+          )}
+        </div>
         {query.data?.data.length ? (
           <div>
             {query.data.data.map((c) => (
@@ -439,16 +491,36 @@ export function Corrections() {
                     <Badge>{String(c.status)}</Badge>
                   </h3>
                   <p>{String(c.reason)}</p>
-                  <small>Requested status: {String(c.requested_status)}</small>
+                  <small>
+                    {String(c.student_code)} · {display(c.attendance_date, a.me?.school?.timezone)}{' '}
+                    · Current: {label(String(c.current_status))} · Requested status:{' '}
+                    {label(String(c.requested_status))}
+                  </small>
                 </div>
+                {c.status === 'REQUESTED' && c.requested_by === a.me?.id && (
+                  <p className="text-xs text-stone-600">
+                    Another approver must review your request.
+                  </p>
+                )}
                 {c.status === 'REQUESTED' &&
+                  c.requested_by !== a.me?.id &&
                   a.me?.school?.permissions.includes('attendance.correct_approve') && (
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => decide(c.id, false)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={deciding}
+                        onClick={() => decide(c.id, false)}
+                      >
                         <X size={14} />
                         Reject
                       </Button>
-                      <Button variant="lime" size="sm" onClick={() => decide(c.id, true)}>
+                      <Button
+                        variant="lime"
+                        size="sm"
+                        disabled={deciding}
+                        onClick={() => decide(c.id, true)}
+                      >
                         <Check size={14} />
                         Approve
                       </Button>
@@ -477,7 +549,7 @@ export function Reports() {
       const row = query.data?.data.find((x) => x.id === id);
       await downloadReport(
         r.url,
-        `vidyalayaa-report.${(row?.parameters as { format?: string })?.format === 'CSV' ? 'csv' : 'pdf'}`,
+        `vidyalayaa-report.${(row?.format || (row?.parameters as { format?: string })?.format) === 'CSV' ? 'csv' : 'pdf'}`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -554,7 +626,10 @@ export function Reports() {
                   onClick={() => download(r.id)}
                 >
                   <Download size={15} />
-                  Download PDF
+                  Download{' '}
+                  {(r.format || (r.parameters as { format?: string })?.format) === 'CSV'
+                    ? 'CSV'
+                    : 'PDF'}
                 </Button>
               </div>
             ))}
