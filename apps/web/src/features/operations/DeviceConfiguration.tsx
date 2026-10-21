@@ -24,6 +24,7 @@ export default function DeviceConfiguration({
   close: () => void;
 }) {
   const a = useAuth(),
+    canManage = !!a.me?.school?.permissions.includes('devices.manage'),
     qc = useQueryClient(),
     [error, setError] = useState(''),
     [page, setPage] = useState(1),
@@ -36,8 +37,8 @@ export default function DeviceConfiguration({
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api(`/devices/${device.id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [a.school] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: [a.school] });
       close();
     },
     onError: (e) => setError(e.message),
@@ -49,12 +50,17 @@ export default function DeviceConfiguration({
         if (!v) close();
       }}
       title={`Reader settings · ${device.name}`}
-      description="Readers receive the next version when they connect. Every saved configuration is retained in history."
+      description={
+        canManage
+          ? 'Readers receive the next version when they connect. Every saved configuration is retained in history.'
+          : 'Read-only reader configuration and change history. Contact your school administrator to make changes.'
+      }
     >
       <form
         className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
+          if (!canManage) return;
           setError('');
           const f = new FormData(e.currentTarget);
           try {
@@ -78,51 +84,61 @@ export default function DeviceConfiguration({
           }
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          {Object.entries(numeric).map(([k, v]) => (
-            <label className="block text-sm" key={k}>
-              {label(k)}
-              <input
-                name={k}
-                type="number"
+        <fieldset disabled={!canManage} className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {Object.entries(numeric).map(([k, v]) => (
+              <label className="block text-sm" key={k}>
+                {label(k)}
+                <input
+                  name={k}
+                  type="number"
+                  className="input mt-2"
+                  defaultValue={Number(config[k] ?? v.value)}
+                  required
+                  min={v.min}
+                  max={v.max}
+                  step={1}
+                />
+              </label>
+            ))}
+          </div>
+          <label className="block text-sm">
+            LED brightness (%)
+            <input
+              className="input mt-2"
+              name="led_brightness"
+              type="number"
+              min={0}
+              max={100}
+              defaultValue={Number(feedback.led_brightness ?? 60)}
+              required
+            />
+          </label>
+          <label className="flex gap-3 text-sm">
+            <input name="buzzer" type="checkbox" defaultChecked={feedback.buzzer !== false} />
+            Sound feedback
+          </label>
+          <label className="flex gap-3 text-sm">
+            <input
+              name="show_result_on_oled"
+              type="checkbox"
+              defaultChecked={feedback.show_result_on_oled === true}
+            />
+            Display attendance result on OLED
+          </label>
+          {canManage && (
+            <label className="block text-sm">
+              Reason for change
+              <textarea
+                name="reason"
                 className="input mt-2"
-                defaultValue={Number(config[k] ?? v.value)}
                 required
-                min={v.min}
-                max={v.max}
-                step={1}
+                minLength={5}
+                maxLength={1000}
               />
             </label>
-          ))}
-        </div>
-        <label className="block text-sm">
-          LED brightness (%)
-          <input
-            className="input mt-2"
-            name="led_brightness"
-            type="number"
-            min={0}
-            max={100}
-            defaultValue={Number(feedback.led_brightness ?? 60)}
-            required
-          />
-        </label>
-        <label className="flex gap-3 text-sm">
-          <input name="buzzer" type="checkbox" defaultChecked={feedback.buzzer !== false} />
-          Sound feedback
-        </label>
-        <label className="flex gap-3 text-sm">
-          <input
-            name="show_result_on_oled"
-            type="checkbox"
-            defaultChecked={feedback.show_result_on_oled === true}
-          />
-          Display attendance result on OLED
-        </label>
-        <label className="block text-sm">
-          Reason for change
-          <textarea name="reason" className="input mt-2" required minLength={5} maxLength={1000} />
-        </label>
+          )}
+        </fieldset>
         {error && (
           <p className="field-error" role="alert">
             {error}
@@ -132,9 +148,11 @@ export default function DeviceConfiguration({
           <Button type="button" variant="outline" onClick={close}>
             Cancel
           </Button>
-          <Button variant="lime" disabled={save.isPending || device.status === 'REVOKED'}>
-            Save reader settings
-          </Button>
+          {canManage && (
+            <Button variant="lime" disabled={save.isPending || device.status === 'REVOKED'}>
+              Save reader settings
+            </Button>
+          )}
         </div>
       </form>
       <h3 className="mb-3 mt-6 font-semibold">Configuration history</h3>
@@ -143,7 +161,7 @@ export default function DeviceConfiguration({
       ) : history.data?.data.length ? (
         <DataTable
           rows={history.data.data}
-          columns={['version', 'editor', 'created_at', 'config']}
+          columns={['version', 'editor', 'created_at', 'reason', 'config']}
         />
       ) : (
         <p className="text-sm text-stone-500">No configuration changes have been recorded yet.</p>

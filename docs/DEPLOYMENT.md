@@ -2,6 +2,8 @@
 
 Version 1.3 | 20 October 2026 | Architecture specification v1.0
 
+21 October Teacher update: apply the additive teacher authorization migration before deploying matching website/API/worker builds. See [Teacher assignments and migration notes](TEACHER_ASSIGNMENTS.md).
+
 ## 1. Deployment model and boundaries
 
 The React single-page application deploys to Firebase Hosting. A Render web service runs the Express API. A distinct Render background worker drains notification jobs, generates private reports, reconciles stored events and runs school jobs. Supabase PostgreSQL is the only authoritative store. Supabase Auth owns passwords, sessions and MFA. Supabase Storage holds private materials and reports. FCM, transactional email and a selected SMS adapter deliver messages only; they do not hold authoritative attendance.

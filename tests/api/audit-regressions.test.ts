@@ -257,7 +257,8 @@ it('checks every resource read and denied write for all five school memberships'
     for (const name of resourceNames) {
       const read = await call('get', `/resources/${name}/${foreign}`, role);
       expect(read.status, `${role} read ${name}`).toBe(
-        permissions.includes(definitions[name].read) ? 404 : 403,
+        role === 'teacher' && ['classes','subjects','enrollments','school_holidays'].includes(name)
+          ? 404 : permissions.includes(definitions[name].read) ? 404 : 403,
       );
       if (!definitions[name].write || !permissions.includes(definitions[name].write!)) {
         const write = await call('post', `/resources/${name}`, role).send({});

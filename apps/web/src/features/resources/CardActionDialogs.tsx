@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CreditCard, ShieldAlert, ArrowRight, Check } from 'lucide-react';
 import { Dialog } from '../../components/ui/dialog';
@@ -20,19 +20,23 @@ export function IssueCardDialog({
     [studentId, setStudentId] = useState(initialStudentId || ''),
     [cardUid, setCardUid] = useState(''),
     [error, setError] = useState('');
+  const retry = useRef({ body: '', key: crypto.randomUUID() });
 
   const mutation = useMutation({
-    mutationFn: () =>
-      api('/cards/issue', {
+    mutationFn: () => {
+      const body = JSON.stringify({
+        student_id: studentId,
+        card_uid: cardUid.trim().toUpperCase(),
+      });
+      if (retry.current.body !== body) retry.current = { body, key: crypto.randomUUID() };
+      return api('/cards/issue', {
         method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({
-          student_id: studentId,
-          card_uid: cardUid.trim().toUpperCase(),
-        }),
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [a.school] });
+        headers: { 'Idempotency-Key': retry.current.key },
+        body,
+      });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: [a.school] });
       close();
     },
     onError: (err: Error) => {
@@ -59,7 +63,10 @@ export function IssueCardDialog({
         className="space-y-4"
       >
         {error && (
-          <div className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200" role="alert">
+          <div
+            className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200"
+            role="alert"
+          >
             {error}
           </div>
         )}
@@ -92,14 +99,17 @@ export function IssueCardDialog({
               title="8 to 32 hexadecimal characters (0-9, A-F)"
               className="input font-mono uppercase tracking-wider"
               value={cardUid}
-              onChange={(e) => setCardUid(e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase())}
+              onChange={(e) =>
+                setCardUid(e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase())
+              }
             />
             <span className="absolute right-3 top-2.5 text-stone-400">
               <CreditCard size={18} />
             </span>
           </div>
           <p className="mt-1 text-xs text-stone-500">
-            Tap card on USB reader or type the 8–32 character hex serial. Any previous active card for this student will be retired automatically.
+            Tap card on USB reader or type the 8–32 character hex serial. Any previous active card
+            for this student will be retired automatically.
           </p>
         </div>
 
@@ -144,8 +154,8 @@ export function BlockCardDialog({
           reason: reason.trim(),
         }),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [a.school] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: [a.school] });
       close();
     },
     onError: (err: Error) => {
@@ -172,16 +182,17 @@ export function BlockCardDialog({
         className="space-y-4"
       >
         {error && (
-          <div className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200" role="alert">
+          <div
+            className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200"
+            role="alert"
+          >
             {error}
           </div>
         )}
 
         <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-900 flex items-start gap-2">
           <ShieldAlert size={17} className="text-amber-700 shrink-0 mt-0.5" />
-          <div>
-            Deactivating this card revokes gate access and attendance logging immediately.
-          </div>
+          <div>Deactivating this card revokes gate access and attendance logging immediately.</div>
         </div>
 
         <div>

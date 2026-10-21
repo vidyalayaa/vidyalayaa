@@ -29,7 +29,7 @@ const relations: Partial<Record<Resource, Record<string, string>>> = {
     class_id: 'classes',
     subject_id: 'subjects',
   },
-  exams: { class_id: 'classes' },
+  exams: { class_id: 'classes', subject_id: 'subjects' },
   marks: { student_id: 'students', exam_id: 'exams', subject_id: 'subjects' },
   assignments: { class_id: 'classes', subject_id: 'subjects' },
   timetable_entries: { class_id: 'classes', subject_id: 'subjects', teacher_id: 'teachers' },
@@ -98,7 +98,7 @@ export const definitions: Record<Resource, ResourceDefinition> = {
     search: [],
     scope: 'teacher',
   },
-  exams: { read: 'marks.read', write: 'academics.write', search: ['name'], scope: 'class' },
+  exams: { read: 'marks.read', write: 'assessments.write', search: ['name'], scope: 'class' },
   marks: { read: 'marks.read', write: 'marks.write', search: ['remarks'], scope: 'student' },
   assignments: {
     read: 'assignments.read',
@@ -158,21 +158,29 @@ export const definitions: Record<Resource, ResourceDefinition> = {
     scope: 'parent',
   },
 };
-export function studentScope(a: Actor, column: string, param: string) {
+export function resourceReadable(name: Resource, a: Actor) {
+  if (a.active!.role === 'teacher') {
+    if (name === 'academic_sessions') return false;
+    if (['classes', 'subjects', 'enrollments', 'school_holidays'].includes(name))
+      return a.active!.permissions.includes('classrooms.read');
+  }
+  return a.active!.permissions.includes(definitions[name].read);
+}
+export function studentScope(a: Actor, column: string, param: string): string {
   const r = a.active!.role;
   if (r === 'parent')
     return `EXISTS(SELECT 1 FROM student_parents sp JOIN parents p ON p.school_id=sp.school_id AND p.id=sp.parent_id WHERE sp.school_id=t.school_id AND sp.student_id=${column} AND sp.status='ACTIVE' AND p.status='ACTIVE' AND p.user_id=${param})`;
   if (r === 'student')
     return `EXISTS(SELECT 1 FROM students own WHERE own.school_id=t.school_id AND own.id=${column} AND own.user_id=${param} AND own.status='ACTIVE')`;
   if (r === 'teacher')
-    return `EXISTS(SELECT 1 FROM enrollments en JOIN teacher_class_assignments ta ON ta.school_id=en.school_id AND ta.class_id=en.class_id JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id WHERE en.school_id=t.school_id AND en.student_id=${column} AND en.status='ACTIVE' AND te.user_id=${param} AND te.status='ACTIVE' AND EXISTS(SELECT 1 FROM classes cl JOIN academic_sessions ac ON ac.school_id=cl.school_id AND ac.id=cl.academic_session_id WHERE cl.school_id=ta.school_id AND cl.id=ta.class_id AND ac.is_current AND ac.retired_at IS NULL AND cl.retired_at IS NULL) AND ta.retired_at IS NULL AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date))`;
+    return `EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=${column} AND en.status='ACTIVE' AND en.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (en.ends_on IS NULL OR en.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date) AND ${classScope(a, 'en.class_id', param)})`;
   return ['school_admin', 'principal'].includes(a.active!.role)
     ? `${param}::uuid IS NOT NULL`
     : 'FALSE';
 }
-export function classScope(a: Actor, column: string, param: string, subject?: string) {
+export function classScope(a: Actor, column: string, param: string, subject?: string): string {
   if (a.active!.role === 'teacher')
-    return `EXISTS(SELECT 1 FROM teacher_class_assignments ta JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id WHERE ta.school_id=t.school_id AND ta.class_id=${column} AND te.user_id=${param} AND te.status='ACTIVE' AND EXISTS(SELECT 1 FROM classes cl JOIN academic_sessions ac ON ac.school_id=cl.school_id AND ac.id=cl.academic_session_id WHERE cl.school_id=ta.school_id AND cl.id=ta.class_id AND ac.is_current AND ac.retired_at IS NULL AND cl.retired_at IS NULL) AND ta.retired_at IS NULL AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date)${subject ? ` AND (ta.subject_id IS NULL OR ta.subject_id=${subject})` : ''})`;
+    return `EXISTS(SELECT 1 FROM classes cl JOIN academic_sessions ac ON ac.school_id=cl.school_id AND ac.id=cl.academic_session_id JOIN teachers te ON te.school_id=cl.school_id AND te.user_id=${param} WHERE cl.school_id=t.school_id AND cl.id=${column} AND te.status='ACTIVE' AND te.staff_role='teacher' AND ac.is_current AND ac.retired_at IS NULL AND cl.retired_at IS NULL AND (${subject ? 'FALSE' : 'cl.class_teacher_id=te.id'} OR EXISTS(SELECT 1 FROM teacher_class_assignments ta WHERE ta.school_id=cl.school_id AND ta.class_id=cl.id AND ta.teacher_id=te.id AND ta.retired_at IS NULL AND ta.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date AND (ta.ends_on IS NULL OR ta.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=t.school_id))::date)${subject ? ` AND ta.subject_id=${subject}` : ''})))`;
   if (['parent', 'student'].includes(a.active!.role))
     return `EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=t.school_id AND en.class_id=${column} AND en.status='ACTIVE' AND ${studentScope(a, 'en.student_id', param)})`;
   return ['school_admin', 'principal'].includes(a.active!.role)
@@ -183,6 +191,7 @@ export function resourceScope(name: Resource, a: Actor, param = '$2') {
   if (!['school_admin', 'principal', 'teacher', 'parent', 'student'].includes(a.active!.role))
     return 'FALSE';
   const d = definitions[name];
+  if (a.active!.role === 'teacher' && name === 'academic_sessions') return 'FALSE';
   let scope = ['school_admin', 'principal', 'teacher', 'parent', 'student'].includes(a.active!.role)
     ? `${param}::uuid IS NOT NULL`
     : 'FALSE';
@@ -214,8 +223,18 @@ export function resourceScope(name: Resource, a: Actor, param = '$2') {
     ].includes(name)
   )
     scope += ' AND t.retired_at IS NULL';
+  if (a.active!.role === 'teacher' && name === 'parents')
+    scope += ` AND t.status='ACTIVE' AND EXISTS(SELECT 1 FROM student_parents sp WHERE sp.school_id=t.school_id AND sp.parent_id=t.id AND sp.status='ACTIVE' AND ${studentScope(a, 'sp.student_id', param)})`;
+  if (a.active!.role === 'teacher' && name === 'student_parents')
+    scope += ` AND t.status='ACTIVE' AND ${studentScope(a, 't.student_id', param)} AND EXISTS(SELECT 1 FROM parents p WHERE p.school_id=t.school_id AND p.id=t.parent_id AND p.status='ACTIVE')`;
+  if (a.active!.role === 'teacher' && name === 'subjects')
+    scope += ` AND app.teacher_subject_access(t.school_id,t.id)`;
+  if (a.active!.role === 'teacher' && name === 'exams')
+    scope += ' AND app.teacher_exam_access(t.school_id,t.id)';
+  if (a.active!.role === 'teacher' && name === 'marks')
+    scope += ' AND app.teacher_mark_access(t.school_id,t.exam_id,t.subject_id)';
   if (name === 'marks')
-    scope += ` AND EXISTS(SELECT 1 FROM exams ex WHERE ex.school_id=t.school_id AND ex.id=t.exam_id AND ${classScope(a, 'ex.class_id', param, 't.subject_id')}${['parent', 'student'].includes(a.active!.role) ? " AND ex.status='PUBLISHED' AND ex.retired_at IS NULL" : ''})`;
+    scope += ` AND EXISTS(SELECT 1 FROM exams ex WHERE ex.school_id=t.school_id AND ex.id=t.exam_id AND ${a.active!.role === 'teacher' ? 'TRUE' : classScope(a, 'ex.class_id', param, 't.subject_id')}${['parent', 'student'].includes(a.active!.role) ? " AND ex.status='PUBLISHED' AND ex.retired_at IS NULL" : ''})`;
   if (name === 'exams' && ['parent', 'student'].includes(a.active!.role))
     scope += " AND t.status='PUBLISHED'";
   return scope;
@@ -249,6 +268,70 @@ export async function validateBusiness(
       String(values.class_id),
       values.subject_id ? String(values.subject_id) : undefined,
     );
+  if (
+    name === 'teacher_class_assignments' &&
+    !(
+      await tx.query(
+        "SELECT id FROM teachers WHERE school_id=$1 AND id=$2 AND staff_role='teacher' AND status='ACTIVE'",
+        [a.context.schoolId, values.teacher_id],
+      )
+    ).rowCount
+  )
+    throw new ApiError(422, 'ACTIVE_TEACHER_REQUIRED', 'Choose an active teacher staff record.');
+  if (name === 'classes') {
+    if (
+      !values.class_teacher_id ||
+      !(
+        await tx.query('SELECT app.valid_class_teacher($1,$2,$3) AS allowed', [
+          a.context.schoolId,
+          values.id || '00000000-0000-4000-8000-000000000000',
+          values.class_teacher_id,
+        ])
+      ).rows[0]?.allowed
+    )
+      throw new ApiError(
+        422,
+        'CLASS_TEACHER_REQUIRED',
+        'Choose one active teacher as Class Teacher for this class and section.',
+      );
+  }
+  if (a.active!.role === 'teacher' && name === 'assignments' && !values.subject_id)
+    throw new ApiError(422, 'SUBJECT_REQUIRED', 'Select one of your assigned subjects.');
+  if (name === 'exams') {
+    if (values.assessment_kind === 'SUBJECT_TEST' && !values.subject_id)
+      throw new ApiError(422, 'SUBJECT_REQUIRED', 'Subject tests require a subject.');
+    if (values.assessment_kind !== 'SUBJECT_TEST' && values.subject_id)
+      throw new ApiError(
+        422,
+        'OFFICIAL_EXAM_SUBJECT',
+        'Official examinations contain marks across subjects.',
+      );
+    if (a.active!.role === 'teacher' && values.assessment_kind !== 'SUBJECT_TEST')
+      throw new ApiError(
+        403,
+        'OFFICIAL_EXAM_ADMIN_ONLY',
+        'Only School Admin can manage official examinations.',
+      );
+    if (isUpdate) {
+      const previous = (
+        await tx.query(
+          'SELECT assessment_kind,subject_id,class_id FROM exams WHERE school_id=$1 AND id=$2',
+          [a.context.schoolId, values.id],
+        )
+      ).rows[0];
+      if (
+        previous &&
+        (previous.assessment_kind !== values.assessment_kind ||
+          previous.subject_id !== (values.subject_id || null) ||
+          previous.class_id !== values.class_id)
+      )
+        throw new ApiError(
+          409,
+          'ASSESSMENT_SCOPE_IMMUTABLE',
+          'Create another assessment to change its kind, class or subject.',
+        );
+    }
+  }
   if (
     a.active!.role === 'teacher' &&
     name === 'announcements' &&
@@ -289,7 +372,7 @@ export async function validateBusiness(
       ])
     ).rows[0];
     if (!ex) throw notFound();
-    await assertClass(tx, a, ex.class_id, String(values.subject_id));
+    await assertMarkAccess(tx, a, ex, String(values.subject_id));
     if (ex.status !== 'OPEN')
       throw new ApiError(409, 'EXAM_LOCKED', 'Only open exams accept marks.');
     if (Number(values.score) > Number(ex.max_score))
@@ -348,6 +431,31 @@ export async function validateBusiness(
         'The teacher or class is already scheduled during this slot.',
       );
   }
+}
+export async function assertMarkAccess(
+  tx: Tx,
+  a: Actor,
+  exam: Record<string, any>,
+  subject: string,
+) {
+  if (a.active!.role === 'teacher') {
+    if (
+      !(
+        await tx.query('SELECT app.teacher_mark_access($1,$2,$3) AS allowed', [
+          a.context.schoolId,
+          exam.id,
+          subject,
+        ])
+      ).rows[0]?.allowed
+    )
+      throw new ApiError(
+        403,
+        'ASSESSMENT_ACCESS_DENIED',
+        'Official results require the designated Class Teacher; subject tests require an exact class and subject assignment.',
+      );
+  } else await assertClass(tx, a, exam.class_id);
+  if (exam.assessment_kind === 'SUBJECT_TEST' && exam.subject_id !== subject)
+    throw new ApiError(422, 'ASSESSMENT_SUBJECT_MISMATCH', 'Use the subject of this test.');
 }
 export function parseResource(name: Resource, value: unknown) {
   return resourceSchemas[name].parse(value) as Record<string, unknown>;

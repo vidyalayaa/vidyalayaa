@@ -7,13 +7,104 @@ import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import { Panel, Loading, ErrorState, DataTable, Empty, Badge } from '../../components/common';
 
+export function SupportTicketResponse({
+  ticket,
+  close,
+}: {
+  ticket: Record<string, unknown>;
+  close: () => void;
+}) {
+  const client = useQueryClient();
+  const save = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api(`/platform/support-requests/${ticket.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ predicate: (query) => query.queryKey.includes('platform') });
+      close();
+    },
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !save.isPending) close();
+      }}
+      title={`Respond: ${ticket.subject}`}
+      description={String(ticket.school_name || 'School support request')}
+    >
+      <div className="mb-5 rounded-xl border p-4">
+        <p className="field-label">School request</p>
+        <p className="whitespace-pre-wrap break-words text-sm">
+          {String(ticket.description || '')}
+        </p>
+      </div>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const fields = new FormData(event.currentTarget);
+          save.mutate({ status: fields.get('status'), response: fields.get('response') });
+        }}
+      >
+        <div>
+          <label className="field-label" htmlFor="ticket-status">
+            Status
+          </label>
+          <select
+            id="ticket-status"
+            className="input"
+            name="status"
+            defaultValue={String(ticket.status)}
+          >
+            {['OPEN', 'IN_PROGRESS', 'RESOLVED'].map((status) => (
+              <option key={status} value={status}>
+                {label(status)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="field-label" htmlFor="ticket-response">
+            Response
+          </label>
+          <textarea
+            id="ticket-response"
+            className="input min-h-32"
+            name="response"
+            required
+            minLength={5}
+            maxLength={2000}
+            defaultValue={String(ticket.response || '')}
+          />
+        </div>
+        {save.error && (
+          <p role="alert" className="field-error">
+            {save.error.message}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={save.isPending} onClick={close}>
+            Cancel
+          </Button>
+          <Button variant="lime" disabled={save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save response'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 export function PlanEditor({ plan, close }: { plan: Record<string, unknown>; close: () => void }) {
   const qc = useQueryClient();
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api(`/platform/plans/${plan.id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ predicate: (q) => q.queryKey.includes('platform') });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ predicate: (q) => q.queryKey.includes('platform') });
       close();
     },
   });
@@ -134,8 +225,8 @@ export function SubscriptionEditor({
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ predicate: (q) => q.queryKey.includes('platform') });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ predicate: (q) => q.queryKey.includes('platform') });
       close();
     },
     onError: (e) => setError(e.message),

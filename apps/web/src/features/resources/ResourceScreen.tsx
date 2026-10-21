@@ -44,7 +44,11 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
     [editing, setEditing] = useState<Record<string, unknown> | null | undefined>(undefined),
     [payingFee, setPayingFee] = useState<Record<string, unknown> | null>(null),
     [issuingCard, setIssuingCard] = useState(false),
-    [blockingCard, setBlockingCard] = useState<{ id: string; card_uid: string; student_id: string } | null>(null),
+    [blockingCard, setBlockingCard] = useState<{
+      id: string;
+      card_uid: string;
+      student_id: string;
+    } | null>(null),
     [actionNotice, setActionNotice] = useState(''),
     info = resourceInfo[resource],
     canWrite = !!info.write && !!a.me?.school?.permissions.includes(info.write),
@@ -137,6 +141,49 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           </Link>
         </div>
       )}
+      {[
+        'classes',
+        'academic_sessions',
+        'subjects',
+        'enrollments',
+        'teacher_class_assignments',
+      ].includes(resource) && (
+        <div className="tabs">
+          <Link
+            className={resource === 'classes' ? 'tab-active' : ''}
+            to={schoolPath(
+              a.me?.school?.role === 'school_admin' ? '/academics' : '/r/classes',
+              a.me?.school?.role,
+            )}
+          >
+            Classes & Sections
+          </Link>
+          <Link
+            className={resource === 'academic_sessions' ? 'tab-active' : ''}
+            to={schoolPath('/r/academic_sessions', a.me?.school?.role)}
+          >
+            Academic Sessions
+          </Link>
+          <Link
+            className={resource === 'subjects' ? 'tab-active' : ''}
+            to={schoolPath('/r/subjects', a.me?.school?.role)}
+          >
+            Subjects
+          </Link>
+          <Link
+            className={resource === 'enrollments' ? 'tab-active' : ''}
+            to={schoolPath('/r/enrollments', a.me?.school?.role)}
+          >
+            Enrollments
+          </Link>
+          <Link
+            className={resource === 'teacher_class_assignments' ? 'tab-active' : ''}
+            to={schoolPath('/r/teacher_class_assignments', a.me?.school?.role)}
+          >
+            Teacher Assignments
+          </Link>
+        </div>
+      )}
       {locked && configured ? (
         <div className="notice">
           <LockKeyhole size={20} />
@@ -197,8 +244,15 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
                             variant="outline"
                             onClick={async () => {
                               try {
-                                const res = await api<{ queued: boolean }>(`/fees/${row.id}/remind`, { method: 'POST' });
-                                setActionNotice(res.queued ? 'Fee reminder queued.' : 'A reminder was already queued today.');
+                                const res = await api<{ queued: boolean }>(
+                                  `/fees/${row.id}/remind`,
+                                  { method: 'POST' },
+                                );
+                                setActionNotice(
+                                  res.queued
+                                    ? 'Fee reminder queued.'
+                                    : 'A reminder was already queued today.',
+                                );
                               } catch (e) {
                                 setActionNotice((e as Error).message);
                               }
@@ -210,31 +264,42 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
                       </div>
                     )
                   : resource === 'nfc_cards'
-                    ? (row) => (
+                    ? (row) =>
                         canWrite && row.status === 'ACTIVE' ? (
-                          <Button size="sm" variant="outline" onClick={() => setBlockingCard(row as { id: string; card_uid: string; student_id: string })}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setBlockingCard(
+                                row as { id: string; card_uid: string; student_id: string },
+                              )
+                            }
+                          >
                             Deactivate
                           </Button>
                         ) : undefined
-                      )
                     : resource === 'students'
                       ? (row) => (
-                          <Button size="sm" variant="outline" onClick={() => setView(String(row.id))}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setView(String(row.id))}
+                          >
                             Profile
                           </Button>
                         )
                       : canWrite &&
-                        [
-                          'academic_sessions',
-                          'classes',
-                          'subjects',
-                          'exams',
-                          'assignments',
-                          'timetable_entries',
-                          'school_holidays',
-                          'announcements',
-                          'teacher_class_assignments',
-                        ].includes(resource)
+                          [
+                            'academic_sessions',
+                            'classes',
+                            'subjects',
+                            'exams',
+                            'assignments',
+                            'timetable_entries',
+                            'school_holidays',
+                            'announcements',
+                            'teacher_class_assignments',
+                          ].includes(resource)
                         ? (row) => (
                             <Button size="sm" variant="outline" onClick={() => setRetiring(row)}>
                               Archive
@@ -242,7 +307,11 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
                           )
                         : undefined
               }
-              onEdit={canWrite && !['attendance_rule_versions', 'nfc_cards'].includes(resource) ? setEditing : undefined}
+              onEdit={
+                canWrite && !['attendance_rule_versions', 'nfc_cards'].includes(resource)
+                  ? setEditing
+                  : undefined
+              }
             />
           ) : (
             <Empty
@@ -332,10 +401,10 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           initial={editing || undefined}
           onDirtyChange={setDirty}
           cancel={closeForm}
-          done={() => {
+          done={async () => {
+            await qc.invalidateQueries({ queryKey: [a.school] });
             setDirty(false);
             setEditing(undefined);
-            qc.invalidateQueries({ queryKey: [a.school] });
           }}
         />
       </Dialog>
@@ -346,21 +415,23 @@ function RefField({
   field,
   value,
   onChange,
+  endpoint,
 }: {
   field: Field;
   value: string;
   onChange: (v: string) => void;
+  endpoint?: string;
 }) {
   const { school, me } = useAuth(),
     [search, setSearch] = useState('');
   const own = field.ref === 'parents' && me?.school?.role === 'parent';
   const q = useQuery({
-    queryKey: [school, 'ref', field.ref, search, own],
+    queryKey: [school, 'ref', field.ref, search, own, endpoint],
     queryFn: () =>
       api<Page>(
         own
           ? '/profile/parent'
-          : `/resources/${field.ref}?page_size=100&search=${encodeURIComponent(search)}`,
+          : `${endpoint || '/resources/' + field.ref}${endpoint?.includes('?') ? '&' : '?'}page_size=100&search=${encodeURIComponent(search)}`,
       ),
     enabled: configured,
   });
@@ -405,28 +476,37 @@ export function ResourceForm({
   done,
   cancel,
   onDirtyChange,
+  preset,
+  hiddenFields = [],
+  draftScope,
 }: {
   resource: Resource;
   initial?: Record<string, unknown>;
-  done: () => void;
+  done: () => void | Promise<void>;
   cancel?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  preset?: Record<string, unknown>;
+  hiddenFields?: string[];
+  draftScope?: string;
 }) {
   const a = useAuth(),
     [error, setError] = useState(''),
     [statusMessage, setStatusMessage] = useState(''),
     [uploading, setUploading] = useState(false),
-    draftKey = `vidyalayaa.draft.${a.me?.id}.${a.school}.${resource}.${initial?.id || 'new'}`;
+    draftKey = `vidyalayaa.draft.${a.me?.id}.${a.school}.${resource}.${initial?.id || 'new'}${preset ? '.' + [preset.exam_id || '', preset.class_id || '', preset.assessment_kind || ''].join('.') : ''}${draftScope ? '.' + encodeURIComponent(draftScope) : ''}`;
   const [restored, setRestored] = useState(() => Object.keys(readDraft(draftKey)).length > 0);
   const defaults = useMemo(() => {
     const saved = readDraft(draftKey);
     return Object.fromEntries(
       fields[resource].map((f) => {
         let value =
+          preset?.[f.key] ??
           saved[f.key] ??
           initial?.[f.key] ??
           (f.type === 'checkbox' ? false : (f.options?.[0] ?? (f.optional ? null : '')));
         if (f.key === 'rules' && typeof value === 'object') value = JSON.stringify(value, null, 2);
+        if (f.type === 'date' && value) value = String(value).slice(0, 10);
+        if (['starts_at', 'ends_at'].includes(f.key) && value) value = String(value).slice(0, 5);
         if (f.type === 'datetime-local' && value && !saved[f.key])
           value = toDateTimeLocal(value, a.me?.school?.timezone);
         return [f.key, value];
@@ -482,11 +562,11 @@ export function ResourceForm({
         headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify(values),
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setRestored(false);
       form.reset(form.getValues());
       deleteDraft(draftKey);
-      done();
+      await done();
     },
     onError: (e) => setError(e.message),
   });
@@ -499,127 +579,171 @@ export function ResourceForm({
       className="form-grid"
       noValidate
     >
-      {fields[resource].map((f) => (
-        <div className={f.type === 'textarea' ? 'col-span-full' : ''} key={f.key}>
-          <label className="field-label" htmlFor={f.key}>
-            {label(f.key.replace(/_id$/, ''))}
-            {f.optional && <span>optional</span>}
-          </label>
-          {f.accountRole ? (
-            <RecordSelect
-              name={f.key}
-              id={f.key}
-              endpoint={`/lookups/accounts?role=${f.accountRole}`}
-              value={String(form.watch(f.key) || '')}
-              onChange={(value) =>
-                form.setValue(f.key, value || null, { shouldValidate: true, shouldDirty: true })
-              }
-              optional={f.optional}
-              label={`${f.accountRole} account`}
-            />
-          ) : f.ref ? (
-            <RefField
-              field={f}
-              value={String(form.watch(f.key) || '')}
-              onChange={(v) =>
-                form.setValue(f.key, v || null, { shouldValidate: true, shouldDirty: true })
-              }
-            />
-          ) : f.type === 'checkbox' ? (
-            <input
-              id={f.key}
-              className="size-5 accent-lime-600"
-              type="checkbox"
-              {...form.register(f.key)}
-            />
-          ) : f.type === 'select' ? (
-            <select id={f.key} className="input" {...form.register(f.key)}>
-              {f.options?.map((o) => (
-                <option key={o} value={o}>
-                  {label(o)}
-                </option>
-              ))}
-            </select>
-          ) : f.type === 'textarea' ? (
-            f.key === 'rules' ? (
-              <div className="col-span-full">
-                <AttendanceRuleBuilder
-                  value={String(form.watch('rules') || '')}
-                  onChange={(v) =>
-                    form.setValue('rules', v, { shouldDirty: true, shouldValidate: true })
-                  }
-                />
-              </div>
-            ) : (
-              <textarea
+      {fields[resource]
+        .filter(
+          (f) =>
+            !hiddenFields.includes(f.key) &&
+            !(
+              resource === 'exams' &&
+              ((initial && ['class_id', 'subject_id', 'assessment_kind'].includes(f.key)) ||
+                (f.key === 'subject_id' && form.watch('assessment_kind') === 'OFFICIAL'))
+            ),
+        )
+        .map((f) => (
+          <div className={f.type === 'textarea' ? 'col-span-full' : ''} key={f.key}>
+            <label className="field-label" htmlFor={f.key}>
+              {label(f.key.replace(/_id$/, ''))}
+              {f.optional && <span>optional</span>}
+            </label>
+            {f.accountRole ? (
+              <RecordSelect
+                name={f.key}
                 id={f.key}
-                className="input min-h-28"
-                rows={4}
-                {...form.register(f.key, {
-                  setValueAs: (v) => (v === '' && f.optional ? null : v),
-                })}
+                endpoint={`/lookups/accounts?role=${f.accountRole}`}
+                value={String(form.watch(f.key) || '')}
+                onChange={(value) =>
+                  form.setValue(f.key, value || null, { shouldValidate: true, shouldDirty: true })
+                }
+                optional={f.optional}
+                label={`${f.accountRole} account`}
               />
-            )
-          ) : (
-            <input
-              id={f.key}
-              className="input"
-              type={f.type || 'text'}
-              step={f.type === 'number' ? '0.01' : undefined}
-              {...form.register(f.key, {
-                setValueAs: (v) =>
-                  v === '' && f.optional ? null : f.type === 'number' ? Number(v) : v,
-              })}
-            />
-          )}{' '}
-          {resource === 'assignments' && f.key === 'storage_path' && (
-            <div className="mt-3">
-              <input
-                aria-label="Upload private material"
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                disabled={uploading}
-                className="input"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setUploading(true);
-                  try {
-                    if (file.size > 10 * 1024 * 1024)
-                      throw new Error('Choose a file smaller than 10 MB.');
-                    const class_id = String(form.getValues('class_id') || '');
-                    if (!class_id) throw new Error('Select a class before uploading.');
-                    const ticket = await api<{ path: string; token: string }>('/materials/upload', {
-                      method: 'POST',
-                      body: JSON.stringify({
-                        class_id,
-                        filename: file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
-                      }),
-                    });
-                    const uploaded = await supabase!.storage
-                      .from('school-documents')
-                      .uploadToSignedUrl(ticket.path, ticket.token, file);
-                    if (uploaded.error) throw uploaded.error;
-                    form.setValue('storage_path', ticket.path, { shouldDirty: true });
-                  } catch (error) {
-                    setError((error as Error).message);
-                  } finally {
-                    setUploading(false);
-                  }
+            ) : f.ref ? (
+              <RefField
+                field={f}
+                value={String(form.watch(f.key) || '')}
+                endpoint={
+                  f.key === 'class_teacher_id'
+                    ? `/lookups/class-teachers?class_id=${initial?.id || '00000000-0000-4000-8000-000000000000'}`
+                    : resource === 'teacher_class_assignments' && f.key === 'teacher_id'
+                      ? '/resources/teachers?assignable=1'
+                      : f.ref === 'students' && preset?.class_id && resource !== 'enrollments'
+                        ? `/resources/students?class_id=${preset.class_id}`
+                        : a.me?.school?.role === 'teacher' && f.ref === 'subjects'
+                          ? `/resources/subjects?class_id=${form.watch('class_id') || preset?.class_id || '00000000-0000-4000-8000-000000000000'}${preset?.assessment_kind === 'OFFICIAL' ? '&assessment_kind=OFFICIAL' : ''}`
+                          : undefined
+                }
+                onChange={(v) => {
+                  form.setValue(f.key, v || null, { shouldValidate: true, shouldDirty: true });
+                  if (
+                    f.key === 'class_id' &&
+                    fields[resource].some((field) => field.key === 'subject_id')
+                  )
+                    form.setValue('subject_id', null, { shouldDirty: true });
                 }}
               />
+            ) : f.type === 'checkbox' ? (
+              <input
+                id={f.key}
+                className="size-5 accent-lime-600"
+                type="checkbox"
+                {...form.register(f.key)}
+              />
+            ) : f.type === 'select' ? (
+              <select
+                id={f.key}
+                className="input"
+                {...form.register(f.key, {
+                  onChange: (e) => {
+                    if (f.key === 'assessment_kind' && e.target.value === 'OFFICIAL')
+                      form.setValue('subject_id', null);
+                  },
+                })}
+              >
+                {f.options?.map((o) => (
+                  <option key={o} value={o}>
+                    {label(o)}
+                  </option>
+                ))}
+              </select>
+            ) : f.type === 'textarea' ? (
+              f.key === 'rules' ? (
+                <div className="col-span-full">
+                  <AttendanceRuleBuilder
+                    value={String(form.watch('rules') || '')}
+                    onChange={(v) =>
+                      form.setValue('rules', v, { shouldDirty: true, shouldValidate: true })
+                    }
+                  />
+                </div>
+              ) : (
+                <textarea
+                  id={f.key}
+                  className="input min-h-28"
+                  rows={4}
+                  {...form.register(f.key, {
+                    setValueAs: (v) => (v === '' && f.optional ? null : v),
+                  })}
+                />
+              )
+            ) : (
+              <input
+                id={f.key}
+                className="input"
+                type={f.type || 'text'}
+                step={f.type === 'number' ? '0.01' : undefined}
+                {...form.register(f.key, {
+                  setValueAs: (v) =>
+                    v === '' && f.optional ? null : f.type === 'number' ? Number(v) : v,
+                })}
+              />
+            )}{' '}
+            {f.key === 'class_teacher_id' && (
               <p className="mt-2 text-xs text-stone-500">
-                {uploading ? 'Uploading securely�' : 'Private PDF, PNG or JPEG. Up to 10 MB.'}
+                Choose one active Class Teacher for this class and section. Assign teaching subjects
+                separately in Teacher assignments.
               </p>
-            </div>
-          )}{' '}
-          {form.formState.errors[f.key] && (
-            <p className="field-error" role="alert">
-              {String(form.formState.errors[f.key]?.message || 'Check this value.')}
-            </p>
-          )}
-        </div>
-      ))}
+            )}
+            {resource === 'assignments' && f.key === 'storage_path' && (
+              <div className="mt-3">
+                <input
+                  aria-label="Upload private material"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  disabled={uploading}
+                  className="input"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploading(true);
+                    try {
+                      if (file.size > 10 * 1024 * 1024)
+                        throw new Error('Choose a file smaller than 10 MB.');
+                      const class_id = String(form.getValues('class_id') || '');
+                      if (!class_id) throw new Error('Select a class before uploading.');
+                      const ticket = await api<{ path: string; token: string }>(
+                        '/materials/upload',
+                        {
+                          method: 'POST',
+                          body: JSON.stringify({
+                            class_id,
+                            filename: file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
+                          }),
+                        },
+                      );
+                      const uploaded = await supabase!.storage
+                        .from('school-documents')
+                        .uploadToSignedUrl(ticket.path, ticket.token, file);
+                      if (uploaded.error) throw uploaded.error;
+                      form.setValue('storage_path', ticket.path, { shouldDirty: true });
+                    } catch (error) {
+                      setError((error as Error).message);
+                    } finally {
+                      setUploading(false);
+                    }
+                  }}
+                />
+                <p className="mt-2 text-xs text-stone-500">
+                  {uploading ? 'Uploading securely�' : 'Private PDF, PNG or JPEG. Up to 10 MB.'}
+                </p>
+              </div>
+            )}{' '}
+            {form.formState.errors[f.key] && (
+              <p className="field-error" role="alert">
+                {String(form.formState.errors[f.key]?.message || 'Check this value.')}
+              </p>
+            )}
+          </div>
+        ))}
       {resource === 'fee_records' && initial && (
         <div className="col-span-full">
           <Button

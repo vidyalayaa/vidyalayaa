@@ -1006,6 +1006,33 @@ td {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.table-action-cell {
+  min-width: 220px;
+  white-space: normal;
+}
+@media print {
+  body:has(.fee-receipt) #root,
+  body:has(.fee-receipt) .receipt-actions {
+    display: none !important;
+  }
+  body:has(.fee-receipt) > * {
+    visibility: hidden;
+  }
+  body:has(.fee-receipt) .dialog-content {
+    position: absolute;
+    inset: 0;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+  }
+  .fee-receipt,
+  .fee-receipt * {
+    visibility: visible;
+  }
+}
 tbody tr:last-child td {
   border-bottom: 0;
 }

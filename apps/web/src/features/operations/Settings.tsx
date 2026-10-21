@@ -52,6 +52,22 @@ export default function Settings() {
               <span>Authenticated account</span>
               <strong>{a.me?.email || 'Not connected'}</strong>
             </div>
+            {a.me?.school && (
+              <>
+                <div className="setting-line">
+                  <span>School name</span>
+                  <strong>{a.me.school.school_name}</strong>
+                </div>
+                <div className="setting-line">
+                  <span>School timezone</span>
+                  <strong>{a.me.school.timezone}</strong>
+                </div>
+                <div className="setting-line">
+                  <span>School language</span>
+                  <strong>{a.me.locale === 'hi-IN' ? 'Hindi' : 'English'}</strong>
+                </div>
+              </>
+            )}
             <div className="setting-line">
               <span>Current subscription</span>
               <strong>{a.me?.subscription_status || 'Awaiting setup'}</strong>
@@ -201,6 +217,7 @@ export default function Settings() {
         title="School profile"
         endpoint="/school"
         method="PATCH"
+        onResult={() => a.refetch()}
         fields={[
           { key: 'name', default: a.me?.school?.school_name },
           { key: 'timezone', default: a.me?.school?.timezone },

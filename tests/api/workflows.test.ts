@@ -208,7 +208,8 @@ describe('atomic writes and school workflows', () => {
         { student_id: f.student, subject_id: subject, score: 90 },
       ],
     };
-    expect((await call('post', '/marks/bulk', 'teacher').send(valid)).status).toBe(404);
+    // The fixture teacher is now this class's designated Class Teacher.
+    expect((await call('post', '/marks/bulk', 'teacher').send(valid)).status).toBe(200);
     const key = crypto.randomUUID();
     for (let attempt = 0; attempt < 2; attempt++) {
       const saved = await call('post', '/marks/bulk').set('Idempotency-Key', key).send(valid);
@@ -297,6 +298,8 @@ describe('atomic writes and school workflows', () => {
     const ex = await call('post', '/resources/exams').send({
       class_id: f.classId,
       name: 'Test exam',
+      assessment_kind: 'SUBJECT_TEST',
+      subject_id: f.subject,
       exam_type: 'UNIT',
       max_score: 100,
       status: 'OPEN',

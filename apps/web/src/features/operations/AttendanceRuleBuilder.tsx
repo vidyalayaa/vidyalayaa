@@ -23,8 +23,9 @@ export default function AttendanceRuleBuilder({
   });
 
   useEffect(() => {
-    onChange(JSON.stringify(rule));
-  }, [rule, onChange]);
+    const encoded = JSON.stringify(rule);
+    if (typeof value !== 'string' || value !== encoded) onChange(encoded);
+  }, [rule, value, onChange]);
 
   const update = (patch: Partial<RuleSet>) => {
     setRule((prev) => ({ ...prev, ...patch }));
@@ -37,11 +38,7 @@ export default function AttendanceRuleBuilder({
     }));
   };
 
-  const updateDeparture = (
-    kind: 'half_day' | 'normal',
-    field: 'start' | 'end',
-    val: string,
-  ) => {
+  const updateDeparture = (kind: 'half_day' | 'normal', field: 'start' | 'end', val: string) => {
     setRule((prev) => ({
       ...prev,
       departure: {
@@ -56,9 +53,7 @@ export default function AttendanceRuleBuilder({
       const exists = prev.weekly_off.includes(day);
       return {
         ...prev,
-        weekly_off: exists
-          ? prev.weekly_off.filter((d) => d !== day)
-          : [...prev.weekly_off, day],
+        weekly_off: exists ? prev.weekly_off.filter((d) => d !== day) : [...prev.weekly_off, day],
       };
     });
   };
@@ -79,9 +74,7 @@ export default function AttendanceRuleBuilder({
             <Clock size={14} className="text-stone-400" />
             Daily Gate & Attendance Windows
           </span>
-          <span className="text-[11px] text-stone-400 font-mono">
-            Cutoff: {rule.absent_cutoff}
-          </span>
+          <span className="text-[11px] text-stone-400 font-mono">Cutoff: {rule.absent_cutoff}</span>
         </div>
         <div className="flex h-7 w-full overflow-hidden rounded-lg font-mono text-[10px] font-semibold text-white shadow-inner">
           <div
@@ -263,9 +256,7 @@ export default function AttendanceRuleBuilder({
               max={360}
               className="input mt-1 w-full text-xs"
               value={rule.absent_finalize_grace_minutes}
-              onChange={(e) =>
-                update({ absent_finalize_grace_minutes: Number(e.target.value) })
-              }
+              onChange={(e) => update({ absent_finalize_grace_minutes: Number(e.target.value) })}
               required
             />
           </label>
@@ -277,9 +268,7 @@ export default function AttendanceRuleBuilder({
               max={600}
               className="input mt-1 w-full text-xs"
               value={rule.repeat_tap_debounce_seconds}
-              onChange={(e) =>
-                update({ repeat_tap_debounce_seconds: Number(e.target.value) })
-              }
+              onChange={(e) => update({ repeat_tap_debounce_seconds: Number(e.target.value) })}
               required
             />
           </label>
@@ -288,9 +277,7 @@ export default function AttendanceRuleBuilder({
             <select
               className="input mt-1 w-full text-xs"
               value={rule.late_counts_as}
-              onChange={(e) =>
-                update({ late_counts_as: e.target.value as 'LATE' | 'PRESENT' })
-              }
+              onChange={(e) => update({ late_counts_as: e.target.value as 'LATE' | 'PRESENT' })}
             >
               <option value="LATE">LATE</option>
               <option value="PRESENT">PRESENT</option>

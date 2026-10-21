@@ -1,21 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCheck, UserX, Clock3, Users, Save, Check } from 'lucide-react';
 import type { Page, AttendanceStatus } from '@vidyalayaa/contracts';
+import { classAttendanceSchema } from '@vidyalayaa/contracts';
 import { api, useAuth } from '../../lib/auth';
 import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import RecordSelect from '../../components/RecordSelect';
 import { Loading, ErrorState } from '../../components/common';
+import { useTeachingClasses } from '../../lib/use-teaching-classes';
 
-interface EnrolledStudent {
+type Enrollment = {
   id: string;
   student_id: string;
-  student_id_label?: string;
+  student_label?: string;
   roll_number?: string;
   status: string;
+  starts_on: string;
+  ends_on?: string | null;
+};
+type Day = {
+  student_id: string;
+  attendance_status: AttendanceStatus;
+  source: string;
+  version: number;
+};
+async function all<T>(endpoint: string): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 1; ; page++) {
+    const result = await api<Page<T>>(`${endpoint}&page_size=100&page=${page}`);
+    if (result.total > 500)
+      throw new Error(
+        'This register supports up to 500 records. Use individual attendance for larger classes.',
+      );
+    rows.push(...result.data);
+    if (rows.length >= result.total || !result.data.length) return rows;
+  }
 }
-
+const choices = ['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED'] as const;
 export default function ClassAttendanceSheet({
   open,
   close,
@@ -27,6 +48,7 @@ export default function ClassAttendanceSheet({
   initialClassId?: string;
   initialDate?: string;
 }) {
+  const teaching = useTeachingClasses();
   const a = useAuth(),
     qc = useQueryClient(),
     [classId, setClassId] = useState(initialClassId || ''),
@@ -39,108 +61,104 @@ export default function ClassAttendanceSheet({
     [reason, setReason] = useState('Classroom register roll call'),
     [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({}),
     [error, setError] = useState('');
-
-  // Fetch students enrolled in this class
-  const enrollmentsQuery = useQuery({
+  const retry = useRef({ body: '', key: crypto.randomUUID() });
+  const enrollments = useQuery({
     queryKey: [a.school, 'class-enrollments', classId],
-    queryFn: () =>
-      api<Page<EnrolledStudent>>(`/resources/enrollments?class_id=${classId}&page_size=100`),
+    queryFn: () => all<Enrollment>(`/resources/enrollments?class_id=${classId}`),
     enabled: open && !!classId,
+    refetchOnWindowFocus: false,
   });
-
-  // Fetch current attendance for this class and date to prefill
-  const existingAttendanceQuery = useQuery({
+  const attendance = useQuery({
     queryKey: [a.school, 'existing-attendance', classId, date],
-    queryFn: () =>
-      api<Page<{ student_id: string; attendance_status: AttendanceStatus }>>(
-        `/attendance?class_id=${classId}&date=${date}&page_size=100`,
-      ),
+    queryFn: () => all<Day>(`/attendance?class_id=${classId}&date=${date}`),
     enabled: open && !!classId && !!date,
+    refetchOnWindowFocus: false,
   });
-
-  // Update initial statuses once data is loaded
+  const students =
+    enrollments.data?.filter(
+      (e) => e.starts_on.slice(0, 10) <= date && (!e.ends_on || e.ends_on.slice(0, 10) >= date),
+    ) || [];
+  const days = new Map(attendance.data?.map((d) => [d.student_id, d]) || []);
+  const protectedRecord = (id: string) => {
+    const d = days.get(id);
+    return d?.source === 'NFC' && d.version > 0;
+  };
   useEffect(() => {
-    if (enrollmentsQuery.data?.data) {
-      const initial: Record<string, AttendanceStatus> = {};
-      const existingMap = new Map(
-        existingAttendanceQuery.data?.data?.map((e) => [e.student_id, e.attendance_status]) || [],
-      );
-
-      enrollmentsQuery.data.data
-        .filter((e) => e.status === 'ACTIVE')
-        .forEach((e) => {
-          initial[e.student_id] = existingMap.get(e.student_id) || 'PRESENT';
-        });
-
-      setStatuses(initial);
-    }
-  }, [enrollmentsQuery.data, existingAttendanceQuery.data]);
-
-  const setAll = (status: AttendanceStatus) => {
-    setStatuses((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((id) => {
-        next[id] = status;
-      });
-      return next;
-    });
-  };
-
-  const markStudent = (studentId: string, status: AttendanceStatus) => {
-    setStatuses((prev) => ({ ...prev, [studentId]: status }));
-  };
-
-  const saveMutation = useMutation({
+    if (!enrollments.data || !attendance.data) return;
+    const prior = new Map(attendance.data.map((d) => [d.student_id, d.attendance_status]));
+    setStatuses(
+      Object.fromEntries(
+        enrollments.data.map((e) => [
+          e.student_id,
+          prior.get(e.student_id) === 'PENDING' ? 'PRESENT' : prior.get(e.student_id) || 'PRESENT',
+        ]),
+      ),
+    );
+  }, [enrollments.data, attendance.data, classId, date]);
+  const save = useMutation({
     mutationFn: async () => {
-      setError('');
-      const records = Object.entries(statuses).map(([student_id, status]) => ({
-        student_id,
-        status,
-      }));
-      if (!records.length) throw new Error('No active students in this class.');
-      return api('/attendance/bulk', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({
+      const body = JSON.stringify(
+        classAttendanceSchema.parse({
           class_id: classId,
           date,
-          records,
           reason,
+          records: students
+            .filter((s) => !protectedRecord(s.student_id))
+            .map((s) => ({
+              student_id: s.student_id,
+              status: statuses[s.student_id] || 'PRESENT',
+              expected_version: days.get(s.student_id)?.version || 0,
+            })),
         }),
+      );
+      if (retry.current.body !== body) retry.current = { body, key: crypto.randomUUID() };
+      return api('/attendance/bulk', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': retry.current.key },
+        body,
       });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [a.school] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: [a.school] });
       close();
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => setError(e.message),
   });
-
-  const students = enrollmentsQuery.data?.data.filter((e) => e.status === 'ACTIVE') || [];
-
+  const loading = enrollments.isFetching || attendance.isFetching;
+  const problem = enrollments.error || attendance.error;
+  const canManage =
+    a.me?.school?.role !== 'teacher' ||
+    !!teaching.data?.data.some((c) => c.id === classId && c.is_class_teacher);
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
-        if (!v) close();
+        if (!v && !save.isPending) close();
       }}
       title="Classroom Attendance Register"
-      description="Record or update full-class attendance in one batch."
+      description="Record classroom attendance. NFC records require an approved correction."
     >
       <div className="space-y-5">
-        {/* Class and Date Header Filters */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="field-label" htmlFor="bulk-class-select">
-              Select Class & Section
+              Select Class &amp; Section
             </label>
             <RecordSelect
               id="bulk-class-select"
               name="class_id"
-              endpoint="/resources/classes"
+              endpoint={
+                a.me?.school?.role === 'teacher'
+                  ? '/resources/classes?class_teacher=1'
+                  : '/resources/classes'
+              }
               value={classId}
-              onChange={(v) => setClassId(v)}
+              onChange={(v) => {
+                setClassId(v);
+                setError('');
+              }}
               label="class"
+              disabled={save.isPending}
             />
           </div>
           <div>
@@ -150,153 +168,147 @@ export default function ClassAttendanceSheet({
             <input
               id="bulk-date-select"
               type="date"
-              className="input w-full"
+              className="input"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              disabled={save.isPending}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setError('');
+              }}
               required
             />
           </div>
         </div>
-
-        {classId ? (
-          enrollmentsQuery.isLoading ? (
-            <Loading />
-          ) : enrollmentsQuery.error ? (
-            <ErrorState error={enrollmentsQuery.error} retry={() => enrollmentsQuery.refetch()} />
-          ) : students.length ? (
-            <div className="space-y-4">
-              {/* Quick Actions Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-50 p-3 border border-stone-100">
-                <span className="text-xs font-semibold text-stone-600">
-                  {students.length} Learners Enrolled
-                </span>
-                <div className="flex items-center gap-2">
+        {!classId ? (
+          <p>Select a class above to open its attendance register.</p>
+        ) : !canManage ? (
+          <p>Only the designated Class Teacher can manage this class register.</p>
+        ) : loading ? (
+          <Loading />
+        ) : problem ? (
+          <ErrorState
+            error={problem}
+            retry={() => {
+              enrollments.refetch();
+              attendance.refetch();
+            }}
+          />
+        ) : students.length ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-50 p-3">
+              <span className="text-xs font-semibold">{students.length} Learners Enrolled</span>
+              <div className="flex gap-2">
+                {(['PRESENT', 'ABSENT'] as const).map((status) => (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="text-xs text-green-800 hover:bg-green-50 border-green-200"
-                    onClick={() => setAll('PRESENT')}
+                    key={status}
+                    disabled={save.isPending}
+                    onClick={() =>
+                      setStatuses((prior) => ({
+                        ...prior,
+                        ...Object.fromEntries(
+                          students
+                            .filter((s) => !protectedRecord(s.student_id))
+                            .map((s) => [s.student_id, status]),
+                        ),
+                      }))
+                    }
                   >
-                    <CheckCheck size={14} className="text-green-600" />
-                    All Present
+                    {status === 'PRESENT' ? 'All Present' : 'All Absent'}
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="text-xs text-rose-800 hover:bg-rose-50 border-rose-200"
-                    onClick={() => setAll('ABSENT')}
-                  >
-                    <UserX size={14} className="text-rose-600" />
-                    All Absent
-                  </Button>
-                </div>
+                ))}
               </div>
-
-              {/* Student Attendance List */}
-              <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 divide-y divide-stone-100">
-                {students.map((s, index) => {
-                  const currentStatus = statuses[s.student_id] || 'PRESENT';
-                  return (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between p-3 text-xs hover:bg-stone-50/70"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 text-center font-mono text-stone-400">
-                          {s.roll_number || `#${index + 1}`}
-                        </span>
-                        <div>
-                          <p className="font-semibold text-stone-900">
-                            {s.student_id_label || 'Student'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Status Toggle Pills */}
-                      <div className="flex items-center gap-1">
-                        {(['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'EXCUSED'] as const).map(
-                          (status) => {
-                            const isSelected = currentStatus === status;
-                            return (
-                              <button
-                                key={status}
-                                type="button"
-                                className={`rounded px-2 py-1 font-semibold transition-all text-[11px] ${
-                                  isSelected
-                                    ? status === 'PRESENT'
-                                      ? 'bg-green-600 text-white shadow-xs'
-                                      : status === 'LATE'
-                                        ? 'bg-amber-500 text-white shadow-xs'
-                                        : status === 'ABSENT'
-                                          ? 'bg-rose-600 text-white shadow-xs'
-                                          : 'bg-stone-800 text-white shadow-xs'
-                                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                                }`}
-                                onClick={() => markStudent(s.student_id, status)}
-                              >
-                                {status === 'PRESENT'
-                                  ? 'P'
-                                  : status === 'LATE'
-                                    ? 'L'
-                                    : status === 'HALF_DAY'
-                                      ? 'HD'
-                                      : status === 'ABSENT'
-                                        ? 'A'
-                                        : 'E'}
-                              </button>
-                            );
-                          },
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Reason for batch entry */}
-              <div>
-                <label className="field-label text-xs" htmlFor="bulk-reason">
-                  Register Note / Reason
-                </label>
-                <input
-                  id="bulk-reason"
-                  className="input mt-1 w-full text-xs"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Daily morning roll call"
-                  required
-                />
-              </div>
-
-              {error && <p className="field-error">{error}</p>}
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={close}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="lime"
-                  disabled={saveMutation.isPending}
-                  onClick={() => saveMutation.mutate()}
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y rounded-xl border">
+              {students.map((s, index) => (
+                <div
+                  key={s.id}
+                  className="flex flex-wrap items-center justify-between gap-2 p-3 text-xs"
                 >
-                  <Save size={14} />
-                  {saveMutation.isPending ? 'Saving Register…' : 'Save Class Attendance'}
-                </Button>
-              </div>
+                  <span>
+                    {s.roll_number || `#${index + 1}`} ·{' '}
+                    <strong>{s.student_label || 'Student'}</strong>
+                  </span>
+                  {protectedRecord(s.student_id) ? (
+                    <span>
+                      NFC · {days.get(s.student_id)?.attendance_status} · correction required
+                    </span>
+                  ) : (
+                    <div
+                      className="flex flex-wrap gap-1"
+                      role="group"
+                      aria-label={`Attendance for ${s.student_label || s.roll_number || index + 1}`}
+                    >
+                      {choices.map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          disabled={save.isPending}
+                          aria-pressed={statuses[s.student_id] === status}
+                          aria-label={status.replaceAll('_', ' ')}
+                          className={`rounded px-2 py-1 font-semibold ${statuses[s.student_id] === status ? 'bg-lime-300 text-black' : 'bg-stone-100 text-stone-700'}`}
+                          onClick={() =>
+                            setStatuses((prior) => ({ ...prior, [s.student_id]: status }))
+                          }
+                        >
+                          {status === 'PRESENT'
+                            ? 'P'
+                            : status === 'LATE'
+                              ? 'L'
+                              : status === 'HALF_DAY'
+                                ? 'HD'
+                                : status === 'ABSENT'
+                                  ? 'A'
+                                  : 'E'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-stone-200 p-8 text-center text-sm text-stone-500">
-              No active students enrolled in this class.
+            <label className="field-label block">
+              Register Note / Reason
+              <input
+                className="input mt-1"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                required
+                minLength={5}
+                maxLength={2000}
+                disabled={save.isPending}
+              />
+            </label>
+            {error && (
+              <p className="field-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={save.isPending} onClick={close}>
+                Cancel
+              </Button>
+              <Button
+                variant="lime"
+                disabled={
+                  !canManage ||
+                  save.isPending ||
+                  reason.trim().length < 5 ||
+                  !students.some((s) => !protectedRecord(s.student_id))
+                }
+                onClick={() => {
+                  setError('');
+                  save.mutate();
+                }}
+              >
+                {save.isPending ? 'Saving Register…' : 'Save Class Attendance'}
+              </Button>
             </div>
-          )
+          </>
         ) : (
-          <div className="rounded-xl border border-dashed border-stone-200 p-8 text-center text-sm text-stone-500">
-            Select a class above to open its attendance register.
-          </div>
+          <p>No students enrolled in this class on the selected date.</p>
         )}
       </div>
     </Dialog>

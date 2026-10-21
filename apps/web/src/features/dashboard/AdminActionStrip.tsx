@@ -26,7 +26,7 @@ export default function AdminActionStrip() {
   // Corrections query to check for pending approvals
   const correctionsQuery = useQuery({
     queryKey: [a.school, 'pending-corrections'],
-    queryFn: () => api<{ total: number; data: Array<{ status: string }> }>('/corrections?page_size=10'),
+    queryFn: () => api<{ total: number }>('/corrections?status=REQUESTED&reviewable=1&page_size=1'),
     enabled: configured && !!a.me?.school?.permissions.includes('attendance.correct_approve'),
     refetchInterval: 60000,
   });
@@ -34,13 +34,18 @@ export default function AdminActionStrip() {
   // Support grants query
   const supportGrantsQuery = useQuery({
     queryKey: [a.school, 'pending-support-grants'],
-    queryFn: () => api<{ total: number; data: Array<{ approved_by: string | null; revoked_at: string | null }> }>('/support-grants?page_size=10'),
+    queryFn: () =>
+      api<{
+        total: number;
+        data: Array<{ approved_by: string | null; revoked_at: string | null }>;
+      }>('/support-grants?page_size=10'),
     enabled: configured && !!a.me?.school?.permissions.includes('users.manage'),
     refetchInterval: 60000,
   });
 
-  const pendingCorrections = correctionsQuery.data?.data?.filter((c) => c.status === 'REQUESTED').length || 0;
-  const pendingGrants = supportGrantsQuery.data?.data?.filter((g) => !g.approved_by && !g.revoked_at).length || 0;
+  const pendingCorrections = correctionsQuery.data?.total || 0;
+  const pendingGrants =
+    supportGrantsQuery.data?.data?.filter((g) => !g.approved_by && !g.revoked_at).length || 0;
 
   const hasPendingItems = pendingCorrections > 0 || pendingGrants > 0;
 
@@ -58,13 +63,15 @@ export default function AdminActionStrip() {
               <div className="flex flex-wrap gap-2 mt-0.5 text-amber-800">
                 {pendingCorrections > 0 && (
                   <span>
-                    <strong>{pendingCorrections}</strong> attendance correction{pendingCorrections > 1 ? 's' : ''} awaiting review
+                    <strong>{pendingCorrections}</strong> attendance correction
+                    {pendingCorrections > 1 ? 's' : ''} awaiting review
                   </span>
                 )}
                 {pendingCorrections > 0 && pendingGrants > 0 && <span>·</span>}
                 {pendingGrants > 0 && (
                   <span>
-                    <strong>{pendingGrants}</strong> support access grant request{pendingGrants > 1 ? 's' : ''}
+                    <strong>{pendingGrants}</strong> support access grant request
+                    {pendingGrants > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
@@ -74,14 +81,14 @@ export default function AdminActionStrip() {
           <div className="flex gap-2">
             {pendingCorrections > 0 && (
               <Button size="sm" variant="outline" asChild className="bg-white text-xs">
-                <Link to="/corrections">
+                <Link to="/corrections?status=REQUESTED&reviewable=1">
                   Review Corrections <ArrowRight size={13} />
                 </Link>
               </Button>
             )}
             {pendingGrants > 0 && (
               <Button size="sm" variant="outline" asChild className="bg-white text-xs">
-                <Link to="/support-grants">
+                <Link to="/support">
                   Review Grants <ArrowRight size={13} />
                 </Link>
               </Button>
@@ -142,18 +149,10 @@ export default function AdminActionStrip() {
         </div>
       </div>
 
-      {batchOpen && (
-        <ClassAttendanceSheet
-          open={batchOpen}
-          close={() => setBatchOpen(false)}
-        />
-      )}
+      {batchOpen && <ClassAttendanceSheet open={batchOpen} close={() => setBatchOpen(false)} />}
 
       {issueCardOpen && (
-        <IssueCardDialog
-          open={issueCardOpen}
-          close={() => setIssueCardOpen(false)}
-        />
+        <IssueCardDialog open={issueCardOpen} close={() => setIssueCardOpen(false)} />
       )}
     </div>
   );

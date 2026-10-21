@@ -7,7 +7,14 @@ export const portals: Record<Role, string> = {
   student: 'student',
 };
 export function schoolPath(path: string, role?: Role) {
-  if (!role || path === '/platform' || path === '/login' || path.startsWith('/auth/')) return path;
+  if (
+    !role ||
+    path === '/platform' ||
+    path.startsWith('/platform/') ||
+    path === '/login' ||
+    path.startsWith('/auth/')
+  )
+    return path;
   return `/${portals[role]}${path === '/' ? '' : path}`;
 }
 

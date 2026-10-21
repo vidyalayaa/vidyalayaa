@@ -5,7 +5,7 @@ import { permission } from '../../middleware/auth.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import { transaction, audit } from '../../lib/db.js';
 import { requireWrite, withIdempotency } from './router.js';
-import { assertClass } from './resources.js';
+import { assertMarkAccess } from './resources.js';
 export function bulkRouter(pool: pg.Pool) {
   const r = Router();
   r.post(
@@ -27,9 +27,8 @@ export function bulkRouter(pool: pg.Pool) {
             if (!ex) throw notFound();
             if (ex.status !== 'OPEN')
               throw new ApiError(409, 'EXAM_LOCKED', 'Only open exams accept marks.');
-            await assertClass(tx, a, ex.class_id);
             for (const subject of new Set(b.entries.map((x) => x.subject_id)))
-              await assertClass(tx, a, ex.class_id, subject);
+              await assertMarkAccess(tx, a, ex, subject);
             const students = [...new Set(b.entries.map((x) => x.student_id))];
             const en = await tx.query(
               "SELECT DISTINCT student_id FROM enrollments WHERE school_id=$1 AND class_id=$2 AND student_id=ANY($3::uuid[]) AND status='ACTIVE'",

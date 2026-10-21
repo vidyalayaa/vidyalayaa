@@ -180,8 +180,8 @@ export function DataTable({
                 </td>
               ))}
               {(onEdit || onView || actions) && (
-                <td>
-                  <div className="flex items-center justify-end gap-2">
+                <td className="table-action-cell">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {actions?.(row)}
                     {onView && (
                       <Button variant="outline" size="sm" onClick={() => onView(row)}>

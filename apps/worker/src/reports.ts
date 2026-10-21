@@ -100,9 +100,11 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
             ? ' JOIN subjects sub ON sub.school_id=t.school_id AND sub.id=t.subject_id JOIN exams ex ON ex.school_id=t.school_id AND ex.id=t.exam_id'
             : '';
         const examRestriction =
-          report.kind === 'ACADEMIC'
-            ? ` AND ${classScope(a, 'ex.class_id', '$2', 't.subject_id')}${['parent', 'student'].includes(member.code) ? " AND ex.status='PUBLISHED'" : ''}`
-            : '';
+          report.kind !== 'ACADEMIC'
+            ? ''
+            : member.code === 'teacher'
+              ? ` AND ((ex.assessment_kind='SUBJECT_TEST' AND ex.subject_id=t.subject_id AND ${classScope(a, 'ex.class_id', '$2', 't.subject_id')}) OR (ex.assessment_kind='OFFICIAL' AND ${classScope(a, 'ex.class_id', '$2')} AND EXISTS(SELECT 1 FROM classes ct JOIN teachers te ON te.school_id=ct.school_id AND te.id=ct.class_teacher_id WHERE ct.school_id=t.school_id AND ct.id=ex.class_id AND te.user_id=$2 AND te.status='ACTIVE')))`
+              : ` AND ${classScope(a, 'ex.class_id', '$2', 't.subject_id')}${['parent', 'student'].includes(member.code) ? " AND ex.status='PUBLISHED'" : ''}`;
         const base = `SELECT t.id AS record_id,s.student_code,s.first_name,s.last_name,${columns} FROM ${table} t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id JOIN schools sch ON sch.id=t.school_id ${joins} WHERE t.school_id=$1 AND $2::uuid IS NOT NULL AND ${studentScope(a, 't.student_id', '$2')} AND ($3::uuid IS NULL OR t.student_id=$3) AND ($4::uuid IS NULL OR ${report.kind === 'ACADEMIC' ? 'ex.class_id=$4' : report.kind === 'ATTENDANCE' ? 't.class_id=$4' : 'EXISTS(SELECT FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=t.student_id AND en.class_id=$4 AND en.starts_on<=t.due_on AND (en.ends_on IS NULL OR en.ends_on>=t.due_on))'}) AND ${dateColumn}>=$5::date AND ${dateColumn}<$6::date+1 ${examRestriction}`;
         const values = [
           schoolId,

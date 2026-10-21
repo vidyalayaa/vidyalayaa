@@ -141,9 +141,14 @@ export function platformRouter(
       z.object({ confirm: z.literal('CLOSE_SCHOOL') })
         .strict()
         .parse(req.body);
-      await platformTx(platform, res.locals.actor.id, (tx) =>
-        tx.query('SELECT app.close_approved_school($1)', [id]),
-      );
+      await platformTx(platform, res.locals.actor.id, async (tx) => {
+        if (
+          !(await tx.query('SELECT id FROM school_offboarding WHERE id=$1 FOR UPDATE', [id]))
+            .rowCount
+        )
+          throw notFound();
+        await tx.query('SELECT app.close_approved_school($1)', [id]);
+      });
       res.status(204).end();
     }),
   );
@@ -201,7 +206,12 @@ export function platformRouter(
     asyncRoute(async (req, res) =>
       res.json(
         await platformTx(platform, res.locals.actor.id, (tx) =>
-          paged(tx, 'SELECT id,name,created_at FROM organizations ORDER BY name,id', [], req.query),
+          paged(
+            tx,
+            'SELECT id,name,created_at FROM organizations WHERE name ILIKE $1 ORDER BY name,id',
+            [`%${typeof req.query.search === 'string' ? req.query.search : ''}%`],
+            req.query,
+          ),
         ),
       ),
     ),
@@ -629,6 +639,12 @@ export function platformRouter(
         await tx.query("SELECT set_config('app.change_reason',$1,true)", [b.reason]);
         const d = (await tx.query('SELECT * FROM devices WHERE id=$1 FOR UPDATE', [id])).rows[0];
         if (!d) throw notFound();
+        if (d.status === 'REVOKED')
+          throw new ApiError(
+            409,
+            'DEVICE_REVOKED',
+            'A revoked reader cannot receive a new credential.',
+          );
         await tx.query(
           "UPDATE device_credentials SET status='REVOKED' WHERE device_id=$1 AND status='ROTATING_OUT'",
           [id],

@@ -50,7 +50,8 @@ export default function RecordSelect({
     enabled:
       configured &&
       (!!a.me?.school ||
-        (endpoint === '/platform/schools' && a.me?.platform_role === 'SUPER_ADMIN')),
+        (['/platform/schools', '/platform/organizations'].includes(endpoint) &&
+          a.me?.platform_role === 'SUPER_ADMIN')),
   });
   const current = value ?? selected;
   return (

@@ -436,7 +436,7 @@ export function managementRouter(pool: pg.Pool) {
               throw notFound();
             return paged(
               tx,
-              'SELECT h.id,h.version,h.config,h.created_at,u.full_name AS editor FROM device_configurations h LEFT JOIN users u ON u.id=h.created_by WHERE h.school_id=$1 AND h.device_id=$2 ORDER BY h.version DESC',
+              "SELECT h.id,h.version,h.config,h.created_at,u.full_name AS editor,(SELECT a.after->>'reason' FROM audit_logs a WHERE a.school_id=h.school_id AND a.entity_type='devices' AND a.entity_id=h.device_id AND a.action='device.configuration.updated' AND a.after->>'config_version'=h.version::text ORDER BY a.occurred_at DESC LIMIT 1) AS reason FROM device_configurations h LEFT JOIN users u ON u.id=h.created_by WHERE h.school_id=$1 AND h.device_id=$2 ORDER BY h.version DESC",
               [a.context.schoolId, id],
               req.query,
             );
@@ -519,12 +519,22 @@ export function managementRouter(pool: pg.Pool) {
               'DEVICE_REVOKED',
               'A revoked device requires platform reprovisioning.',
             );
-          return (
+          const updated = (
             await tx.query(
-              "UPDATE devices SET name=$2,location_id=$3,status=$4,revoked_reason=$5,revoked_at=CASE WHEN $4='REVOKED' THEN now() ELSE NULL END,config=config||coalesce($6::jsonb,'{}'),config_version=config_version+1 WHERE id=$1 RETURNING id,name,status",
+              "UPDATE devices SET name=$2,location_id=$3,status=$4,revoked_reason=$5,revoked_at=CASE WHEN $4='REVOKED' THEN now() ELSE NULL END,config=config||coalesce($6::jsonb,'{}'),config_version=config_version+1 WHERE id=$1 RETURNING id,name,status,config_version",
               [id, b.name, b.location_id, b.status, b.reason, b.config || null],
             )
           ).rows[0];
+          await tx.query(
+            "INSERT INTO audit_logs(school_id,actor_type,actor_id,action,entity_type,entity_id,after) VALUES($1,'USER',$2,'device.configuration.updated','devices',$3,$4)",
+            [
+              a.context.schoolId,
+              a.id,
+              id,
+              { config_version: updated.config_version, reason: b.reason },
+            ],
+          );
+          return updated;
         }),
       );
     }),

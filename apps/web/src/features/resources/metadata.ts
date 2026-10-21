@@ -53,7 +53,7 @@ export const fields: Record<Resource, Field[]> = {
     ref('academic_session_id', 'academic_sessions'),
     { key: 'grade' },
     { key: 'section' },
-    ref('class_teacher_id', 'teachers', true),
+    ref('class_teacher_id', 'teachers'),
   ],
   subjects: [{ key: 'code' }, { key: 'name' }],
   enrollments: [
@@ -76,12 +76,14 @@ export const fields: Record<Resource, Field[]> = {
   teacher_class_assignments: [
     ref('teacher_id', 'teachers'),
     ref('class_id', 'classes'),
-    ref('subject_id', 'subjects', true),
+    ref('subject_id', 'subjects'),
     { key: 'starts_on', type: 'date' },
     { key: 'ends_on', type: 'date', optional: true },
   ],
   exams: [
     ref('class_id', 'classes'),
+    select('assessment_kind', ['OFFICIAL', 'SUBJECT_TEST']),
+    ref('subject_id', 'subjects', true),
     { key: 'name' },
     select('exam_type', ['UNIT', 'MIDTERM', 'FINAL', 'PRACTICAL']),
     { key: 'starts_on', type: 'date', optional: true },
@@ -211,7 +213,7 @@ export const resourceInfo: Record<
     description: 'A little structure. A lot of possibility.',
     permission: 'academics.read',
     write: 'academics.write',
-    columns: ['grade', 'section', 'academic_session_id'],
+    columns: ['grade', 'section', 'academic_session_id','class_teacher_id'],
   },
   subjects: {
     title: 'Subjects',
@@ -245,8 +247,8 @@ export const resourceInfo: Record<
     title: 'Exams & results',
     description: 'Make room for every achievement.',
     permission: 'marks.read',
-    write: 'academics.write',
-    columns: ['name', 'exam_type', 'max_score', 'status'],
+    write: 'assessments.write',
+    columns: ['name', 'assessment_kind', 'subject_id', 'exam_type', 'max_score', 'status'],
   },
   marks: {
     title: 'Marks',
