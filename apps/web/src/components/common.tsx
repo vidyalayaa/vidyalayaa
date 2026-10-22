@@ -1,9 +1,11 @@
-import { ArrowUpRight, Inbox, Loader2, RefreshCw, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ArrowUpRight, Inbox, Loader2, RefreshCw, ShieldCheck, AlertCircle, Home } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
 import { display, label, cn } from '../lib/utils';
 import { HttpError } from '../lib/auth';
 import { useAuth } from '../lib/auth';
+import { schoolPath } from '../lib/portals';
 export function Badge({ children }: { children: ReactNode }) {
   const value = String(children);
   return (
@@ -27,11 +29,33 @@ export function Empty({
   title = 'A fresh start',
   description = 'Records will appear here when your school adds them.',
   action,
+  showHome,
+  homePath,
+  homeText = 'Back to Home',
 }: {
   title?: string;
   description?: string;
   action?: ReactNode;
+  showHome?: boolean;
+  homePath?: string;
+  homeText?: string;
 }) {
+  const a = useAuth();
+  const shouldShowHome =
+    showHome ??
+    (title.toLowerCase().includes('unavailable') ||
+      title.toLowerCase().includes('not found') ||
+      title.toLowerCase().includes('moved') ||
+      title.toLowerCase().includes('another role'));
+
+  const resolvedHomePath =
+    homePath ||
+    (a.me?.school
+      ? schoolPath('/', a.me.school.role)
+      : a.me?.platform_role === 'SUPER_ADMIN'
+        ? '/platform'
+        : '/');
+
   return (
     <div className="empty-state">
       <div className="empty-icon">
@@ -40,6 +64,14 @@ export function Empty({
       <h3>{title}</h3>
       <p>{description}</p>
       {action}
+      {shouldShowHome && (!action || showHome === true) && (
+        <Button variant="lime" asChild className="mt-3 inline-flex items-center gap-2">
+          <Link to={resolvedHomePath}>
+            <Home size={15} />
+            {homeText}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 }

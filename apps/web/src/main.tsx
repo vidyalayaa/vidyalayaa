@@ -112,10 +112,13 @@ function Guard() {
   if (configured && a.me) {
     if (location.pathname.startsWith('/platform') && a.me.platform_role !== 'SUPER_ADMIN')
       return (
-        <Empty
-          title="Access unavailable"
-          description="The platform console requires a Super Admin account."
-        />
+        <div className="flex min-h-[70vh] flex-col items-center justify-center p-6">
+          <Empty
+            title="Access unavailable"
+            description="The platform console requires a Super Admin account."
+            showHome
+          />
+        </div>
       );
     if (location.pathname === '/' && a.me.platform_role === 'SUPER_ADMIN')
       return <Navigate to="/platform" replace />;
@@ -176,10 +179,13 @@ function PortalGate() {
     (configured && (!a.me?.school || portals[a.me.school.role] !== portal))
   )
     return (
-      <Empty
-        title="Access unavailable"
-        description="Choose a school and use your assigned role's workspace."
-      />
+      <div className="flex min-h-[70vh] flex-col items-center justify-center p-6">
+        <Empty
+          title="Access unavailable"
+          description="Choose a school and use your assigned role's workspace."
+          showHome
+        />
+      </div>
     );
   return <Outlet />;
 }
@@ -403,10 +409,13 @@ const router = createBrowserRouter(
         <Route
           path="*"
           element={
-            <Empty
-              title="This page has moved"
-              description="Use the workspace navigation to find your way."
-            />
+            <div className="flex min-h-[70vh] flex-col items-center justify-center p-6">
+              <Empty
+                title="This page has moved"
+                description="Use the workspace navigation to find your way."
+                showHome
+              />
+            </div>
           }
         />
       </Route>
