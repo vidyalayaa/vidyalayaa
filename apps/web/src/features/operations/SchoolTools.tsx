@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, useAuth } from '../../lib/auth';
 import { useRows } from '../../lib/use-records';
 import { Button } from '../../components/ui/button';
-import { PageHeading, Panel, DataTable, Loading, ErrorState, Empty } from '../../components/common';
+import { PageHeading, Panel, DataTable, Loading, ErrorState, Empty, AttendanceTabs } from '../../components/common';
 import { ActionDialog } from '../../components/ActionDialog';
 import RecordSelect from '../../components/RecordSelect';
 import Pagination from '../../components/Pagination';
@@ -24,6 +24,7 @@ export function AttendanceHistory() {
         title="Every arrival. Every departure."
         description="A history of recorded events, within your current access."
       />
+      <AttendanceTabs active="history" />
       <Panel
         title="Movement history"
         action={

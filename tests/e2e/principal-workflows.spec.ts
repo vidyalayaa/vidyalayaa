@@ -77,7 +77,6 @@ for (const resource of [
   'marks',
   'assignments',
   'timetable_entries',
-  'school_holidays',
   'fee_records',
   'nfc_cards',
   'device_locations',
@@ -214,6 +213,48 @@ for (const resource of [
     }
   });
 }
+
+test('Principal views the school calendar with no event-management actions', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  const f = platformApp.records;
+  const r = await platformApp.request(
+    '/calendar/events',
+    'POST',
+    {
+      title: 'Principal calendar inspection',
+      description: 'Read-only calendar details',
+      kind: 'SCHOOL_EVENT',
+      start_date: '2027-03-15',
+      end_date: '2027-03-16',
+      audience: 'SCHOOL',
+      class_ids: [],
+    },
+    f.admin,
+    f.schoolA,
+  );
+  expect(r.status).toBe(201);
+  await page.goto(authAppURL + '/principal/r/school_holidays');
+  await expect(page).toHaveURL(/\/principal\/calendar$/);
+  await page.getByLabel('Calendar year', { exact: true }).selectOption('2027');
+  await page.locator('[data-date="2027-03-15"]').click();
+  await expect(page.getByRole('dialog')).toContainText('Principal calendar inspection');
+  for (const action of ['Add event', 'Edit event', 'Delete event'])
+    await expect(page.getByRole('button', { name: new RegExp('^' + action) })).toHaveCount(0);
+  expect(
+    (
+      await platformApp.request(
+        '/calendar/events/' + r.body.id,
+        'PATCH',
+        { expected_version: r.body.version },
+        f.principal,
+        f.schoolA,
+      )
+    ).status,
+  ).toBe(403);
+});
 
 test('Principal reviews all student profile sections without administration controls', async ({
   page,

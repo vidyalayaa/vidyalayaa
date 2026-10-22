@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
+import { studentDirectoryRouter } from './student-directory.js';
+import { calendarRouter } from './calendar.js';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -172,6 +174,8 @@ export function schoolAccess(pool: pg.Pool) {
 export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Config) {
   const router = Router();
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
+  router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
+  router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
   router.get(
     '/school/retention',
     permission('school.manage'),
@@ -481,7 +485,9 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
                  FROM enrollments e
                  JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id
                  JOIN academic_sessions s ON s.school_id=e.school_id AND s.id=e.academic_session_id
-                 WHERE e.school_id=$1 AND e.student_id=$2 AND e.status='ACTIVE'
+                 WHERE e.school_id=$1 AND e.student_id=$2 AND e.status='ACTIVE' AND c.retired_at IS NULL
+                 AND e.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=e.school_id))::date
+                 AND (e.ends_on IS NULL OR e.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=e.school_id))::date)
                  ORDER BY e.starts_on DESC LIMIT 1`,
                 [a.context.schoolId, id],
               )

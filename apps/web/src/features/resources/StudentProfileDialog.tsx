@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Users,
@@ -17,13 +17,17 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api, useAuth } from '../../lib/auth';
-import { display, label } from '../../lib/utils';
+import { display, label, sexLabel } from '../../lib/utils';
 import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import { Badge, Loading, ErrorState } from '../../components/common';
 import { ActionDialog } from '../../components/ActionDialog';
 import FeePaymentDialog from './FeePaymentDialog';
 import { IssueCardDialog } from './CardActionDialogs';
+const StudentEnrollments = lazy(() => import('../students/StudentEnrollments'));
+const FamilyRecordForm = lazy(() =>
+  import('./ResourceScreen').then((m) => ({ default: m.ResourceForm })),
+);
 
 interface StudentOverview {
   student: {
@@ -32,8 +36,10 @@ interface StudentOverview {
     first_name: string;
     last_name: string | null;
     date_of_birth: string | null;
+    sex: string;
     status: string;
     created_at: string;
+    email: string | null;
   };
   enrollment: {
     id: string;
@@ -130,6 +136,20 @@ export default function StudentProfileDialog({
   const canWriteFees = permissions.includes('fees.write');
   const canWriteParents = permissions.includes('parents.write');
   const [linkParentOpen, setLinkParentOpen] = useState(false);
+  const [familyEdit, setFamilyEdit] = useState<{
+      resource: 'parents' | 'student_parents';
+      initial: Record<string, unknown>;
+    }>(),
+    [familyDirty, setFamilyDirty] = useState(false);
+  function closeFamilyEdit() {
+    if (
+      !familyDirty ||
+      window.confirm('Close with unsaved changes? The draft stays in this tab.')
+    ) {
+      setFamilyEdit(undefined);
+      setFamilyDirty(false);
+    }
+  }
 
   const d = query.data;
 
@@ -356,6 +376,52 @@ export default function StudentProfileDialog({
                           )}
                           {p.can_receive_alerts && <span>· SMS/Push Alerts On</span>}
                         </div>
+                        {canWriteParents && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              aria-label={`Edit parent details for ${p.full_name}`}
+                              onClick={() => {
+                                setFamilyDirty(false);
+                                setFamilyEdit({
+                                  resource: 'parents',
+                                  initial: {
+                                    id: p.parent_id,
+                                    full_name: p.full_name,
+                                    email: p.email,
+                                    phone: p.phone,
+                                    status: 'ACTIVE',
+                                  },
+                                });
+                              }}
+                            >
+                              Edit parent details
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              aria-label={`Edit connection for ${p.full_name}`}
+                              onClick={() => {
+                                setFamilyDirty(false);
+                                setFamilyEdit({
+                                  resource: 'student_parents',
+                                  initial: {
+                                    id: p.id,
+                                    student_id: studentId,
+                                    parent_id: p.parent_id,
+                                    relationship: p.relationship,
+                                    is_primary_contact: p.is_primary_contact,
+                                    can_receive_alerts: p.can_receive_alerts,
+                                    status: 'ACTIVE',
+                                  },
+                                });
+                              }}
+                            >
+                              Edit connection
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -369,12 +435,22 @@ export default function StudentProfileDialog({
               <section className="rounded-xl border border-stone-100 bg-stone-50/70 p-4 text-xs text-stone-600">
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   <div>
+                    <span className="font-semibold text-stone-700">Sex:</span>{' '}
+                    {sexLabel(d.student.sex)}
+                  </div>
+                  <div>
                     <span className="font-semibold text-stone-700">Date of Birth:</span>{' '}
-                    {d.student.date_of_birth ? display(d.student.date_of_birth) : 'Not specified'}
+                    {d.student.date_of_birth
+                      ? display(d.student.date_of_birth.slice(0, 10))
+                      : 'Not specified'}
+                  </div>
+                  <div className="break-words">
+                    <span className="font-semibold text-stone-700">Student email:</span>{' '}
+                    {d.student.email || 'Not specified'}
                   </div>
                   <div>
                     <span className="font-semibold text-stone-700">Enrollment Date:</span>{' '}
-                    {d.enrollment?.starts_on ? display(d.enrollment.starts_on) : '—'}
+                    {d.enrollment?.starts_on ? display(d.enrollment.starts_on.slice(0, 10)) : '—'}
                   </div>
                   <div>
                     <span className="font-semibold text-stone-700">Academic Session:</span>{' '}
@@ -382,6 +458,11 @@ export default function StudentProfileDialog({
                   </div>
                 </div>
               </section>
+              {a.me?.school?.role === 'school_admin' && permissions.includes('students.write') && (
+                <Suspense fallback={<Loading />}>
+                  <StudentEnrollments studentId={studentId} />
+                </Suspense>
+              )}
             </div>
           )}
 
@@ -641,6 +722,38 @@ export default function StudentProfileDialog({
             />
           )}
 
+          {familyEdit && (
+            <Dialog
+              open
+              title={
+                familyEdit.resource === 'parents' ? 'Edit parent details' : 'Edit family connection'
+              }
+              description="Manage this student's family directly from their profile."
+              onOpenChange={(v) => {
+                if (!v) closeFamilyEdit();
+              }}
+            >
+              <Suspense fallback={<Loading />}>
+                <FamilyRecordForm
+                  key={`${familyEdit.resource}:${familyEdit.initial.id}`}
+                  resource={familyEdit.resource}
+                  initial={familyEdit.initial}
+                  hiddenFields={
+                    familyEdit.resource === 'parents'
+                      ? ['status']
+                      : ['student_id', 'parent_id', 'status']
+                  }
+                  onDirtyChange={setFamilyDirty}
+                  cancel={closeFamilyEdit}
+                  done={async () => {
+                    await qc.invalidateQueries({ queryKey: [a.school] });
+                    setFamilyDirty(false);
+                    setFamilyEdit(undefined);
+                  }}
+                />
+              </Suspense>
+            </Dialog>
+          )}
           {linkParentOpen && (
             <ActionDialog
               open

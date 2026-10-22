@@ -11,7 +11,9 @@ it('preserves legacy exams, marks, and null-subject assignments without granting
     await db.exec(
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
     );
-    const files = (await readdir('db/migrations')).sort();
+    const files = (await readdir('db/migrations'))
+      .sort()
+      .filter((file) => file <= '20261021154148_teacher_subject_authorization.sql');
     for (const file of files.slice(0, -1))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     const f = await fixture(db);

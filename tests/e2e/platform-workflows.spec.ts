@@ -557,6 +557,10 @@ test('Super Admin sign-out clears the browser session and returns to login', asy
 }) => {
   await page.goto(authAppURL + '/platform/schools');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const confirmBtn = page.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true });
+  if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await confirmBtn.click();
+  }
   await expect(page).toHaveURL(/\/login/);
   expect(await page.evaluate(() => localStorage.getItem('sb-mfa-qr-auth-token'))).toBeNull();
 });

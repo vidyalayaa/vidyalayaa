@@ -1,6 +1,12 @@
 # Vidyalayaa REST API
 
-School Admin's expandable [class-wise Academics workspace](CLASS_WISE_ACADEMICS.md) uses `/academics/classes` and its paginated subjects, enrollments and unconfigured-assignment child endpoints. `POST /academics/classes/{id}/subjects` atomically creates or selects a subject and assigns its required teacher to that section. Other actions reuse existing resource write APIs; no duplicate class/subject/enrollment store is introduced.
+School Admin's [student and family admission form and class-wise student directory](STUDENT_ADMISSION.md) use `/student-directory/*`. `POST /student-directory/admissions` atomically saves a student, class enrollment, one to five new/existing parents, and their family connections. Existing email matches require explicit parent selection; this workflow does not create Auth accounts or send invitations.
+
+School Admin's expandable [class-wise Academics workspace](CLASS_WISE_ACADEMICS.md) uses `/academics/classes` and its paginated subjects and unconfigured-assignment child endpoints. Class summaries include `student_count`, `male_count`, `female_count`, `other_count` and `unspecified_count`, based on dated active enrollments and active students. No individual student roster is loaded by Academics. The enrollment-list API remains compatible; enrollment management lives in student profiles. `POST /academics/classes/{id}/subjects` atomically creates or selects a subject and assigns its required teacher to that section. Other actions reuse existing resource write APIs; no duplicate class/subject/enrollment store is introduced.
+
+Student resource and admission contracts accept `sex: MALE | FEMALE | OTHER | NOT_SPECIFIED`, defaulting to NOT_SPECIFIED for older clients/imports. Both API validation and the database constraint reject invalid values. Student/profile responses include the persisted value; all existing role and ownership checks still apply.
+
+The [school calendar](SCHOOL_CALENDAR.md) extends existing `school_holidays` records. `/calendar/events` provides inclusive multi-day event reads with type/section filters and role-aware visibility; `/calendar/classes` returns authorized target choices. Only School Admin can create/edit/delete, using shared calendar schemas and expected versions. Students/parents have database-enforced current-enrollment/family scope. Dashboard upcoming events reuse these endpoints. Legacy single-day holiday resource APIs remain compatible; use calendar APIs for multi-day/multi-section events.
 
 Teacher class/subject assignment and Class Teacher examination contracts are described in [Teacher assignments](TEACHER_ASSIGNMENTS.md). This includes the additive assessment-kind migration and scoped teaching lookups.
 

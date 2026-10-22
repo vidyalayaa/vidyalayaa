@@ -28,6 +28,7 @@ export const fields: Record<Resource, Field[]> = {
     { key: 'first_name' },
     { key: 'last_name', optional: true },
     { key: 'date_of_birth', type: 'date', optional: true },
+    select('sex', ['NOT_SPECIFIED', 'MALE', 'FEMALE', 'OTHER']),
     select('status', ['ACTIVE', 'TRANSFERRED', 'GRADUATED', 'WITHDRAWN']),
   ],
   parents: [
@@ -213,7 +214,7 @@ export const resourceInfo: Record<
     description: 'A little structure. A lot of possibility.',
     permission: 'academics.read',
     write: 'academics.write',
-    columns: ['grade', 'section', 'academic_session_id','class_teacher_id'],
+    columns: ['grade', 'section', 'academic_session_id', 'class_teacher_id'],
   },
   subjects: {
     title: 'Subjects',

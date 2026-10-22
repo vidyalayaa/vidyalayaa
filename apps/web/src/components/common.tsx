@@ -215,3 +215,7 @@ export function SecureNote() {
     </p>
   );
 }
+
+export { AttendanceTabs } from './AttendanceTabs';
+export type { AttendanceTab } from './AttendanceTabs';
+

@@ -23,13 +23,13 @@ import {
   LockKeyhole,
 } from 'lucide-react';
 import { api, configured, useAuth, supabase } from '../../lib/auth';
-import { label, display, toDateTimeLocal, fromDateTimeLocal } from '../../lib/utils';
+import { label, display, sexLabel, toDateTimeLocal, fromDateTimeLocal } from '../../lib/utils';
 import { readDraft, saveDraft, deleteDraft } from '../../lib/drafts';
 import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
 import { fields, resourceInfo, sampleRule, type Field } from './metadata';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
-import { PageHeading, Panel, Empty, Loading, ErrorState, DataTable } from '../../components/common';
+import { PageHeading, Panel, Empty, Loading, ErrorState, DataTable, AttendanceTabs } from '../../components/common';
 export function ResourceScreen({ resource }: { resource: Resource }) {
   const [params] = useSearchParams();
   const a = useAuth(),
@@ -183,6 +183,17 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
             Teacher Assignments
           </Link>
         </div>
+      )}
+      {['nfc_cards', 'attendance_rule_versions', 'school_holidays'].includes(resource) && (
+        <AttendanceTabs
+          active={
+            resource === 'nfc_cards'
+              ? 'cards'
+              : resource === 'attendance_rule_versions'
+                ? 'rules'
+                : 'calendar'
+          }
+        />
       )}
       {locked && configured ? (
         <div className="notice">
@@ -651,7 +662,7 @@ export function ResourceForm({
               >
                 {f.options?.map((o) => (
                   <option key={o} value={o}>
-                    {label(o)}
+                    {f.key === 'sex' ? sexLabel(o) : label(o)}
                   </option>
                 ))}
               </select>

@@ -177,11 +177,20 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
               tx,
               `SELECT ${resourceSelect('classes')},
        ct.status AS class_teacher_status,
-       (SELECT count(DISTINCT e.student_id)::int FROM enrollments e JOIN students s ON s.school_id=e.school_id AND s.id=e.student_id WHERE e.school_id=t.school_id AND e.class_id=t.id AND ${currentEnrollment}) AS student_count,
+       roster.student_count,roster.male_count,roster.female_count,roster.other_count,roster.unspecified_count,
        (SELECT count(DISTINCT ta.subject_id)::int FROM teacher_class_assignments ta JOIN subjects sub ON sub.school_id=ta.school_id AND sub.id=ta.subject_id WHERE ta.school_id=t.school_id AND ta.class_id=t.id AND ta.retired_at IS NULL AND sub.retired_at IS NULL) AS subject_count,
        (SELECT count(*)::int FROM teacher_class_assignments ta WHERE ta.school_id=t.school_id AND ta.class_id=t.id AND ta.retired_at IS NULL) AS assignment_count,
        (SELECT count(*)::int FROM teacher_class_assignments ta WHERE ta.school_id=t.school_id AND ta.class_id=t.id AND ta.retired_at IS NULL AND ta.subject_id IS NULL) AS legacy_assignment_count
        FROM classes t LEFT JOIN teachers ct ON ct.school_id=t.school_id AND ct.id=t.class_teacher_id
+       CROSS JOIN LATERAL (
+         SELECT count(DISTINCT e.student_id)::int AS student_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.sex='MALE')::int AS male_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.sex='FEMALE')::int AS female_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.sex='OTHER')::int AS other_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.sex='NOT_SPECIFIED')::int AS unspecified_count
+         FROM enrollments e JOIN students s ON s.school_id=e.school_id AND s.id=e.student_id
+         WHERE e.school_id=t.school_id AND e.class_id=t.id AND ${currentEnrollment}
+       ) roster
        WHERE t.school_id=$1 AND t.retired_at IS NULL AND ($2::uuid IS NULL OR t.academic_session_id=$2)
        ORDER BY t.academic_session_id,t.grade,t.section,t.id`,
               [a.context.schoolId, q.session_id || null],
@@ -189,7 +198,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
             )),
             sessions: (
               await tx.query(
-                'SELECT id,name,is_current FROM academic_sessions WHERE school_id=$1 ORDER BY starts_on DESC,id',
+                'SELECT id,name,is_current,starts_on,ends_on FROM academic_sessions WHERE school_id=$1 AND retired_at IS NULL ORDER BY starts_on DESC,id',
                 [a.context.schoolId],
               )
             ).rows,

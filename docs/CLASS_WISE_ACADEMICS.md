@@ -1,13 +1,13 @@
 # Class-wise School Admin Academics
 
-School Admin → **Academics** opens `/admin/academics`. Classes are grouped by academic session and grade, with each section beneath its class. Expand any section to manage its subjects, teachers, Class Teacher and enrollments without leaving the page. Other roles retain their existing workspaces.
+School Admin → **Academics** opens `/admin/academics`. Classes are grouped by academic session and grade, with each section beneath its class. Expand a section to manage subjects, subject teachers and its Class Teacher, and see student counts by recorded sex. Individual student records and enrollment management belong to Students. Other roles retain their existing workspaces.
 
 ## Source of truth
 
 - A `classes` row already identifies the academic session, grade and section. Its `class_teacher_id` is the single Class Teacher designation.
 - `subjects` is a school-wide catalogue. A section's configured subjects are the distinct subjects referenced by its non-archived `teacher_class_assignments`, joined to non-archived catalogue subjects. No new class-subject table or copied subject records are created.
 - The same subject can have multiple teachers and be used by multiple sections. It appears once per section with its teacher-assignment rows beneath it. Dates and inactive teachers remain visible for management.
-- Enrollments come from `enrollments.class_id`, with the matching school and academic-session relationships preserved. The current student count and current student list use the same active enrollment/student and school-local date rules. **All enrollment records** includes future and ended records for editing and historical review.
+- Enrollment totals come from `enrollments.class_id`, with the matching school and academic-session relationships preserved. Only active students with dated active enrollments on today's school-local date contribute. Each section returns `student_count`, `male_count`, `female_count`, `other_count` and `unspecified_count`. The four categories sum to the total. Existing students default to NOT_SPECIFIED; no sex is inferred from a name. Academics does not fetch or display individual student rosters.
 - Preserved legacy assignments without a subject appear in **Assignments needing a subject** within their own section. Repair updates the existing row; archive preserves its history.
 
 ## Management
@@ -18,9 +18,9 @@ Use **Add class & section** or the class's **Add section** action. Existing form
 
 Editing a subject's code/name affects that shared catalogue record across sections, as stated in the form. Archive individual teacher assignments to remove their teaching relationship from this section, without deleting the catalogue subject or another section's assignment. Existing database uniqueness checks reject duplicate subject codes and duplicate teacher/class/subject assignments.
 
-**Enroll student** uses existing student records and locks the form to the selected class and academic session. Edit an enrollment's dates, roll number or status in place. End an enrollment by changing its status to ENDED; use **All enrollment records** to review it. Active enrollments still prevent class archival. Archival never deletes the student, enrollment, subject or assignment history.
+Use **Students → student profile → Class enrollments** to add/edit class, session, dates, roll number and status, including future or ended records. End an enrollment by changing its status to ENDED. Active enrollments still prevent class archival. Archival never deletes student, enrollment, subject or assignment history.
 
-The existing resource URLs, school-wide catalogue/session management and CSV tools remain available. The new School Admin navigation points to the grouped workspace; Principal and Teacher navigation are unchanged.
+**Academic sessions** expands management inside this workspace; add, edit and archive actions use the existing forms and resource APIs. School Admin's legacy session/class/subject/teacher-assignment URLs redirect here; legacy enrollment URLs redirect to Students. Principal and Teacher navigation are unchanged. The separate generic academic resource tables are no longer entry points for School Admin.
 
 ## API and permissions
 
@@ -37,11 +37,11 @@ All paths use the existing `/api/v1` base, verified authentication and selected 
 
 Every query binds the school and class, using the existing non-bypass API role and forced RLS. Foreign and missing class IDs return the same 404 code. Teacher, Principal, Parent and Student callers cannot use these endpoints. The atomic subject action reuses existing teacher validation, auditing, subscription and uniqueness enforcement. Other create/update/archive actions continue through the existing resource APIs and archival guards.
 
-Lists remain bounded and paginated. The page loads all class summaries across batches of 100, then lazily loads a section's paginated subjects and enrollments when expanded. It does not silently omit classes after the first page. Queries reuse the existing roster and teacher/class/subject indexes.
+Lists remain bounded and paginated. The page loads all class summaries across batches of 100, then lazily loads a section's paginated subjects when expanded. It does not silently omit classes after the first page. A single lateral aggregation counts students by sex using the existing roster indexes. The enrollment-list API remains available for compatibility; the Academics UI never calls it.
 
 ## Deployment
 
-This change introduces no database migration or production-data rewrite. Read-only inspection confirmed the configured database already has the preceding teaching migration, including the assessment metadata and Class Teacher permission helpers. No configured data or settings were changed during this work. Deploy matching contracts, API and web builds through the existing process.
+Apply the additive student-sex migration before deploying matching contracts, API and web builds. See [student-sex deployment and verification](STUDENT_SEX.md). No existing student, family or enrollment row is deleted or reassigned, and RLS/role grants are unchanged.
 
 ## Verification
 
@@ -49,9 +49,9 @@ This change introduces no database migration or production-data rewrite. Read-on
 
 `tests/e2e/academics.spec.ts` exercises the real website and disposable API/database fixtures on desktop and mobile, including creating/editing classes, Class Teacher designation, both new/existing subject options, required teachers, cancellation/draft restoration, enrollment history, archival and more than 100 classes. Accessibility checks cover serious/critical Axe violations and horizontal viewport overflow.
 
-Executed: the full unit/security/API/database suite passed **171 tests across 27 files**. The adjacent School Admin class/subject/enrollment/teacher-assignment CRUD, Principal read-only class access, and Teacher homework/subject-test browser regressions passed on desktop and mobile (**14 checks**). External authentication/email/storage providers are simulated in these isolated tests; the Express API, runtime SQL roles, migrations and RLS are real. Live production writes and external-provider delivery were not tested.
+The latest verification passed **182 unit/security/API/database tests across 29 files**, plus **30 desktop/mobile browser checks** covering the Academics and student workflows and adjacent Principal/Teacher access. External authentication/email/storage providers are simulated in these isolated tests; the Express API, runtime SQL roles, migrations and RLS are real. External-provider delivery was not tested. The additive recorded-sex migration was applied and its schema/security checks passed on the configured database; existing students were preserved.
 
-The final Academics desktop/mobile run passed **12 checks** (six workflows on each screen size), including the single-save subject form and navigation back from Academic Sessions. Together with the adjacent role regressions this is **26 distinct browser checks**. Both screen sizes were visually reviewed. Type checking, source linting, the repository secret scan, OpenAPI generation and diff whitespace checks passed. The full production build passed for contracts, API, worker and website. Temporary browser-test services were closed; no permanent development server was started.
+The final Academics cases cover seven workflows on each screen size, including embedded Academic Sessions, counts without student lists, class/section CRUD, Class Teacher designation, subject assignment, enrollment management from student profiles and pagination beyond 100 classes. Count layouts were visually reviewed on both screen sizes. Type checking, source linting, secret scanning, OpenAPI generation and whitespace checks for the changed feature files passed. The full production build passed for contracts, API, worker and website. Temporary browser-test services were closed; no permanent development server was started. See [STUDENT_SEX.md](STUDENT_SEX.md) for migration/rollback details and current verification.
 
 Commands used (from the repository root):
 

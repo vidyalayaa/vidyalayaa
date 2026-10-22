@@ -5,6 +5,7 @@ import {
   Users,
   GraduationCap,
   CalendarCheck2,
+  CalendarDays,
   BookOpen,
   Wallet,
   Radio,
@@ -27,6 +28,7 @@ import {
 } from 'lucide-react';
 import { configured, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
+import { Dialog } from './ui/dialog';
 import { cn } from '../lib/utils';
 import { schoolPath } from '../lib/portals';
 import { useQuery } from '@tanstack/react-query';
@@ -56,6 +58,7 @@ const items = [
     permission: 'teachers.write',
   },
   { to: '/attendance', text: 'Attendance', icon: CalendarCheck2, permission: 'attendance.read' },
+  { to: '/calendar', text: 'Calendar', icon: CalendarDays, permission: 'calendar.read' },
   { to: '/r/classes', text: 'Academics', icon: BookOpen, permission: 'academics.read' },
   { to: '/r/assignments', text: 'Homework', icon: BookOpen, permission: 'assignments.read' },
   { to: '/r/marks', text: 'Results', icon: GraduationCap, permission: 'marks.read' },
@@ -82,8 +85,20 @@ export default function Layout() {
     [open, setOpen] = useState(false),
     [search, setSearch] = useState(''),
     [online, setOnline] = useState(navigator.onLine),
+    [confirmLogout, setConfirmLogout] = useState(false),
+    [loggingOut, setLoggingOut] = useState(false),
     navigate = useNavigate(),
     location = useLocation();
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await a.logout();
+    } finally {
+      setLoggingOut(false);
+      setConfirmLogout(false);
+    }
+  };
   const support = useQuery({
     queryKey: [a.school, 'support-access'],
     queryFn: () =>
@@ -162,9 +177,49 @@ export default function Layout() {
         ]
       : role === 'school_admin'
         ? items
-            .filter((i) => i.to !== '/r/teacher_class_assignments')
+            .filter(
+              (i) =>
+                !['/r/teacher_class_assignments', '/r/parents', '/r/student_parents'].includes(
+                  i.to,
+                ),
+            )
             .map((i) => (i.to === '/r/classes' ? { ...i, to: '/academics' } : i))
         : items;
+
+  const isItemActive = (to: string, isActive: boolean) => {
+    if (isActive) return true;
+    const current = location.pathname;
+    if (to === '/attendance') {
+      return (
+        current.includes('/attendance') ||
+        current.includes('/r/nfc_cards') ||
+        current.includes('/r/attendance_rule_versions') ||
+        current.includes('/r/school_holidays')
+      );
+    }
+    if (to === '/r/students') {
+      return (
+        current.includes('/r/students') ||
+        current.includes('/r/parents') ||
+        current.includes('/r/student_parents')
+      );
+    }
+    if (to === '/academics' || to === '/r/classes') {
+      return (
+        current.includes('/academics') ||
+        current.includes('/r/classes') ||
+        current.includes('/r/academic_sessions') ||
+        current.includes('/r/subjects') ||
+        current.includes('/r/enrollments') ||
+        current.includes('/r/teacher_class_assignments')
+      );
+    }
+    if (to === '/devices') {
+      return current.includes('/devices') || current.includes('/r/device_locations');
+    }
+    return false;
+  };
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -240,7 +295,9 @@ export default function Layout() {
                 to={path(i.to)}
                 end={i.to === '/'}
                 onClick={() => setOpen(false)}
-                className={({ isActive }) => cn('nav-item', isActive && 'nav-active')}
+                className={({ isActive }) =>
+                  cn('nav-item', isItemActive(i.to, isActive) && 'nav-active')
+                }
               >
                 <i.icon size={18} strokeWidth={1.7} />
                 <span>{i.text}</span>
@@ -333,7 +390,11 @@ export default function Layout() {
             </Link>
             <div className="topbar-divider" />
             {a.session ? (
-              <button className="profile-button" onClick={() => a.logout()} aria-label="Sign out">
+              <button
+                className="profile-button"
+                onClick={() => setConfirmLogout(true)}
+                aria-label="Sign out"
+              >
                 <span>{a.me?.full_name.slice(0, 2).toUpperCase() || 'V'}</span>
                 <LogOut size={15} />
               </button>
@@ -396,6 +457,50 @@ export default function Layout() {
             ))}
           </nav>
         )}
+        <Dialog
+          open={confirmLogout}
+          onOpenChange={(v) => !loggingOut && setConfirmLogout(v)}
+          title="Sign out of your account?"
+          description="Are you sure you want to end your current session? You will need to sign in again to access Vidyalayaa."
+        >
+          <div className="space-y-4 pt-1">
+            <div className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50 p-3">
+              <div className="flex size-10 items-center justify-center rounded-full bg-lime-100 font-semibold text-lime-900">
+                {a.me?.full_name.slice(0, 2).toUpperCase() || 'V'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-stone-900">
+                  {a.me?.full_name || 'Signed in user'}
+                </p>
+                <p className="truncate text-xs text-stone-500">{a.me?.email}</p>
+              </div>
+              {a.me?.school?.school_name && (
+                <span className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-medium text-stone-600 shadow-sm">
+                  {a.me.school.school_name}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setConfirmLogout(false)}
+                disabled={loggingOut}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+              >
+                <LogOut size={15} />
+                {loggingOut ? 'Signing out…' : 'Sign out'}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       </div>
     </div>
   );
