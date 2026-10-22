@@ -2162,6 +2162,167 @@ tbody tr:hover {
     min-width: 44px;
   }
 }
+/* ── Splash screen ─────────────────────────────── */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f6f7f3;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.splash-exit {
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+}
+.splash-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── Symbol ──────────────────────────────────── */
+.splash-symbol {
+  width: 56px;
+  height: 58px;
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  background: var(--lime);
+  border-radius: 16px;
+  transform: scale(0) rotate(-20deg);
+  animation: splashSymbolIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.splash-symbol-settled {
+  animation: splashSymbolIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.splash-v {
+  font-size: 60px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -6px;
+  padding-right: 8px;
+  padding-bottom: 8px;
+  color: var(--ink);
+}
+.splash-dot {
+  position: absolute;
+  right: 9px;
+  bottom: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: 0;
+  animation: splashDotIn 0.3s ease forwards 0.45s;
+}
+@keyframes splashSymbolIn {
+  0% {
+    transform: scale(0) rotate(-20deg);
+  }
+  100% {
+    transform: scale(1) rotate(-4deg);
+  }
+}
+@keyframes splashDotIn {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Wordmark ────────────────────────────────── */
+.splash-wordmark {
+  display: flex;
+  align-items: baseline;
+  overflow: hidden;
+  max-width: 0;
+  transition: max-width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.splash-wordmark-visible {
+  max-width: 300px;
+}
+.splash-letter {
+  display: inline-block;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -1.8px;
+  color: var(--ink);
+  opacity: 0;
+  transform: translateY(8px);
+  animation: none;
+}
+.splash-wordmark-visible .splash-letter {
+  animation: splashLetterIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.splash-period {
+  color: var(--muted);
+}
+@keyframes splashLetterIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Tagline ─────────────────────────────────── */
+.splash-tagline {
+  margin-top: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
+}
+.splash-tagline-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Responsive splash ───────────────────────── */
+@media (max-width: 480px) {
+  .splash-symbol {
+    width: 44px;
+    height: 46px;
+    border-radius: 13px;
+  }
+  .splash-v {
+    font-size: 46px;
+    letter-spacing: -5px;
+    padding-right: 6px;
+    padding-bottom: 6px;
+  }
+  .splash-dot {
+    width: 6px;
+    height: 6px;
+    right: 7px;
+    bottom: 11px;
+  }
+  .splash-letter {
+    font-size: 28px;
+    letter-spacing: -1.2px;
+  }
+  .splash-tagline {
+    font-size: 12px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
