@@ -28,7 +28,11 @@ export async function resolveRules(
   pinned?: string,
 ) {
   const { rows: holidays } = await tx.query(
-    'SELECT kind FROM school_holidays WHERE school_id=$1 AND retired_at IS NULL AND on_date=$2 AND (class_id=$3 OR class_id IS NULL) ORDER BY class_id NULLS LAST',
+    `SELECT kind FROM school_holidays WHERE school_id=$1 AND retired_at IS NULL AND on_date<=$2::date AND coalesce(ends_on,on_date)>=$2::date
+     AND kind IN ('HOLIDAY','WEEKEND_OVERRIDE','EXAM_DAY','SHORT_DAY')
+     AND (cardinality(target_class_ids)=0 OR target_class_ids@>ARRAY[$3::uuid])
+     ORDER BY (cardinality(target_class_ids)>0) DESC,
+       CASE kind WHEN 'HOLIDAY' THEN 0 WHEN 'WEEKEND_OVERRIDE' THEN 1 WHEN 'EXAM_DAY' THEN 2 ELSE 3 END,id`,
     [school, date, classId],
   );
   const day = holidays[0]?.kind;

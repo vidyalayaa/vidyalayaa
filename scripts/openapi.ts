@@ -32,6 +32,10 @@ import {
   classAttendanceSchema,
   feePaymentSchema,
   classSubjectSchema,
+  studentAdmissionSchema,
+  calendarEventSchema,
+  calendarEventUpdateSchema,
+  calendarDeleteSchema,
 } from '@vidyalayaa/contracts';
 // Generate from the same schemas used by Express and the browser. Do not edit JSON by hand.
 function json(schema: z.ZodTypeAny): Record<string, unknown> {
@@ -121,6 +125,10 @@ const schemas = {
   ClassAttendance: classAttendanceSchema,
   FeePayment: feePaymentSchema,
   ClassSubject: classSubjectSchema,
+  StudentAdmission: studentAdmissionSchema,
+  CalendarEvent: calendarEventSchema,
+  CalendarEventUpdate: calendarEventUpdateSchema,
+  CalendarEventDelete: calendarDeleteSchema,
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
@@ -180,8 +188,11 @@ function operation(
     },
     ...Object.fromEntries(Object.entries(extra).filter(([key]) => key !== 'parameters')),
   };
-  if (Array.isArray(extra.parameters))
-    (paths[path][method] as { parameters: unknown[] }).parameters.push(...extra.parameters);
+  if (Array.isArray(extra.parameters)) {
+    const op = paths[path][method] as { parameters: { name: string; in: string }[] };
+    const merged = [...op.parameters, ...extra.parameters] as { name: string; in: string }[];
+    op.parameters = [...new Map(merged.map((p) => [`${p.in}:${p.name}`, p])).values()];
+  }
 }
 for (const name of Object.keys(resourceSchemas)) {
   operation(`/resources/${name}`, 'get', `List scoped ${name}`);
@@ -292,10 +303,88 @@ operation(
   'get',
   'Current teacher assigned classes, sections, subjects and Class Teacher designation; classrooms.read',
 );
+for (const child of ['classes', 'students', 'parents', 'enrollment-classes'])
+  operation(
+    `/student-directory/${child}`,
+    'get',
+    'School Admin only; school-scoped class-wise student directory and admission lookups',
+    undefined,
+    'UserJWT',
+    {
+      parameters: [
+        {
+          name: 'X-School-Id',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+        { name: 'search', in: 'query', schema: { type: 'string', maxLength: 120 } },
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+        ...(child === 'students'
+          ? [
+              { name: 'class_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+              { name: 'unassigned', in: 'query', schema: { type: 'string', enum: ['1'] } },
+            ]
+          : []),
+      ],
+      description:
+        child === 'students'
+          ? 'Select exactly one of class_id or unassigned=1. Current dated placements include all student statuses; future/former/unplaced students remain visible in the unassigned group.'
+          : 'Classes are paginated with matching student counts and an unassigned_count. Admission choices exclude archived classes/sessions and inactive parents.',
+    },
+  );
+operation(
+  '/student-directory/admissions',
+  'post',
+  'School Admin only; save student, class enrollment, parents and family links atomically',
+  'StudentAdmission',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', minLength: 8, maxLength: 200 },
+      },
+    ],
+    description:
+      'Requires students.write and parents.write as well as directory read permissions. Supply one to five guardians, each with exactly one parent_id or parent details. At most one primary contact. The academic session is derived from the selected class. Existing email matches require explicit selection; existing parents are never overwritten. No Auth accounts or invitations are created.',
+  },
+);
+const admissionResponses = (
+  paths['/student-directory/admissions'].post as { responses: Record<string, unknown> }
+).responses;
+admissionResponses['201'] = {
+  description:
+    'Student, enrollment, parents and family connections saved together; safe retries return the same saved records.',
+};
+delete admissionResponses['200'];
+operation('/calendar/classes','get','Calendar read: paginated accessible class/section choices; families see only current authorized enrollment sections',undefined,'UserJWT',{
+  parameters:[{name:'page',in:'query',schema:{type:'integer',minimum:1}},{name:'page_size',in:'query',schema:{type:'integer',minimum:1,maximum:100}}],
+});
+operation('/calendar/events','get','Calendar read: all applicable events overlapping an inclusive date range, with current role/ownership enforcement',undefined,'UserJWT',{
+  parameters:[{name:'from',in:'query',required:true,schema:{type:'string',format:'date'}},{name:'to',in:'query',required:true,schema:{type:'string',format:'date'}},{name:'kind',in:'query',schema:{type:'string',enum:['HOLIDAY','SCHOOL_EVENT','EXAM_DAY','ACTIVITY','ANNOUNCEMENT','OTHER','WEEKEND_OVERRIDE','SHORT_DAY']}},{name:'class_ids',in:'query',schema:{type:'string'},description:'Comma-separated accessible section UUIDs; school-wide events remain included.'},{name:'page',in:'query',schema:{type:'integer',minimum:1}},{name:'page_size',in:'query',schema:{type:'integer',minimum:1,maximum:100}}],
+  description:'calendar.read; date span <=366 days. Returns paginated events with id,title,description,kind,start_date,end_date,audience,class_ids,targets,version. Target labels are projected through class authorization. Existing multi-day events overlapping the range are included even when they start before it.',
+});
+const calendarId={name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}};
+operation('/calendar/events/{id}','get','Calendar read: one applicable event or scope-safe 404',undefined,'UserJWT',{parameters:[calendarId]});
+operation('/calendar/events','post','School Admin calendar.write only: create one school-wide or multi-section event','CalendarEvent','UserJWT',{parameters:[{name:'Idempotency-Key',in:'header',schema:{type:'string'}}]});
+const calendarResponses=(paths['/calendar/events'].post as {responses:Record<string,unknown>}).responses;
+calendarResponses['201']={description:'Calendar event created; idempotent retries return the same event.'};delete calendarResponses['200'];
+operation('/calendar/events/{id}','patch','School Admin only: update complete event details and targets with expected_version','CalendarEventUpdate','UserJWT',{parameters:[calendarId,{name:'Idempotency-Key',in:'header',schema:{type:'string'}}]});
+operation('/calendar/events/{id}','delete','School Admin only: remove event from calendars while preserving audited history','CalendarEventDelete','UserJWT',{parameters:[calendarId,{name:'Idempotency-Key',in:'header',schema:{type:'string'}}]});
 operation(
   '/academics/classes',
   'get',
-  'School Admin only; paginated class/section summaries with current student counts, distinct assigned subjects, Class Teacher and school sessions',
+  'School Admin only; class/section summaries with student_count, male_count, female_count, other_count, unspecified_count for dated active enrollments, assigned subjects, Class Teacher and school sessions with dates',
   undefined,
   'UserJWT',
   {
@@ -632,19 +721,20 @@ for (const [path, methods] of Object.entries(paths))
       parameters: { name: string; in: string; required?: boolean; schema: unknown }[];
     };
     for (const m of path.matchAll(/\{([^}]+)\}/g))
-      o.parameters.push({
-        name: m[1],
-        in: 'path',
-        required: true,
-        schema:
-          m[1] === 'version'
-            ? { type: 'string', pattern: '^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$' }
-            : m[1] === 'index'
-              ? { type: 'integer', minimum: 0 }
-              : m[1] === 'feature'
-                ? { type: 'string', enum: ['students', 'attendance', 'marks', 'fees'] }
-                : { type: 'string', format: 'uuid' },
-      });
+      if (!o.parameters.some((p) => p.in === 'path' && p.name === m[1]))
+        o.parameters.push({
+          name: m[1],
+          in: 'path',
+          required: true,
+          schema:
+            m[1] === 'version'
+              ? { type: 'string', pattern: '^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$' }
+              : m[1] === 'index'
+                ? { type: 'integer', minimum: 0 }
+                : m[1] === 'feature'
+                  ? { type: 'string', enum: ['students', 'attendance', 'marks', 'fees'] }
+                  : { type: 'string', format: 'uuid' },
+        });
   }
 const spec = {
   openapi: '3.1.0',

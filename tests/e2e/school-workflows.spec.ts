@@ -4,6 +4,17 @@ const id = '00000000-0000-4000-8000-000000000201',
   school = '00000000-0000-4000-8000-000000000202',
   student = '00000000-0000-4000-8000-000000000203';
 async function login(page: Page, role: string, permissions: string[]) {
+  if (role === 'school_admin') {
+    permissions = [...new Set([...permissions, 'parents.read', 'parents.write', 'academics.read'])];
+    await page.route('**/api/v1/student-directory/classes?**', (r) =>
+      r.fulfill({ json: { data: [], total: 0, page: 1, page_size: 100, unassigned_count: 0 } }),
+    );
+    await page.route('**/api/v1/student-directory/enrollment-classes?**', (r) =>
+      r.fulfill({
+        json: { data: [{ id: student, name: 'Class 8 · A' }], total: 1, page: 1, page_size: 100 },
+      }),
+    );
+  }
   const user = {
     id,
     email: 'school-workflow@example.test',
@@ -63,7 +74,7 @@ test('expired sessions restore only the same user’s memory draft after sign-in
   await page.route('**/api/v1/lookups/accounts?**', (r) =>
     r.fulfill({ json: { data: [], total: 0, page: 1, page_size: 100 } }),
   );
-  await page.route('**/api/v1/resources/students', (r) =>
+  await page.route('**/api/v1/student-directory/admissions', (r) =>
     r.fulfill({
       status: 401,
       json: { error: { code: 'UNAUTHENTICATED', message: 'Session expired.' } },
@@ -89,17 +100,19 @@ test('expired sessions restore only the same user’s memory draft after sign-in
   await page.route('https://mfa-qr.test/auth/v1/logout?**', (r) => r.fulfill({ status: 204 }));
   await page.goto(`${authAppURL}/admin/r/students`);
   await page.getByRole('button', { name: 'Add student', exact: true }).click();
-  await page.getByLabel('Student Code', { exact: true }).fill('DRAFT01');
-  await page.getByLabel('First Name', { exact: true }).fill('Recoverable draft');
+  await page.locator('#student_code').fill('DRAFT01');
+  await page.locator('#first_name').fill('Recoverable draft');
+  await page.locator('#class_id').selectOption(student);
+  await page.locator('#parent-0-full_name').fill('Draft parent');
   page.on('dialog', (d) => d.accept());
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await page.getByRole('button', { name: 'Save student & family', exact: true }).click();
   await expect(page).toHaveURL(/\/login\?returnTo=/);
   await page.getByLabel('Email address').fill(user.email);
   await page.getByLabel('Password', { exact: true }).fill('Fixture-only-password-2026');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/r\/students$/);
   await page.getByRole('button', { name: 'Add student', exact: true }).click();
-  await expect(page.getByLabel('First Name', { exact: true })).toHaveValue('Recoverable draft');
+  await expect(page.locator('#first_name')).toHaveValue('Recoverable draft');
   expect(
     await page.evaluate(() =>
       Object.keys(sessionStorage).filter((k) => k.startsWith('vidyalayaa.draft.')),
@@ -119,7 +132,7 @@ test('school record drafts stay in memory and warn before closing', async ({
   );
   await page.goto(`${authAppURL}/admin/r/students`);
   await page.getByRole('button', { name: 'Add student', exact: true }).click();
-  await page.getByLabel('First Name', { exact: true }).fill('Private draft fixture');
+  await page.locator('#first_name').fill('Private draft fixture');
   page.once('dialog', (d) => d.dismiss());
   await page.getByRole('button', { name: 'Close dialog' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -127,7 +140,7 @@ test('school record drafts stay in memory and warn before closing', async ({
   await page.getByRole('button', { name: 'Close dialog' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Add student', exact: true }).click();
-  await expect(page.getByLabel('First Name', { exact: true })).toHaveValue('Private draft fixture');
+  await expect(page.locator('#first_name')).toHaveValue('Private draft fixture');
   expect(
     await page.evaluate(() =>
       Object.keys(sessionStorage).filter((k) => k.startsWith('vidyalayaa.draft.')),
@@ -136,7 +149,7 @@ test('school record drafts stay in memory and warn before closing', async ({
   page.once('dialog', (d) => d.accept());
   await page.reload();
   await page.getByRole('button', { name: 'Add student', exact: true }).click();
-  await expect(page.getByLabel('First Name', { exact: true })).toHaveValue('');
+  await expect(page.locator('#first_name')).toHaveValue('');
 });
 test('teacher pages attendance and requests a correction from the selected record', async ({
   page,

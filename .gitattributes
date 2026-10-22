@@ -5,3 +5,6 @@
 *.zip binary
 
 *.sh text eol=lf
+db/migrations/20261021154148_teacher_subject_authorization.sql text eol=lf
+db/migrations/20261022141625_student_sex_counts.sql text eol=lf
+db/migrations/20261022144925_school_calendar_events.sql text eol=lf

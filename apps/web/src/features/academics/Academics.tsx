@@ -1,17 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { BookOpen, ChevronDown, GraduationCap, Plus, Search, Users } from 'lucide-react';
 import type {
   AcademicClass,
   AcademicSubject,
-  AcademicEnrollment,
   AcademicSession,
   Page,
   Resource,
 } from '@vidyalayaa/contracts';
 import { api, useAuth } from '../../lib/auth';
-import { schoolPath } from '../../lib/portals';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
 import { Badge, DataTable, Empty, ErrorState, Loading, PageHeading } from '../../components/common';
@@ -94,6 +91,7 @@ export default function Academics() {
     [edit, setEdit] = useState<Edit>(),
     [subjectClass, setSubjectClass] = useState<AcademicClass>(),
     [archive, setArchive] = useState<Archive>(),
+    [sessionsOpen, setSessionsOpen] = useState(false),
     [dirty, setDirty] = useState(false);
   const q = useQuery({
     queryKey: [a.school, 'academic-classes'],
@@ -140,13 +138,16 @@ export default function Academics() {
     <>
       <PageHeading
         title="Every class. Everything together."
-        description="Classes, sections, subjects, learners and their teachers, in one place."
+        description="Classes, sections, subjects, student counts and teachers, in one place."
         actions={
           <>
-            <Button variant="outline" asChild>
-              <Link to={schoolPath('/r/academic_sessions', a.me.school.role)}>
-                Academic sessions
-              </Link>
+            <Button
+              variant="outline"
+              onClick={() => setSessionsOpen((v) => !v)}
+              aria-expanded={sessionsOpen}
+              aria-controls="academic-sessions"
+            >
+              Academic sessions
             </Button>
             {can('academics.write') && (
               <Button
@@ -161,6 +162,85 @@ export default function Academics() {
           </>
         }
       />
+      {sessionsOpen && (
+        <section
+          id="academic-sessions"
+          aria-label="Academic sessions"
+          className="mb-6 rounded-2xl border border-stone-200 bg-white p-5"
+        >
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Academic sessions</h2>
+            {can('academics.write') && (
+              <Button
+                size="sm"
+                variant="lime"
+                onClick={() =>
+                  open({ resource: 'academic_sessions', title: 'Add academic session' })
+                }
+              >
+                <Plus size={15} /> Add academic session
+              </Button>
+            )}
+          </div>
+          {q.isLoading ? (
+            <Loading />
+          ) : q.error ? (
+            <ErrorState error={q.error} retry={() => q.refetch()} />
+          ) : !q.data?.sessions.length ? (
+            <p className="text-sm text-stone-500">
+              Add an academic session before creating classes.
+            </p>
+          ) : (
+            <ul className="divide-y divide-stone-100">
+              {q.data.sessions.map((s) => (
+                <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div>
+                    <h3 className="font-medium">
+                      {s.name}
+                      {s.is_current ? ' · Current' : ''}
+                    </h3>
+                    <p className="text-sm text-stone-500">
+                      {s.starts_on.slice(0, 10)} – {s.ends_on.slice(0, 10)}
+                    </p>
+                  </div>
+                  {can('academics.write') && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label={`Edit session ${s.name}`}
+                        onClick={() =>
+                          open({
+                            resource: 'academic_sessions',
+                            title: 'Edit academic session',
+                            initial: s,
+                          })
+                        }
+                      >
+                        Edit session
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Archive session ${s.name}`}
+                        onClick={() =>
+                          setArchive({
+                            resource: 'academic_sessions',
+                            id: s.id,
+                            title: 'Archive academic session',
+                          })
+                        }
+                      >
+                        Archive session
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       <div className="mb-6 flex flex-wrap gap-4 rounded-2xl border border-stone-200 bg-white p-4">
         <label className="min-w-0 flex-1 text-sm">
           Find a class, section or Class Teacher
@@ -226,6 +306,10 @@ export default function Academics() {
                         {first.academic_session_label} · {sections.length}{' '}
                         {sections.length === 1 ? 'section' : 'sections'} ·{' '}
                         {sections.reduce((n, c) => n + c.student_count, 0)} students
+                        {' · '}
+                        {sections.reduce((n, c) => n + c.male_count, 0)} male
+                        {' · '}
+                        {sections.reduce((n, c) => n + c.female_count, 0)} female
                       </p>
                     </div>
                   </div>
@@ -400,31 +484,17 @@ function ClassSection({
 }) {
   const a = useAuth(),
     [expanded, setExpanded] = useState(false),
-    [subjectPage, setSubjectPage] = useState(1),
-    [studentPage, setStudentPage] = useState(1),
-    [view, setView] = useState('current');
+    [subjectPage, setSubjectPage] = useState(1);
   const subjects = useQuery({
     queryKey: [a.school, 'academic-subjects', c.id, subjectPage],
     queryFn: () =>
       api<Page<AcademicSubject>>(`/academics/classes/${c.id}/subjects?page=${subjectPage}`),
     enabled: expanded,
   });
-  const students = useQuery({
-    queryKey: [a.school, 'academic-enrollments', c.id, studentPage, view],
-    queryFn: () =>
-      api<Page<AcademicEnrollment>>(
-        `/academics/classes/${c.id}/enrollments?page=${studentPage}&view=${view}`,
-      ),
-    enabled: expanded,
-  });
   useEffect(() => {
     if (subjects.data && subjectPage > Math.max(1, Math.ceil(subjects.data.total / 25)))
       setSubjectPage(Math.max(1, Math.ceil(subjects.data.total / 25)));
   }, [subjects.data?.total, subjectPage]);
-  useEffect(() => {
-    if (students.data && studentPage > Math.max(1, Math.ceil(students.data.total / 25)))
-      setStudentPage(Math.max(1, Math.ceil(students.data.total / 25)));
-  }, [students.data?.total, studentPage]);
   const classroom = `Class ${c.grade} · Section ${c.section}`;
   function assignment(subject?: AcademicSubject, initial?: Record<string, unknown>) {
     open({
@@ -435,17 +505,6 @@ function ClassSection({
       preset: { class_id: c.id, ...(subject ? { subject_id: subject.id } : {}) },
       hidden: ['class_id', ...(subject ? ['subject_id'] : [])],
       scope: `assignment:${c.id}:${subject?.id || 'new'}`,
-    });
-  }
-  function enrollment(initial?: Record<string, unknown>) {
-    open({
-      resource: 'enrollments',
-      title: initial ? 'Edit enrollment' : 'Enroll student',
-      description: classroom,
-      initial,
-      preset: { class_id: c.id, academic_session_id: c.academic_session_id },
-      hidden: ['class_id', 'academic_session_id', ...(initial ? ['student_id'] : [])],
-      scope: `enrollment:${c.id}`,
     });
   }
   return (
@@ -468,6 +527,8 @@ function ClassSection({
         <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-50 px-3 py-2 text-xs">
           <Users size={14} />
           {c.student_count} students
+          {' · '}
+          {c.male_count} male · {c.female_count} female
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-50 px-3 py-2 text-xs">
           <BookOpen size={14} />
@@ -669,81 +730,26 @@ function ClassSection({
               </>
             )}
           </section>
-          <section aria-label={`Students for ${classroom}`}>
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold">Enrolled students · {c.student_count}</h3>
-                <p className="text-sm text-stone-500">
-                  Current count includes active learners enrolled on today's school date.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="text-sm">
-                  Enrollment view
-                  <select
-                    className="input mt-1"
-                    aria-label="Enrollment view"
-                    value={view}
-                    onChange={(e) => {
-                      setView(e.target.value);
-                      setStudentPage(1);
-                    }}
-                  >
-                    <option value="current">Current students</option>
-                    <option value="all">All enrollment records</option>
-                  </select>
-                </label>
-                {can('students.write') && (
-                  <Button size="sm" variant="lime" onClick={() => enrollment()}>
-                    <Plus size={15} /> Enroll student
-                  </Button>
-                )}
-              </div>
-            </div>
-            {students.isLoading ? (
-              <Loading />
-            ) : students.error ? (
-              <ErrorState error={students.error} retry={() => students.refetch()} />
-            ) : !students.data?.data.length ? (
-              <Empty
-                title="No enrollments in this view"
-                description="Enroll an existing student or switch to all enrollment records to review scheduled and ended enrollments."
-              />
-            ) : (
-              <>
-                <DataTable
-                  rows={students.data.data}
-                  columns={[
-                    'student_code',
-                    'student_label',
-                    'roll_number',
-                    'status',
-                    'starts_on',
-                    'ends_on',
-                  ]}
-                  actions={
-                    can('students.write')
-                      ? (r) => (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            aria-label={`Edit enrollment for ${r.student_label}`}
-                            onClick={() => enrollment(r)}
-                          >
-                            Edit enrollment
-                          </Button>
-                        )
-                      : undefined
-                  }
-                />
-                <Paging
-                  page={studentPage}
-                  total={students.data.total}
-                  onPage={setStudentPage}
-                  caption="enrollments"
-                />
-              </>
-            )}
+          <section aria-label={`Student counts for ${classroom}`}>
+            <h3 className="text-lg font-semibold">Enrolled students · {c.student_count}</h3>
+            <p className="mt-1 text-sm text-stone-500">
+              Active students enrolled on today's school date. Manage individual students and
+              enrollments from Students.
+            </p>
+            <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {[
+                ['Total students', c.student_count],
+                ['Male', c.male_count],
+                ['Female', c.female_count],
+                ['Other', c.other_count],
+                ['Not specified', c.unspecified_count],
+              ].map(([title, count]) => (
+                <div key={title} className="rounded-xl bg-stone-50 p-4">
+                  <dt className="text-sm text-stone-600">{title}</dt>
+                  <dd className="mt-1 text-2xl font-semibold">{count}</dd>
+                </div>
+              ))}
+            </dl>
           </section>
         </div>
       )}

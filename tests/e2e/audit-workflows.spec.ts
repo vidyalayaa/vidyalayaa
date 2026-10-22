@@ -33,7 +33,16 @@ async function session(page: Page, role = 'school_admin') {
     permissions:
       role === 'parent'
         ? ['students.read', 'attendance.read', 'assignments.read']
-        : ['school.manage', 'students.read', 'students.write', 'reports.export', 'users.manage'],
+        : [
+            'school.manage',
+            'students.read',
+            'students.write',
+            'parents.read',
+            'parents.write',
+            'academics.read',
+            'reports.export',
+            'users.manage',
+          ],
   };
   await page.route('**/api/v1/me', (r) =>
     r.fulfill({
@@ -59,6 +68,9 @@ test('School Admin validates an import before committing the same rows', async (
 }) => {
   await session(page);
   await page.route('**/api/v1/resources/students?**', (r) => r.fulfill({ json: empty }));
+  await page.route('**/api/v1/student-directory/classes?**', (r) =>
+    r.fulfill({ json: { ...empty, unassigned_count: 0 } }),
+  );
   const calls: { rows: unknown[]; validate_only: boolean }[] = [];
   await page.route('**/api/v1/imports/students', async (r) => {
     const body = r.request().postDataJSON();

@@ -25,6 +25,8 @@ import './styles.css';
 import { portals, schoolPath, platformSections } from './lib/portals';
 const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
 const Academics = lazy(() => import('./features/academics/Academics'));
+const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
+const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
 const AttendanceHistory = lazy(() =>
   import('./features/operations/SchoolTools').then((m) => ({ default: m.AttendanceHistory })),
 );
@@ -97,7 +99,12 @@ function Guard() {
           Your school requires an authenticator. Enroll and verify it to continue.
         </p>
         <AuthenticatorSetup />
-        <button className="mt-4 underline" onClick={() => a.logout()}>
+        <button
+          className="mt-4 underline"
+          onClick={() => {
+            if (window.confirm('Are you sure you want to sign out?')) a.logout();
+          }}
+        >
           Sign out
         </button>
       </div>
@@ -105,10 +112,13 @@ function Guard() {
   if (configured && a.me) {
     if (location.pathname.startsWith('/platform') && a.me.platform_role !== 'SUPER_ADMIN')
       return (
-        <Empty
-          title="Access unavailable"
-          description="The platform console requires a Super Admin account."
-        />
+        <div className="flex min-h-[70vh] flex-col items-center justify-center p-6">
+          <Empty
+            title="Access unavailable"
+            description="The platform console requires a Super Admin account."
+            showHome
+          />
+        </div>
       );
     if (location.pathname === '/' && a.me.platform_role === 'SUPER_ADMIN')
       return <Navigate to="/platform" replace />;
@@ -147,7 +157,12 @@ function Guard() {
                 Accept an invitation above, or ask your school administrator to invite you.
               </p>
             )}
-            <button className="text-sm underline" onClick={() => a.logout()}>
+            <button
+              className="text-sm underline"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to sign out?')) a.logout();
+              }}
+            >
               Sign out
             </button>
           </div>
@@ -164,18 +179,24 @@ function PortalGate() {
     (configured && (!a.me?.school || portals[a.me.school.role] !== portal))
   )
     return (
-      <Empty
-        title="Access unavailable"
-        description="Choose a school and use your assigned role's workspace."
-      />
+      <div className="flex min-h-[70vh] flex-col items-center justify-center p-6">
+        <Empty
+          title="Access unavailable"
+          description="Choose a school and use your assigned role's workspace."
+          showHome
+        />
+      </div>
     );
   return <Outlet />;
 }
 function ResourcePage() {
   const { resource } = useParams();
   const a = useAuth();
+  const location = useLocation();
   if (!resourceNames.includes(resource as Resource)) return <Empty title="Page not found" />;
   const name = resource as Resource;
+  if (name === 'school_holidays')
+    return <Navigate replace to={schoolPath('/calendar', a.me?.school?.role) + location.search} />;
   if (a.me?.school?.role === 'teacher') {
     if (['students', 'parents', 'student_parents'].includes(name)) return <TeacherRoster />;
     if (['marks', 'exams'].includes(name)) return <TeacherAssessments kind="SUBJECT_TEST" />;
@@ -188,19 +209,37 @@ function ResourcePage() {
       );
   }
   if (configured && !a.me?.school?.permissions.includes(resourceInfo[name].permission))
-    if (
-      !(
-        a.me?.school?.role === 'teacher' &&
-        name === 'school_holidays' &&
-        a.me.school.permissions.includes('classrooms.read')
-      )
-    )
+    return (
+      <Empty
+        title="This area belongs to another role"
+        description="Your school administrator can help with access."
+      />
+    );
+  if (
+    a.me?.school?.role === 'school_admin' &&
+    ['students', 'parents', 'student_parents'].includes(name)
+  ) {
+    const params = new URLSearchParams(location.search);
+    if (name !== 'students' || params.has('view')) {
+      params.delete('view');
       return (
-        <Empty
-          title="This area belongs to another role"
-          description="Your school administrator can help with access."
+        <Navigate
+          replace
+          to={
+            schoolPath('/r/students', 'school_admin') + (params.size ? '?' + params.toString() : '')
+          }
         />
       );
+    }
+    return <StudentDirectory key={a.school} />;
+  }
+  if (
+    a.me?.school?.role === 'school_admin' &&
+    ['academic_sessions', 'classes', 'subjects', 'teacher_class_assignments'].includes(name)
+  )
+    return <Navigate replace to={schoolPath('/academics', 'school_admin')} />;
+  if (a.me?.school?.role === 'school_admin' && name === 'enrollments')
+    return <Navigate replace to={schoolPath('/r/students', 'school_admin')} />;
   return <ResourceScreen key={name} resource={name} />;
 }
 function Permission({ code, children }: { code: string; children: React.ReactNode }) {
@@ -227,6 +266,14 @@ function schoolRoutes() {
   return (
     <>
       <Route index element={<Dashboard />} />
+      <Route
+        path="calendar"
+        element={
+          <Permission code="calendar.read">
+            <SchoolCalendar />
+          </Permission>
+        }
+      />
       <Route
         path="academics"
         element={
@@ -362,10 +409,13 @@ const router = createBrowserRouter(
         <Route
           path="*"
           element={
-            <Empty
-              title="This page has moved"
-              description="Use the workspace navigation to find your way."
-            />
+            <div className="flex min-h-[70vh] flex-col items-center justify-center p-6">
+              <Empty
+                title="This page has moved"
+                description="Use the workspace navigation to find your way."
+                showHome
+              />
+            </div>
           }
         />
       </Route>

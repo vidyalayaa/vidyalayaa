@@ -28,7 +28,9 @@ import {
   Loading,
   ErrorState,
   Badge,
+  AttendanceTabs,
 } from '../../components/common';
+import { schoolPath } from '../../lib/portals';
 import { ActionDialog, type ActionField } from '../../components/ActionDialog';
 import { Dialog } from '../../components/ui/dialog';
 import MemberInvitations from '../auth/MemberInvitations';
@@ -92,7 +94,7 @@ export function Attendance() {
         actions={
           <>
             <Button variant="outline" asChild>
-              <Link to="/corrections">
+              <Link to={schoolPath('/corrections', a.me?.school?.role)}>
                 Corrections <ArrowUpRight size={15} />
               </Link>
             </Button>
@@ -113,19 +115,7 @@ export function Attendance() {
           manage attendance.
         </p>
       )}
-      <div className="tabs">
-        <Link className="tab-active" to="/attendance">
-          Daily attendance
-        </Link>
-        <Link to="/attendance/history">Movement history</Link>
-        {a.me?.school?.permissions.includes('cards.read') && (
-          <Link to="/r/nfc_cards">NFC cards</Link>
-        )}
-        {a.me?.school?.permissions.includes('rules.read') && (
-          <Link to="/r/attendance_rule_versions">Rule versions</Link>
-        )}
-        <Link to="/r/school_holidays">Calendar</Link>
-      </div>
+      <AttendanceTabs active="daily" />
       <Panel
         title="Daily register"
         subtitle="Attendance and movement are recorded separately."

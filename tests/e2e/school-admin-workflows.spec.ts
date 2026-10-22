@@ -46,20 +46,11 @@ test('School Admin dashboard, navigation and review-grant shortcut work', async 
 });
 
 for (const resource of [
-  'students',
-  'parents',
   'teachers',
-  'academic_sessions',
-  'classes',
-  'subjects',
-  'enrollments',
-  'student_parents',
-  'teacher_class_assignments',
   'exams',
   'marks',
   'assignments',
   'timetable_entries',
-  'school_holidays',
   'announcements',
   'fee_records',
   'device_locations',
@@ -84,12 +75,6 @@ for (const resource of [
     });
     expect(exam.status).toBe(201);
     const inputs: Record<string, Record<string, unknown>> = {
-      students: {
-        student_code: 'WEB_STUDENT',
-        email: 'student-web@example.test',
-        first_name: 'Website learner',
-      },
-      parents: { full_name: 'Website guardian', email: 'guardian-web@example.test' },
       teachers: {
         staff_code: 'WEB_STAFF',
         full_name: 'Website principal',
@@ -115,7 +100,6 @@ for (const resource of [
         starts_on: '2028-01-01',
         roll_number: 'WEB99',
       },
-      student_parents: { student_id: f.student, parent_id: f.parentId, relationship: 'FATHER' },
       teacher_class_assignments: {
         teacher_id: staff.id,
         class_id: f.classId,
@@ -185,19 +169,11 @@ for (const resource of [
       expect(teacher.status).toBe(201);
       inputs[resource].teacher_id = teacher.body.id;
     }
-    // Existing unique family link: create another parent instead of duplicating it.
-    if (resource === 'student_parents') {
-      const parent = await call('/resources/parents', 'POST', {
-        full_name: 'Website linked guardian',
-        email: 'linked-web@example.test',
-      });
-      expect(parent.status).toBe(201);
-      inputs[resource].parent_id = parent.body.id;
-    }
+    // Student/parent/family creation and edits are covered together in student-directory.spec.ts.
     await page.goto(authAppURL + '/admin/r/' + resource);
     await page
       .getByRole('button', {
-        name: resource === 'students' ? 'Add student' : 'Add record',
+        name: 'Add record',
         exact: true,
       })
       .click();
@@ -246,11 +222,9 @@ for (const resource of [
           ? 'amount_due'
           : resource === 'enrollments'
             ? 'roll_number'
-            : resource === 'student_parents'
-              ? 'relationship'
-              : resource === 'teacher_class_assignments'
-                ? 'ends_on'
-                : key;
+            : resource === 'teacher_class_assignments'
+              ? 'ends_on'
+              : key;
     const editValue =
       editKey === 'score'
         ? 89
@@ -292,9 +266,12 @@ test('School Admin builds an immutable attendance rule and opens student profile
   await save(page);
   await page.goto(authAppURL + '/admin/r/students');
   await page
-    .getByRole('row')
-    .filter({ hasText: 'STU001' })
-    .getByRole('button', { name: 'Profile', exact: true })
+    .locator('summary')
+    .filter({ has: page.getByRole('heading', { name: 'Class 8', exact: true }) })
+    .click();
+  await page
+    .getByRole('article', { name: 'Student STU001', exact: true })
+    .getByRole('button', { name: /^Test learner / })
     .click();
   await expect(page.getByRole('dialog')).toContainText('Test learner');
   await expect(page.getByRole('dialog')).toContainText('Parent Test');
@@ -521,7 +498,10 @@ test('School Admin imports students and archives a subject without removing hist
   await page.getByRole('button', { name: 'Import validated records', exact: true }).click();
   await expect(page.getByText('1 records imported.')).toBeVisible();
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'IMPORT_WEB' })).toBeVisible();
+  await page.locator('summary').filter({ hasText: 'Not currently enrolled' }).click();
+  await expect(
+    page.getByRole('article', { name: 'Student IMPORT_WEB', exact: true }),
+  ).toBeVisible();
   const f = platformApp.records;
   expect(
     (
@@ -1050,7 +1030,7 @@ test('School Admin school switching clears the previous school records and navig
   );
   expect(other).toBeTruthy();
   await page.goto(authAppURL + '/admin/r/students');
-  await expect(page.getByRole('row').filter({ hasText: 'STU001' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Class 8', exact: true })).toBeVisible();
   if (isMobile) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
   await page
     .getByRole('combobox', { name: 'Active school', exact: true })
@@ -1063,9 +1043,7 @@ test('School Admin school switching clears the previous school records and navig
     .click();
   await expect(page.getByRole('heading', { name: 'Students', exact: true })).toBeVisible();
   await expect(page.getByRole('row').filter({ hasText: 'STU001' })).toHaveCount(0);
-  await expect(
-    page.getByText('Add your first record to get started.', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No classes yet', exact: true })).toBeVisible();
 });
 
 test('School Admin searches students, pages the filtered list and resets filters', async ({
@@ -1095,18 +1073,26 @@ test('School Admin searches students, pages the filtered list and resets filters
     await page.locator('.global-search input').fill('Lookup learner 025');
     await page.locator('.global-search input').press('Enter');
     await expect(page).toHaveURL(/search=Lookup/);
-    await expect(page.getByRole('row').filter({ hasText: 'PAGE_WEB_025' })).toBeVisible();
-    await expect(page.getByRole('row').filter({ hasText: 'PAGE_WEB_024' })).toHaveCount(0);
+    await page.locator('summary').filter({ hasText: 'Not currently enrolled' }).click();
+    await expect(
+      page.getByRole('article', { name: 'Student PAGE_WEB_025', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('article', { name: 'Student PAGE_WEB_024', exact: true }),
+    ).toHaveCount(0);
   }
   const search = page
     .getByRole('main')
-    .getByRole('textbox', { name: 'Search Students', exact: true });
+    .getByRole('textbox', { name: 'Search students', exact: true });
   await search.fill('PAGE_WEB');
-  const records = page
-    .getByRole('row')
-    .filter({ has: page.getByRole('button', { name: /^Edit / }) });
+  const unassigned = page
+    .locator('details')
+    .filter({ has: page.locator('summary').filter({ hasText: 'Not currently enrolled' }) });
+  if (!(await unassigned.evaluate((e) => (e as HTMLDetailsElement).open)))
+    await unassigned.locator('summary').click();
+  const records = unassigned.getByRole('article');
   await expect(records).toHaveCount(25);
-  await page.getByRole('button', { name: 'Next page', exact: true }).click();
+  await unassigned.getByRole('button', { name: 'Next students', exact: true }).click();
   await expect(records).toHaveCount(1);
   await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
   await expect(search).toHaveValue('');

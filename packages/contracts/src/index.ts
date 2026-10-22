@@ -233,6 +233,7 @@ export const resourceSchemas = {
       first_name: text,
       last_name: nullableText,
       date_of_birth: date.nullable().optional(),
+      sex: z.enum(['NOT_SPECIFIED', 'MALE', 'FEMALE', 'OTHER']).default('NOT_SPECIFIED'),
       user_id: uuid.nullable().optional(),
       status: z.enum(['ACTIVE', 'TRANSFERRED', 'GRADUATED', 'WITHDRAWN']).default('ACTIVE'),
     })
@@ -414,6 +415,65 @@ export const resourceSchemas = {
 export type Resource = keyof typeof resourceSchemas;
 export type ResourceInput<K extends Resource> = z.infer<(typeof resourceSchemas)[K]>;
 export const resourceNames = Object.keys(resourceSchemas) as Resource[];
+export const studentAdmissionSchema = z
+  .object({
+    student: resourceSchemas.students.omit({ user_id: true }),
+    enrollment: z
+      .object({
+        class_id: uuid,
+        starts_on: date,
+        ends_on: date.nullable().optional(),
+        roll_number: nullableText,
+      })
+      .strict(),
+    guardians: z
+      .array(
+        z
+          .object({
+            parent_id: uuid.optional(),
+            parent: resourceSchemas.parents.omit({ user_id: true, status: true }).optional(),
+            relationship: resourceSchemas.student_parents.shape.relationship,
+            is_primary_contact: z.boolean().default(false),
+            can_receive_alerts: z.boolean().default(true),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(5),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.enrollment.ends_on && v.enrollment.ends_on < v.enrollment.starts_on)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['enrollment', 'ends_on'],
+        message: 'End date must be on or after the start date.',
+      });
+    if (v.guardians.filter((g) => g.is_primary_contact).length > 1)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['guardians'],
+        message: 'Choose at most one primary contact.',
+      });
+    const ids = new Set<string>();
+    v.guardians.forEach((g, i) => {
+      if (!!g.parent_id === !!g.parent)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['guardians', i, 'parent_id'],
+          message: 'Choose an existing parent or enter a new parent.',
+        });
+      if (g.parent_id && ids.has(g.parent_id))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['guardians', i, 'parent_id'],
+          message: 'This parent is already included.',
+        });
+      if (g.parent_id) ids.add(g.parent_id);
+    });
+  });
+export * from './student-directory.js';
+
 export const classSubjectSchema = z
   .object({
     subject_id: uuid.optional(),
@@ -547,6 +607,7 @@ export const manualSchema = z
 export { bulkMarksSchema } from './bulk.js';
 export * from './operations.js';
 export * from './academics.js';
+export * from './calendar.js';
 
 export interface InvitationCandidate {
   id: string;

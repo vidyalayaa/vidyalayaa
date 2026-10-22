@@ -6,6 +6,16 @@ export function cn(...inputs: ClassValue[]) {
 export function label(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (x) => x.toUpperCase());
 }
+export function sexLabel(value: string) {
+  return (
+    (
+      { MALE: 'Male', FEMALE: 'Female', OTHER: 'Other', NOT_SPECIFIED: 'Not specified' } as Record<
+        string,
+        string
+      >
+    )[value] || 'Not specified'
+  );
+}
 export function display(value: unknown, timeZone = 'Asia/Kolkata') {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';

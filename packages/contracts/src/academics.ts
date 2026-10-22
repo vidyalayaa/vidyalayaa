@@ -1,7 +1,9 @@
-export interface AcademicSession {
+export interface AcademicSession extends Record<string, unknown> {
   id: string;
   name: string;
   is_current: boolean;
+  starts_on: string;
+  ends_on: string;
 }
 export interface AcademicClass extends Record<string, unknown> {
   id: string;
@@ -13,6 +15,10 @@ export interface AcademicClass extends Record<string, unknown> {
   class_teacher_label: string | null;
   class_teacher_status: string | null;
   student_count: number;
+  male_count: number;
+  female_count: number;
+  other_count: number;
+  unspecified_count: number;
   subject_count: number;
   assignment_count: number;
   legacy_assignment_count: number;

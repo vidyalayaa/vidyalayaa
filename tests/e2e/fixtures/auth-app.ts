@@ -67,6 +67,9 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
           '/src/features/resources/ResourceScreen.tsx',
           '/src/features/operations/Screens.tsx',
           '/src/features/operations/Platform.tsx',
+          '/src/features/calendar/SchoolCalendar.tsx',
+          '/src/features/calendar/EventForm.tsx',
+          '/src/features/dashboard/Dashboard.tsx',
         ].map((path) => server.warmupRequest(path)),
       );
       const address = server.httpServer!.address();

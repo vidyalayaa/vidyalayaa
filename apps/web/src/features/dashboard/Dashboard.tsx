@@ -25,6 +25,8 @@ import ParentPortalSection from './ParentPortalSection';
 import TeacherPortalSection from './TeacherPortalSection';
 import StudentPortalSection from './StudentPortalSection';
 import AdminActionStrip from './AdminActionStrip';
+import UpcomingEvents from '../calendar/UpcomingEvents';
+import { schoolPath } from '../../lib/portals';
 const Chart = lazy(() => import('./TrendChart'));
 interface DashboardData {
   date: string;
@@ -102,7 +104,7 @@ export default function Dashboard() {
         }
         actions={
           <Button variant="outline" asChild>
-            <Link to="/r/school_holidays">
+            <Link to={schoolPath('/calendar', role)}>
               <CalendarDays size={16} />
               {new Intl.DateTimeFormat('en-IN', {
                 day: 'numeric',
@@ -136,6 +138,7 @@ export default function Dashboard() {
       {configured && role === 'parent' && <ParentPortalSection />}
       {configured && role === 'teacher' && <TeacherPortalSection />}
       {configured && role === 'student' && <StudentPortalSection />}
+      {configured && a.me?.school?.permissions.includes('calendar.read') && <UpcomingEvents />}
       {configured && (role === 'school_admin' || role === 'principal') && <AdminActionStrip />}
       <div className="hero-grid">
         <section className="welcome-card">

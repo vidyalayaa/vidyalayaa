@@ -115,6 +115,66 @@ beforeAll(async () => {
 });
 afterAll(async () => db.close());
 
+it('counts recorded sex in the correct section and excludes future, ended and inactive students', async () => {
+  const section = await create('classes', {
+    academic_session_id: f.session,
+    grade: '11',
+    section: 'SEX_COUNTS',
+    class_teacher_id: teacher2,
+  });
+  const ids: string[] = [];
+  for (const [code, sex, status, starts_on] of [
+    ['SEX_M', 'MALE', 'ACTIVE', '2026-01-01'],
+    ['SEX_F', 'FEMALE', 'ACTIVE', '2026-01-01'],
+    ['SEX_O', 'OTHER', 'ACTIVE', '2026-01-01'],
+    ['SEX_U', 'NOT_SPECIFIED', 'ACTIVE', '2026-01-01'],
+    ['SEX_FUTURE', 'MALE', 'ACTIVE', '2099-01-01'],
+    ['SEX_WITHDRAWN', 'FEMALE', 'WITHDRAWN', '2026-01-01'],
+  ]) {
+    const student = await create('students', { student_code: code, first_name: code, sex, status });
+    ids.push(student.id);
+    await create('enrollments', {
+      student_id: student.id,
+      class_id: section.id,
+      academic_session_id: f.session,
+      starts_on,
+    });
+  }
+  const stats = async () =>
+    (await call('get', '/academics/classes')).body.data.find((c: any) => c.id === section.id);
+  expect(await stats()).toMatchObject({
+    student_count: 4,
+    male_count: 1,
+    female_count: 1,
+    other_count: 1,
+    unspecified_count: 1,
+  });
+  expect((await call('patch', '/resources/students/' + ids[1]).send({ sex: 'MALE' })).status).toBe(
+    200,
+  );
+  expect(await stats()).toMatchObject({
+    student_count: 4,
+    male_count: 2,
+    female_count: 0,
+    other_count: 1,
+    unspecified_count: 1,
+  });
+  const invalid = await call('patch', '/resources/students/' + ids[0]).send({ sex: 'INVALID' });
+  expect(invalid.status).toBe(422);
+  expect(
+    (await call('patch', '/resources/students/' + ids[0], 'teacher').send({ sex: 'FEMALE' }))
+      .status,
+  ).toBe(403);
+  expect(
+    (await call('patch', '/resources/students/' + f.foreignStudent).send({ sex: 'FEMALE' })).status,
+  ).toBe(404);
+  await expect(db.query("UPDATE students SET sex='INVALID' WHERE id=$1", [ids[0]])).rejects.toThrow(
+    /students_sex_check/,
+  );
+  // Retire this isolated section so the existing pagination/group assertions remain stable.
+  await db.query('UPDATE classes SET retired_at=now() WHERE id=$1', [section.id]);
+});
+
 it('groups existing classes with accurate student, distinct-subject and Class Teacher data without writing records', async () => {
   const before = (await db.query('SELECT id FROM teacher_class_assignments ORDER BY id')).rows;
   const r = await call('get', '/academics/classes');
@@ -124,6 +184,10 @@ it('groups existing classes with accurate student, distinct-subject and Class Te
     grade: '8',
     section: 'A',
     student_count: 1,
+    male_count: 0,
+    female_count: 0,
+    other_count: 0,
+    unspecified_count: 1,
     subject_count: 1,
     assignment_count: 2,
     class_teacher_id: f.teacherId,

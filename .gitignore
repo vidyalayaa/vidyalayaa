@@ -9,6 +9,7 @@ test-results/
 tmp/
 *.log
 .firebase/
+supabase/.temp/
 .pio/
 credentials/
 *.pem

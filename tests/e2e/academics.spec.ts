@@ -16,6 +16,10 @@ async function save(page: Page, closes = true) {
     .getByRole('button', { name: 'Save record', exact: true })
     .click();
   if (closes) await expect(page.getByRole('dialog')).toHaveCount(0);
+  else
+    await expect(
+      page.getByRole('dialog').last().getByRole('button', { name: 'Save record', exact: true }),
+    ).toHaveCount(0);
 }
 async function expand(page: Page, grade: string, section: string) {
   const group = page.getByRole('region', { name: `Class ${grade} · Test year`, exact: true });
@@ -27,12 +31,12 @@ async function expand(page: Page, grade: string, section: string) {
   return group.getByRole('region', { name: `Class ${grade} · Section ${section}`, exact: true });
 }
 
-test('Academics groups classes and sections with correctly scoped subjects, students and Class Teacher', async ({
+test('Academics groups sections with subjects, Class Teacher and counts without fetching student rosters', async ({
   page,
   authAppURL,
   platformApp,
   isMobile,
-}) => {
+}, testInfo) => {
   test.setTimeout(120000);
   const f = platformApp.records;
   const admin = (path: string, method = 'GET', body?: unknown) =>
@@ -68,6 +72,7 @@ test('Academics groups classes and sections with correctly scoped subjects, stud
   const learner = await admin('/resources/students', 'POST', {
     student_code: 'ACA_VIEW_B',
     first_name: 'View section B learner',
+    sex: 'FEMALE',
   });
   expect(
     (
@@ -79,6 +84,10 @@ test('Academics groups classes and sections with correctly scoped subjects, stud
       })
     ).status,
   ).toBe(201);
+  const rosterRequests: string[] = [];
+  page.on('request', (r) => {
+    if (/\/academics\/classes\/[^/]+\/enrollments/.test(r.url())) rosterRequests.push(r.url());
+  });
   await page.goto(authAppURL + '/admin');
   if (isMobile) await page.getByRole('button', { name: 'Open navigation' }).click();
   await page
@@ -99,11 +108,15 @@ test('Academics groups classes and sections with correctly scoped subjects, stud
   await expect(
     first.getByRole('heading', { name: 'Enrolled students · 1', exact: true }),
   ).toBeVisible();
-  await expect(first).toContainText('Test learner');
+  await expect(first).not.toContainText('Test learner');
   await expect(first).not.toContainText('View section B learner');
+  await expect(first.getByRole('definition').last()).toHaveText('1');
   const other = await expand(page, '8', 'VIEW_B');
   await expect(other).toContainText('View English');
-  await expect(other).toContainText('View section B learner');
+  await expect(other).not.toContainText('View section B learner');
+  await expect(
+    other.locator('dl > div').filter({ has: page.getByText('Female', { exact: true }) }),
+  ).toContainText('1');
   await expect(other).not.toContainText('Test learner');
   await expect(
     other.getByRole('article', { name: 'Subject Mathematics', exact: true }),
@@ -113,9 +126,64 @@ test('Academics groups classes and sections with correctly scoped subjects, stud
   await page.getByLabel('Find academic class').fill('Class 8');
   await expect(group.locator('summary')).toHaveCount(2);
   expect((await admin('/resources/subjects?search=ACA_VIEW_ENG')).body.total).toBe(1);
-  await page.getByRole('link', { name: 'Academic sessions', exact: true }).click();
-  await page.getByRole('link', { name: 'Classes & Sections', exact: true }).click();
+  expect(rosterRequests).toEqual([]);
+  await page.screenshot({
+    path: `tmp/qa/academics-counts-${testInfo.project.name}.png`,
+    fullPage: true,
+  });
+  for (const resource of [
+    'academic_sessions',
+    'classes',
+    'subjects',
+    'teacher_class_assignments',
+  ]) {
+    await page.goto(authAppURL + '/admin/r/' + resource);
+    await expect(page).toHaveURL(/\/admin\/academics$/);
+    await expect(page.getByRole('button', { name: 'Add record', exact: true })).toHaveCount(0);
+  }
+});
+
+test('Academic session management stays in the class-wise workspace', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  await page.goto(authAppURL + '/admin/academics');
+  await page.getByRole('button', { name: 'Academic sessions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add academic session', exact: true }).click();
+  await fill(page, { name: 'Inline session', starts_on: '2030-01-01', ends_on: '2030-12-31' });
+  await save(page);
   await expect(page).toHaveURL(/\/admin\/academics$/);
+  await page.getByRole('button', { name: 'Edit session Inline session', exact: true }).click();
+  await fill(page, { name: 'Inline session updated' });
+  await save(page);
+  await expect(
+    page.getByRole('heading', { name: 'Inline session updated', exact: true }),
+  ).toBeVisible();
+  const accessibility = await new AxeBuilder({ page }).include('main').analyze();
+  expect(
+    accessibility.violations.filter((v) => ['serious', 'critical'].includes(v.impact || '')),
+  ).toEqual([]);
+  await page
+    .getByRole('button', { name: 'Archive session Inline session updated', exact: true })
+    .click();
+  await page.getByRole('dialog').locator('#action-reason').fill('Archive unused future session');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Inline session updated', exact: true }),
+  ).toHaveCount(0);
+  expect(
+    (
+      await platformApp.request(
+        '/resources/academic_sessions?search=Inline',
+        'GET',
+        undefined,
+        platformApp.records.admin,
+        platformApp.records.schoolA,
+      )
+    ).body.total,
+  ).toBe(0);
 });
 
 test('School Admin creates and edits sections and designates a Class Teacher in Academics', async ({
@@ -295,7 +363,7 @@ test('School Admin can cancel a new section subject or reuse an existing subject
   ).toHaveLength(1);
 });
 
-test('School Admin enrolls, edits, ends and reviews student history without leaving the section', async ({
+test('School Admin manages enrollment history in student profiles while Academics shows counts only', async ({
   page,
   authAppURL,
   platformApp,
@@ -314,25 +382,37 @@ test('School Admin enrolls, edits, ends and reviews student history without leav
     student_code: 'ACA_UI_ENROLL',
     first_name: 'Website enrolled learner',
   });
-  await page.goto(authAppURL + '/admin/academics');
-  const region = await expand(page, '4', 'ENROLL_CRUD');
-  await region.getByRole('button', { name: 'Enroll student', exact: true }).click();
-  await fill(page, { student_id: student.body.id, starts_on: '2026-01-01', roll_number: '41' });
-  await save(page);
-  await expect(
-    region.getByRole('heading', { name: 'Enrolled students · 1', exact: true }),
-  ).toBeVisible();
-  await region
-    .getByRole('button', { name: 'Edit enrollment for Website enrolled learner', exact: true })
+  await page.goto(authAppURL + '/admin/r/enrollments');
+  await expect(page).toHaveURL(/\/admin\/r\/students$/);
+  await page.locator('summary').filter({ hasText: 'Not currently enrolled' }).click();
+  await page
+    .getByRole('article', { name: 'Student ACA_UI_ENROLL', exact: true })
+    .getByRole('button', { name: /^Website enrolled learner / })
+    .click();
+  await page.getByRole('button', { name: 'Add enrollment', exact: true }).click();
+  await fill(page, {
+    class_id: c.body.id,
+    academic_session_id: f.session,
+    starts_on: '2026-01-01',
+    roll_number: '41',
+  });
+  await save(page, false);
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await expect(page.getByRole('dialog')).toContainText('Roll #41');
+  await page
+    .getByRole('button', { name: 'Edit enrollment 4 ENROLL_CRUD Test year', exact: true })
     .click();
   await fill(page, { roll_number: '42', status: 'ENDED', ends_on: '2026-10-21' });
-  await save(page);
+  await save(page, false);
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await expect(page.getByRole('dialog')).toContainText('Roll 42');
+  await page.getByRole('dialog').getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.goto(authAppURL + '/admin/academics');
+  const region = await expand(page, '4', 'ENROLL_CRUD');
   await expect(
     region.getByRole('heading', { name: 'Enrolled students · 0', exact: true }),
   ).toBeVisible();
-  await region.getByLabel('Enrollment view', { exact: true }).selectOption('all');
-  await expect(region).toContainText('Website enrolled learner');
-  await expect(region).toContainText('42');
+  await expect(region).not.toContainText('Website enrolled learner');
   await region.getByRole('button', { name: 'Archive section', exact: true }).click();
   await page
     .getByRole('dialog')
@@ -353,18 +433,26 @@ test('Academics loads classes beyond the first hundred and has accessible respon
 }, testInfo) => {
   test.setTimeout(120000);
   const f = platformApp.records;
+  const pagingTeacher = await platformApp.request(
+    '/resources/teachers',
+    'POST',
+    { staff_code: 'ACA_PAGE_TEACHER', full_name: 'Academics paging teacher' },
+    f.admin,
+    f.schoolA,
+  );
+  expect(pagingTeacher.status).toBe(201);
   await platformApp.db.query("SELECT set_config('app.school_id',$1,false)", [f.schoolA]);
   try {
     await platformApp.db.query(
-      "INSERT INTO classes(school_id,academic_session_id,grade,section,class_teacher_id) SELECT $1,$2,'12','PAGE_'||n,$3 FROM generate_series(1,103) n",
-      [f.schoolA, f.session, f.teacherId],
+      "INSERT INTO classes(school_id,academic_session_id,grade,section,class_teacher_id) SELECT $1,$2,'13','PAGE_'||n,$3 FROM generate_series(1,103) n",
+      [f.schoolA, f.session, pagingTeacher.body.id],
     );
   } finally {
     await platformApp.db.query("SELECT set_config('app.school_id','',false)");
   }
   await page.goto(authAppURL + '/admin/academics');
-  const group = page.getByRole('region', { name: 'Class 12 · Test year', exact: true });
-  await expect(group.locator('summary')).toHaveCount(103);
+  const group = page.getByRole('region', { name: 'Class 13 · Test year', exact: true });
+  await expect(group.locator('summary')).toHaveCount(103, { timeout: 30000 });
   await page.getByLabel('Find academic class').fill('Section PAGE_103');
   await expect(page.locator('summary')).toHaveCount(1);
   await group.locator('summary').click();
