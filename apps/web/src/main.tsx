@@ -430,16 +430,29 @@ window.addEventListener('vidyalayaa:step-up', (event) => {
       : `/login?mfa=1&recent=1&returnTo=${encodeURIComponent(location.pathname + location.search)}`,
   );
 });
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <Boundary>
-      <QueryClientProvider client={client}>
-        <AuthProvider>
-          <Suspense fallback={<Loading />}>
-            <RouterProvider router={router} />
-          </Suspense>
-        </AuthProvider>
-      </QueryClientProvider>
-    </Boundary>
-  </React.StrictMode>,
-);
+import SplashScreen from './components/SplashScreen';
+
+function App() {
+  const [showSplash, setShowSplash] = React.useState(() => {
+    if (sessionStorage.getItem('vidyalayaa_splash_shown')) return false;
+    sessionStorage.setItem('vidyalayaa_splash_shown', '1');
+    return true;
+  });
+  const hideSplash = React.useCallback(() => setShowSplash(false), []);
+  return (
+    <React.StrictMode>
+      {showSplash && <SplashScreen onFinished={hideSplash} />}
+      <Boundary>
+        <QueryClientProvider client={client}>
+          <AuthProvider>
+            <Suspense fallback={<Loading />}>
+              <RouterProvider router={router} />
+            </Suspense>
+          </AuthProvider>
+        </QueryClientProvider>
+      </Boundary>
+    </React.StrictMode>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
