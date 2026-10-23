@@ -5,6 +5,7 @@ export const portals: Record<Role, string> = {
   teacher: 'teacher',
   parent: 'parent',
   student: 'student',
+  finance_staff: 'finance',
 };
 export function schoolPath(path: string, role?: Role) {
   if (

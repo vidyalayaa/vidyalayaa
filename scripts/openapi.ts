@@ -30,12 +30,15 @@ import {
   deviceTuningSchema,
   retentionPolicySchema,
   classAttendanceSchema,
-  feePaymentSchema,
+  feePaymentSchema, feeDate,
+  feeStructureSchema, feeAssessmentSchema, feeCollectionSchema, feeReasonSchema, transportRouteSchema, transportAssignmentSchema,
   classSubjectSchema,
   studentAdmissionSchema,
   calendarEventSchema,
   calendarEventUpdateSchema,
   calendarDeleteSchema,
+  schoolTimingsSchema,
+  schoolTimingsUpdateSchema,
 } from '@vidyalayaa/contracts';
 // Generate from the same schemas used by Express and the browser. Do not edit JSON by hand.
 function json(schema: z.ZodTypeAny): Record<string, unknown> {
@@ -124,11 +127,14 @@ const schemas = {
   ManualAttendance: manualSchema,
   ClassAttendance: classAttendanceSchema,
   FeePayment: feePaymentSchema,
+  FeeStructure: feeStructureSchema, FeeAssessment: feeAssessmentSchema, FeeCollection: feeCollectionSchema, FeeCorrection: feeReasonSchema, FeeTransportEnd:feeReasonSchema.extend({ended_on:feeDate}), FeeTransportRoute: transportRouteSchema, FeeTransportAssignment: transportAssignmentSchema,
   ClassSubject: classSubjectSchema,
   StudentAdmission: studentAdmissionSchema,
   CalendarEvent: calendarEventSchema,
   CalendarEventUpdate: calendarEventUpdateSchema,
   CalendarEventDelete: calendarDeleteSchema,
+  SchoolTimings: schoolTimingsSchema,
+  SchoolTimingsUpdate: schoolTimingsUpdateSchema,
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
@@ -195,7 +201,14 @@ function operation(
   }
 }
 for (const name of Object.keys(resourceSchemas)) {
-  operation(`/resources/${name}`, 'get', `List scoped ${name}`);
+  operation(`/resources/${name}`, 'get', `List scoped ${name}`, undefined, 'UserJWT',
+    ['marks', 'subjects', 'exams'].includes(name) ? {
+      parameters: [
+        { name: 'X-School-Id', in: 'header', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'class_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Exact class/section record. Marks are filtered through the examination class; subjects use configured section assignments.' },
+        ...(name === 'marks' ? [{ name: 'exam_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Combines with class_id; an examination from another class returns no matching marks.' }] : []),
+      ],
+    } : {});
   operation(`/resources/${name}`, 'post', `Create ${name}`, name, 'UserJWT', {
     parameters: [{ name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } }],
   });
@@ -204,6 +217,14 @@ for (const name of Object.keys(resourceSchemas)) {
 }
 operation('/me', 'get', 'Verified identity, memberships, permissions and entitlements');
 operation('/dashboard', 'get', 'Role-scoped school dashboard');
+operation('/timetable/settings', 'get', 'School timing template; configured=false means unsaved defaults');
+operation('/timetable/settings', 'put', 'School Admin-only versioned timing update; preserves existing lectures', 'SchoolTimingsUpdate', 'UserJWT', {
+  parameters:[{name:'X-School-Id',in:'header',required:true,schema:{type:'string',format:'uuid'}},{name:'Idempotency-Key',in:'header',schema:{type:'string'}}],
+});
+operation('/timetable/classes', 'get', 'Paginated authorized timetable classes and sections');
+for (const child of ['entries','assignments']) operation(`/timetable/classes/{id}/${child}`, 'get', child==='entries'?'Paginated weekly class lectures with labels':'School Admin-only active subject/teacher assignments for this class',undefined,'UserJWT',{
+  parameters:[{name:'X-School-Id',in:'header',required:true,schema:{type:'string',format:'uuid'}},{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}},{name:'page',in:'query',schema:{type:'integer',minimum:1}},{name:'page_size',in:'query',schema:{type:'integer',minimum:1,maximum:100}}],
+});
 operation('/attendance', 'get', 'Paginated daily attendance');
 operation('/attendance/manual', 'post', 'Manual classroom attendance', 'ManualAttendance');
 operation(
@@ -715,6 +736,35 @@ operation(
     },
   },
 );
+for (const [path,method,summary,schema] of [
+ ['/fees/options','get','Accessible fee year and class choices',''],
+ ['/fees/students','get','Paginated authorized fee students; academic_session_id required',''],
+ ['/fees/students/{id}','get','Authoritative academic/transport statement and payment history; academic_session_id required',''],
+ ['/fees/assessments/{id}','get','Authorized installment lookup for existing student-profile payment links',''],
+ ['/fees/payments/{id}','get','Authorized immutable receipt and reversal status',''],
+ ['/fees/structures','get','Paginated class fee versions; academic_session_id and grade required',''],
+ ['/fees/structures','post','Create an immutable class-wide or section fee version','FeeStructure'],
+ ['/fees/assessments/preview','post','Preview only unassessed enrollment installments','FeeAssessment'],
+ ['/fees/assessments','post','Idempotently assess class-section or student without rewriting prior charges','FeeAssessment'],
+ ['/fees/assessments/{id}/void','post','Void an unpaid assessment with audit reason','FeeCorrection'],
+ ['/fees/payments','post','Record balanced multi-installment payment; required durable Idempotency-Key; manual receipt override School Admin-only','FeeCollection'],
+ ['/fees/payments/{id}/reverse','post','Reverse full payment with immutable original receipt; required Idempotency-Key','FeeCorrection'],
+ ['/fees/routes','get','List transport routes for authorized school staff',''],
+ ['/fees/routes','post','Create transport route','FeeTransportRoute'],
+ ['/fees/routes/{id}','patch','Edit or deactivate route; posted student prices unchanged','FeeTransportRoute'],
+ ['/fees/transport','post','Assign service and assess transport installments; required Idempotency-Key','FeeTransportAssignment'],
+ ['/fees/transport/{id}/end','post','End service; reason plus ended_on date; void future unpaid installments','FeeTransportEnd'],
+ ['/fees/reports','get','Staff-only year/class/section/student/category summaries, paginated assessments and date-wise net collections',''],
+ ['/fees/reports/export','get','Staff-only Excel-compatible CSV JSON download; max 10000 rows, spreadsheet formula protection',''],
+] as const) operation(path,method,summary,schema||undefined);
+for(const path of ['/fees/students','/fees/students/{id}','/fees/structures','/fees/reports','/fees/reports/export']){
+ const op=paths[path].get as {parameters:unknown[]};
+ const fields=path==='/fees/structures'?['academic_session_id','grade','page','page_size']:path==='/fees/students/{id}'?['academic_session_id']:path.startsWith('/fees/reports')?['academic_session_id','grade','class_id','student_id','category','search','from','to','page','page_size']:['academic_session_id','grade','class_id','search','page','page_size'];
+ for(const name of fields)op.parameters.push({name,in:'query',required:(name==='academic_session_id'&&!path.startsWith('/fees/reports'))||(path==='/fees/structures'&&name==='grade'),schema:name.endsWith('_id')?{type:'string',format:'uuid'}:name==='page'||name==='page_size'?{type:'integer',minimum:1,...(name==='page_size'?{maximum:100}:{})}:name==='from'||name==='to'?{type:'string',format:'date'}:{type:'string'}});
+}
+for(const path of ['/fees/payments','/fees/payments/{id}/reverse','/fees/transport']){
+ const op=paths[path].post as {parameters:unknown[]};op.parameters.push({name:'Idempotency-Key',in:'header',required:true,schema:{type:'string',minLength:8,maxLength:200,pattern:'^[a-zA-Z0-9:_-]+$'}});
+}
 for (const [path, methods] of Object.entries(paths))
   for (const op of Object.values(methods)) {
     const o = op as {

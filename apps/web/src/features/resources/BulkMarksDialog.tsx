@@ -47,8 +47,9 @@ export default function BulkMarksDialog({
     [pending, setPending] = useState(false),
     idempotency = useRef(crypto.randomUUID());
   const exams = useQuery({
-    queryKey: [a.school, 'exams', 'import'],
-    queryFn: () => all('exams'),
+    queryKey: [a.school, 'exams', 'import', examId],
+    queryFn: async () =>
+      examId ? [await api<Record<string, unknown>>('/resources/exams/' + examId)] : all('exams'),
     enabled: open,
   });
   return (

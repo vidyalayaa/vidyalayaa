@@ -27,6 +27,9 @@ const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
 const Academics = lazy(() => import('./features/academics/Academics'));
 const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
 const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
+const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
+const Timetable = lazy(() => import('./features/timetable/Timetable'));
+const Fees = lazy(() => import('./features/fees/Fees'));
 const AttendanceHistory = lazy(() =>
   import('./features/operations/SchoolTools').then((m) => ({ default: m.AttendanceHistory })),
 );
@@ -215,6 +218,10 @@ function ResourcePage() {
         description="Your school administrator can help with access."
       />
     );
+  if (a.me?.school?.role === 'school_admin' && name === 'marks')
+    return <SchoolResults key={a.school} />;
+  if (name === 'timetable_entries') return <Timetable key={a.school} />;
+  if (name === 'fee_records') return <Fees key={a.school} />;
   if (
     a.me?.school?.role === 'school_admin' &&
     ['students', 'parents', 'student_parents'].includes(name)

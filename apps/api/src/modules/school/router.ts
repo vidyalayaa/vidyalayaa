@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { academicsRouter } from './academics.js';
 import { studentDirectoryRouter } from './student-directory.js';
 import { calendarRouter } from './calendar.js';
+import { timetableRouter } from './timetable.js';
+import { feesRouter, collectFeePayment } from './fees.js';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -176,6 +178,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
+  router.use('/timetable', timetableRouter(pool, { requireWrite, withIdempotency }));
+  router.use('/fees', feesRouter(pool, { requireWrite, withIdempotency }));
   router.get(
     '/school/retention',
     permission('school.manage'),
@@ -551,7 +555,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           const feeSummary = (
             await tx.query(
               `SELECT
-                 coalesce(sum(amount_due), 0)::numeric as total_due,
+                 coalesce(sum(amount_due) FILTER(WHERE status<>'WAIVED' AND voided_at IS NULL), 0)::numeric as total_due,
                  coalesce(sum(amount_paid), 0)::numeric as total_paid,
                  coalesce(sum(CASE WHEN status='WAIVED' THEN 0 ELSE amount_due - amount_paid END), 0)::numeric as balance,
                  count(*) FILTER (WHERE status = 'UNPAID')::int as unpaid_count
@@ -562,8 +566,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
 
           const fees = (
             await tx.query(
-              `SELECT id, fee_type, amount_due, amount_paid, due_on, status, currency
-               FROM fee_records WHERE school_id=$1 AND student_id=$2 AND $3::boolean ORDER BY due_on DESC LIMIT 10`,
+              `SELECT id, fee_type, amount_due, amount_paid, due_on::text, status, currency
+               FROM fee_records WHERE school_id=$1 AND student_id=$2 AND $3::boolean AND voided_at IS NULL AND status<>'WAIVED' ORDER BY due_on DESC LIMIT 10`,
               [a.context.schoolId, id, a.active!.permissions.includes('fees.read')],
             )
           ).rows;
@@ -741,6 +745,16 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             params.push(q.exam_id);
             where += ` AND t.exam_id=$${params.length}`;
           }
+          if (q.class_id && name === 'marks') {
+            await assertClass(tx, a, q.class_id);
+            params.push(q.class_id);
+            where += ` AND EXISTS(SELECT FROM exams ex WHERE ex.school_id=t.school_id AND ex.id=t.exam_id AND ex.class_id=$${params.length})`;
+          }
+          if (q.class_id && name === 'subjects' && a.active!.role !== 'teacher') {
+            await assertClass(tx, a, q.class_id);
+            params.push(q.class_id);
+            where += ` AND EXISTS(SELECT FROM teacher_class_assignments ta WHERE ta.school_id=t.school_id AND ta.subject_id=t.id AND ta.class_id=$${params.length} AND ta.retired_at IS NULL)`;
+          }
           if (q.assessment_kind && name === 'exams') {
             params.push(q.assessment_kind);
             where += ` AND t.assessment_kind=$${params.length}`;
@@ -870,6 +884,28 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
           `${a.context.schoolId}:${name}`,
         ]);
+        if (name === 'fee_records') {
+          const identity = (
+            await tx.query(
+              'SELECT student_id,academic_session_id FROM fee_records WHERE school_id=$1 AND id=$2',
+              [a.context.schoolId, id],
+            )
+          ).rows[0];
+          if (!identity) throw notFound();
+          const accounts = [
+            { student: identity.student_id, year: identity.academic_session_id },
+            {
+              student: patch.student_id || identity.student_id,
+              year: patch.academic_session_id || identity.academic_session_id,
+            },
+          ].sort((x, y) => (x.student + ':' + x.year).localeCompare(y.student + ':' + y.year));
+          for (const account of accounts)
+            await tx.query('SELECT app.lock_fee_account($1,$2,$3)', [
+              a.context.schoolId,
+              account.student,
+              account.year,
+            ]);
+        }
         const old = (
           await tx.query(
             `SELECT t.* FROM ${name} t WHERE t.school_id=$1 AND t.id=$3 AND ${resourceScope(name, a)} FOR UPDATE`,
@@ -1131,6 +1167,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
         id = uuid.parse(req.params.id);
+      if (a.active?.role !== 'school_admin')
+        throw new ApiError(403, 'FORBIDDEN', 'Only School Admin can queue fee reminders.');
       res.json(
         await transaction(pool, a.context, async (tx) => {
           await requireWrite(tx, a);
@@ -1178,50 +1216,39 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         await requireWrite(tx, a);
         return withIdempotency(tx, a, key, { operation: 'fee.payment', id, ...b }, async () => {
           const fee = (
-            await tx.query('SELECT * FROM fee_records WHERE school_id=$1 AND id=$2 FOR UPDATE', [
+            await tx.query('SELECT * FROM fee_records WHERE school_id=$1 AND id=$2', [
               a.context.schoolId,
               id,
             ])
           ).rows[0];
           if (!fee) throw notFound();
-          const paid = Math.round(Number(fee.amount_paid) * 100),
-            due = Math.round(Number(fee.amount_due) * 100),
-            amount = Math.round(b.amount * 100);
-          if (['PAID', 'WAIVED'].includes(fee.status) || paid >= due)
-            throw new ApiError(409, 'FEE_SETTLED', 'This fee has no outstanding balance.');
-          if (amount > due - paid)
-            throw new ApiError(
-              409,
-              'PAYMENT_EXCEEDS_BALANCE',
-              'The payment exceeds the outstanding balance. Refresh the fee record.',
-            );
+          const today = localParts(new Date(), a.active!.timezone).date;
+          const payment = await collectFeePayment(
+            tx,
+            a,
+            {
+              student_id: fee.student_id,
+              academic_session_id: fee.academic_session_id,
+              payment_date: today,
+              payment_method: b.payment_method,
+              reference: b.note || '',
+              note: b.note || '',
+              allocations: [{ fee_id: id, amount: b.amount }],
+            },
+            key,
+          );
           const updated = (
-            await tx.query(
-              'UPDATE fee_records SET amount_paid=$2,status=$3 WHERE school_id=$1 AND id=$4 RETURNING *',
-              [
-                a.context.schoolId,
-                (paid + amount) / 100,
-                paid + amount === due ? 'PAID' : 'PARTIAL',
-                id,
-              ],
-            )
+            await tx.query('SELECT * FROM fee_records WHERE school_id=$1 AND id=$2', [
+              a.context.schoolId,
+              id,
+            ])
           ).rows[0];
           const receipt = {
-            receipt_no: 'REC-' + crypto.randomUUID(),
+            ...payment.receipt,
             amount_paid_now: b.amount,
-            payment_method: b.payment_method,
-            note: b.note || '',
-            date: new Date().toISOString(),
+            date: payment.receipt.payment_date,
+            payment_id: payment.id,
           };
-          await tx.query(
-            "INSERT INTO audit_logs(school_id,actor_type,actor_id,action,entity_type,entity_id,after) VALUES($1,'USER',$2,'fee.payment_received','fee_records',$3,$4)",
-            [
-              a.context.schoolId,
-              a.id,
-              id,
-              { receipt, amount_paid: updated.amount_paid, status: updated.status },
-            ],
-          );
           return { ...updated, receipt };
         });
       });
@@ -1274,7 +1301,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     asyncRoute(async (req, res) => {
       const a = res.locals.actor;
       const role = z
-        .enum(['school_admin', 'principal', 'teacher', 'parent', 'student'])
+        .enum(['school_admin', 'principal', 'teacher', 'parent', 'student', 'finance_staff'])
         .parse(req.query.role);
       const table = role === 'student' ? 'students' : role === 'parent' ? 'parents' : 'teachers';
       const label = role === 'student' ? "concat_ws(' ',t.first_name,t.last_name)" : 't.full_name';
@@ -1429,7 +1456,14 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         id = uuid.parse(req.params.id),
         b = z
           .object({
-            role: z.enum(['school_admin', 'principal', 'teacher', 'parent', 'student']),
+            role: z.enum([
+              'school_admin',
+              'principal',
+              'teacher',
+              'parent',
+              'student',
+              'finance_staff',
+            ]),
             status: z.enum(['ACTIVE', 'SUSPENDED', 'REMOVED']),
           })
           .strict()

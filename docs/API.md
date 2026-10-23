@@ -1,5 +1,9 @@
 # Vidyalayaa REST API
 
+The [weekly timetable](TIMETABLE.md) reuses `timetable_entries` and stores validated school timings in existing school settings. `/timetable/*` supplies versioned timings and role-scoped class/lecture choices; existing resource CRUD and retirement routes remain the lecture write contracts. Only School Admin can write, with database-enforced assignments, periods, role/ownership rules and overlap constraints.
+
+School Admin's [class-wise Results](CLASS_WISE_RESULTS.md) select a class/section and its examination before entering or importing marks. `GET /resources/marks?class_id=...&exam_id=...` intersects both scopes; `GET /resources/subjects?class_id=...` returns configured section subjects. Existing examination, student, individual-mark and bulk-mark endpoints remain the source of truth.
+
 School Admin's [student and family admission form and class-wise student directory](STUDENT_ADMISSION.md) use `/student-directory/*`. `POST /student-directory/admissions` atomically saves a student, class enrollment, one to five new/existing parents, and their family connections. Existing email matches require explicit parent selection; this workflow does not create Auth accounts or send invitations.
 
 School Admin's expandable [class-wise Academics workspace](CLASS_WISE_ACADEMICS.md) uses `/academics/classes` and its paginated subjects and unconfigured-assignment child endpoints. Class summaries include `student_count`, `male_count`, `female_count`, `other_count` and `unspecified_count`, based on dated active enrollments and active students. No individual student roster is loaded by Academics. The enrollment-list API remains compatible; enrollment management lives in student profiles. `POST /academics/classes/{id}/subjects` atomically creates or selects a subject and assigns its required teacher to that section. Other actions reuse existing resource write APIs; no duplicate class/subject/enrollment store is introduced.
@@ -163,3 +167,7 @@ Class registers use the same write service as individual manual attendance: the 
 Fee payments require an `Idempotency-Key` of 8–200 safe characters. The key is scoped to the authenticated user and school and fingerprints both the fee ID and payment body. An identical retry returns its original UUID receipt without applying another payment; changed contents return 409. Paid/waived fees and overpayments return 409; sub-cent amounts return 422. The committed receipt, reference, amount and status are retained in append-only audit metadata. This records a manual school payment; it does not charge a gateway.
 
 Reader configuration changes retain a versioned snapshot and an explicit audit reason. `GET /devices/{id}/configurations` returns `reason` for changes recorded by the current API; older snapshots without that event return null. Historical reasons are not inferred. Student overview projections independently enforce fee/card/guardian permissions and the existing assessment subject/publication scope.
+
+## Class and student fee management
+
+The existing fee records now support versioned class/section structures, dated installments, transport assignments and an append-only payment allocation/reversal ledger. Parents and students have read-only ownership-scoped statements and printable receipts. School Admin and record-bound finance staff can collect manual payments; only School Admin can override generated receipt numbers. See [Fee management](FEE_MANAGEMENT.md) for contracts, validation, migration and recovery details. Existing payment endpoints post to the same ledger.

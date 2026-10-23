@@ -89,3 +89,11 @@ Verify allow/deny behavior using the role tests, including an unassigned section
 Prefer a forward fix when rolling back. Retain the schema, policies and new attendance resolver: an old resolver would incorrectly interpret multi-section records with null `class_id` as school-wide and ignore multi-day end dates. Do not drop the target/version columns or read policies, modify applied migration files, or overwrite migration ledger checksums. A schema rollback requires an approved backup and separately reviewed conversion of modern events; simply deploying old API code is unsafe.
 
 Tests use real Express handlers, migrations, runtime database roles and RLS with disposable PostgreSQL fixtures. External Auth is simulated; no live invitations or calendar notifications are sent. Coverage includes legacy preservation, multi-day/leap-year placement, duplicate and retry handling, version conflicts, archive/delete behavior, target validation, multi-child/current-enrollment scope, role/tenant boundaries, subscription restrictions, attendance integration, date selection, filters, keyboard access, desktop/mobile layouts and dashboard links.
+
+## Verification record
+
+- Full regression suite: 194 tests passed across 32 files.
+- Calendar desktop/mobile workflows: 12 checks passed, covering School Admin, Principal, Parent and Student views. All six School Admin calendar checks passed again after the final layout adjustments.
+- The complete production build, type checking, source lint and secret checks passed. Calendar source formatting passed with the Windows checkout's existing line endings.
+- The connected database migration was applied transactionally and passed database verification, preserving its existing calendar record. Read-only inspection confirmed `calendar.read` and `calendar.write` for School Admin, with read-only calendar permissions for Principal, Teacher, Parent and Student.
+- An already open browser must refresh to reload its `/me` permission list. Verification used isolated browser accounts; the user's signed-in Chrome tab was not accessible to the browser connector.

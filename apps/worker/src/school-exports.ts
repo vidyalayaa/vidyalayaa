@@ -26,6 +26,14 @@ const tables = [
   'school_holidays',
   'announcements',
   'fee_records',
+  'fee_structures',
+  'fee_structure_sections',
+  'fee_structure_items',
+  'fee_transport_routes',
+  'fee_transport_assignments',
+  'fee_payments',
+  'fee_payment_allocations',
+  'fee_payment_reversals',
   'nfc_cards',
   'device_locations',
   'devices',
@@ -151,10 +159,19 @@ export async function generateSchoolExport(
             part = 0;
           for (;;) {
             const idType = table === 'audit_logs' ? 'bigint' : 'uuid';
+            const feeDateColumns: Record<string, string[]> = {
+              fee_records: ['due_on'],
+              fee_structure_items: ['first_due_on'],
+              fee_transport_assignments: ['starts_on', 'ends_on', 'first_due_on', 'ended_on'],
+              fee_payments: ['payment_date'],
+            };
+            const feeDates = (feeDateColumns[table] || [])
+              .map((column) => `,t.${column}::text AS ${column}`)
+              .join('');
             if (Date.now() - started > 900000) throw new Error('EXPORT_SNAPSHOT_DEADLINE');
             const page: Record<string, any>[] = (
               await tx.query(
-                `SELECT t.* FROM ${table} t WHERE t.school_id=$1 AND ($2::${idType} IS NULL OR t.id>$2::${idType}) ORDER BY t.id LIMIT 500`,
+                `SELECT t.*${feeDates} FROM ${table} t WHERE t.school_id=$1 AND ($2::${idType} IS NULL OR t.id>$2::${idType}) ORDER BY t.id LIMIT 500`,
                 [schoolId, cursor],
               )
             ).rows;

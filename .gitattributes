@@ -8,3 +8,6 @@
 db/migrations/20261021154148_teacher_subject_authorization.sql text eol=lf
 db/migrations/20261022141625_student_sex_counts.sql text eol=lf
 db/migrations/20261022144925_school_calendar_events.sql text eol=lf
+db/migrations/20261023070540_school_timetable.sql text eol=lf
+
+db/migrations/20261023083655_fee_management.sql text eol=lf

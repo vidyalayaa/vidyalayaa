@@ -41,16 +41,14 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
   if (err?.name === 'MulterError') {
-    res
-      .status(422)
-      .json({
-        error: {
-          code: 'INVALID_UPLOAD',
-          message: 'Upload one image and one manifest within the documented limits.',
-        },
-        request_id,
-        server_time: new Date().toISOString(),
-      });
+    res.status(422).json({
+      error: {
+        code: 'INVALID_UPLOAD',
+        message: 'Upload one image and one manifest within the documented limits.',
+      },
+      request_id,
+      server_time: new Date().toISOString(),
+    });
     return;
   }
   if (err?.type === 'entity.parse.failed') {
@@ -76,6 +74,28 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
           'Add another active School Admin before changing the last administrator.',
         INVITATION_PENDING:
           'The person must accept a school invitation before access can be activated.',
+        TIMETABLE_ASSIGNMENT_INVALID:
+          'Choose an active subject teacher assigned to this class and section.',
+        TIMETABLE_PERIOD_INVALID: 'Choose a configured school day and lecture period.',
+        TIMETABLE_TIMINGS_INVALID:
+          'School timings contain invalid or overlapping lectures or breaks.',
+        TIMETABLE_VERSION_CONFLICT: 'School timings changed. Refresh before saving again.',
+        FEE_HISTORY_IMMUTABLE:
+          'Posted fee history is immutable. Reverse payments or void unpaid assessments, then create a corrected record.',
+        FEE_LEDGER_REQUIRED:
+          'Paid totals and installment status are calculated from the payment ledger.',
+        FEE_CLASS_INVALID: 'Choose a class and enrollment in the selected academic year.',
+        FEE_TRANSPORT_INVALID: 'Check the transport assignment, dates and fee amount.',
+        FEE_TRANSPORT_REQUIRED: 'Assign a transport service before charging transport fees.',
+        FEE_STRUCTURE_INVALID: 'Check the class fee structure, section mode and due dates.',
+        FEE_ALLOCATION_INVALID:
+          'A selected installment has changed or its balance is insufficient. Refresh the fee statement.',
+        FEE_PAYMENT_INVALID: 'Check the payment date, account and retry key.',
+        FEE_PAYMENT_UNBALANCED: 'Payment allocations must equal the receipt total.',
+        FEE_PAYMENT_REVERSED: 'This payment was already reversed.',
+        FEE_REFERENCE_REQUIRED: 'Enter a transaction or cheque reference for this payment method.',
+        FEE_RECEIPT_INVALID:
+          'Use letters, numbers, hyphens, underscores or slashes in the receipt number.',
       } as Record<string, string>
     )[err.message];
   if (knownConstraint) {

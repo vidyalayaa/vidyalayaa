@@ -30,7 +30,14 @@ export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const text = z.string().trim().min(1).max(500);
 const nullableText = z.string().max(10000).nullable().optional();
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
-export const roles = ['school_admin', 'principal', 'teacher', 'parent', 'student'] as const;
+export const roles = [
+  'school_admin',
+  'principal',
+  'teacher',
+  'parent',
+  'student',
+  'finance_staff',
+] as const;
 export type Role = (typeof roles)[number];
 export const attendanceStatuses = [
   'PENDING',
@@ -251,7 +258,9 @@ export const resourceSchemas = {
     .object({
       staff_code: text,
       email: z.string().trim().email().max(254).nullable().optional(),
-      staff_role: z.enum(['teacher', 'principal', 'school_admin']).default('teacher'),
+      staff_role: z
+        .enum(['teacher', 'principal', 'school_admin', 'finance_staff'])
+        .default('teacher'),
       full_name: text,
       user_id: uuid.nullable().optional(),
       status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
@@ -615,3 +624,6 @@ export interface InvitationCandidate {
   email: string;
   code: string;
 }
+export * from './timetable.js';
+
+export * from './fees.js';
