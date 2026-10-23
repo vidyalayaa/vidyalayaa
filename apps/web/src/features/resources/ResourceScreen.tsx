@@ -9,7 +9,7 @@ import StudentProfileDialog from './StudentProfileDialog';
 import AttendanceRuleBuilder from '../operations/AttendanceRuleBuilder';
 import FeePaymentDialog from './FeePaymentDialog';
 import { IssueCardDialog, BlockCardDialog } from './CardActionDialogs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -29,8 +29,22 @@ import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
 import { fields, resourceInfo, sampleRule, type Field } from './metadata';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
-import { PageHeading, Panel, Empty, Loading, ErrorState, DataTable, AttendanceTabs } from '../../components/common';
-export function ResourceScreen({ resource }: { resource: Resource }) {
+import {
+  PageHeading,
+  Panel,
+  Empty,
+  Loading,
+  ErrorState,
+  DataTable,
+  AttendanceTabs,
+} from '../../components/common';
+export function ResourceScreen({
+  resource,
+  assessment,
+}: {
+  resource: Resource;
+  assessment?: { classId: string; classLabel: string; exam: Record<string, unknown> };
+}) {
   const [params] = useSearchParams();
   const a = useAuth(),
     qc = useQueryClient(),
@@ -51,8 +65,12 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
     } | null>(null),
     [actionNotice, setActionNotice] = useState(''),
     info = resourceInfo[resource],
-    canWrite = !!info.write && !!a.me?.school?.permissions.includes(info.write),
+    canWrite =
+      !!info.write &&
+      !!a.me?.school?.permissions.includes(info.write) &&
+      (!assessment || assessment.exam.status === 'OPEN'),
     locked = !!info.feature && !a.me?.features[info.feature];
+  const Heading = assessment ? ResultsHeading : PageHeading;
   useEffect(() => {
     setPage(1);
     setSearch(params.get('search') || '');
@@ -70,16 +88,22 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
     }
   };
   const query = useQuery({
-    queryKey: [a.school, resource, search, page],
+    queryKey: [a.school, resource, search, page, assessment?.classId, assessment?.exam.id],
     queryFn: () =>
-      api<Page>(`/resources/${resource}?page=${page}&search=${encodeURIComponent(search)}`),
+      api<Page>(
+        `/resources/${resource}?page=${page}&search=${encodeURIComponent(search)}${assessment ? `&class_id=${assessment.classId}&exam_id=${assessment.exam.id}` : ''}`,
+      ),
     enabled: configured && !!a.me?.school && !locked,
   });
   return (
     <>
-      <PageHeading
-        title={info.title}
-        description={info.description}
+      <Heading
+        title={assessment ? 'Student marks' : info.title}
+        description={
+          assessment
+            ? 'Select a student enrolled in this class to record their marks.'
+            : info.description
+        }
         actions={
           <>
             {[
@@ -203,8 +227,12 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
       ) : (
         <Panel
           title="All records"
-          subtitle={`${query.data?.total ?? 0} records in your school`}
-          action={<span className="text-xs text-stone-500">School records</span>}
+          subtitle={`${query.data?.total ?? 0} ${assessment ? 'marks in this examination' : 'records in your school'}`}
+          action={
+            <span className="text-xs text-stone-500">
+              {assessment ? 'Selected class and examination' : 'School records'}
+            </span>
+          }
         >
           <div className="table-toolbar">
             <div className="search-input">
@@ -238,7 +266,7 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           ) : query.data?.data.length ? (
             <DataTable
               rows={query.data.data}
-              columns={info.columns}
+              columns={assessment ? ['student_id', 'subject_id', 'score', 'remarks'] : info.columns}
               onView={(row) => setView(String(row.id))}
               actions={
                 resource === 'fee_records'
@@ -384,7 +412,13 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
           fields={[{ key: 'reason', type: 'textarea' }]}
         />
       )}
-      {bulk && <BulkMarksDialog open={bulk} close={() => setBulk(false)} />}
+      {bulk && (
+        <BulkMarksDialog
+          open={bulk}
+          examId={assessment ? String(assessment.exam.id) : undefined}
+          close={() => setBulk(false)}
+        />
+      )}
       {actionNotice && (
         <div className="notice mb-4" role="status">
           {actionNotice}
@@ -406,10 +440,39 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
         }}
         title={`${editing ? 'Edit' : 'Add'} ${info.title.toLowerCase()}`}
       >
+        {assessment && (
+          <p className="mb-5 text-sm text-stone-600">
+            {assessment.classLabel} · {String(assessment.exam.name)} · Maximum score:{' '}
+            {String(assessment.exam.max_score)}
+            {assessment.exam.assessment_kind === 'SUBJECT_TEST'
+              ? ` · Subject: ${assessment.exam.subject_label || 'Subject of this test'}`
+              : ''}
+          </p>
+        )}
         <ResourceForm
           key={`${resource}-${String(editing?.id || 'new')}`}
           resource={resource}
           initial={editing || undefined}
+          preset={
+            assessment
+              ? {
+                  class_id: assessment.classId,
+                  exam_id: assessment.exam.id,
+                  assessment_kind: assessment.exam.assessment_kind,
+                  ...(assessment.exam.assessment_kind === 'SUBJECT_TEST'
+                    ? { subject_id: assessment.exam.subject_id }
+                    : {}),
+                }
+              : undefined
+          }
+          hiddenFields={
+            assessment
+              ? [
+                  'exam_id',
+                  ...(assessment.exam.assessment_kind === 'SUBJECT_TEST' ? ['subject_id'] : []),
+                ]
+              : []
+          }
           onDirtyChange={setDirty}
           cancel={closeForm}
           done={async () => {
@@ -422,16 +485,37 @@ export function ResourceScreen({ resource }: { resource: Resource }) {
     </>
   );
 }
+function ResultsHeading({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 className="text-xl font-semibold">{title}</h2>
+        <p className="mt-2 text-sm text-stone-600">{description}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">{actions}</div>
+    </div>
+  );
+}
 function RefField({
   field,
   value,
   onChange,
   endpoint,
+  disabled = false,
 }: {
   field: Field;
   value: string;
   onChange: (v: string) => void;
   endpoint?: string;
+  disabled?: boolean;
 }) {
   const { school, me } = useAuth(),
     [search, setSearch] = useState('');
@@ -444,7 +528,7 @@ function RefField({
           ? '/profile/parent'
           : `${endpoint || '/resources/' + field.ref}${endpoint?.includes('?') ? '&' : '?'}page_size=100&search=${encodeURIComponent(search)}`,
       ),
-    enabled: configured,
+    enabled: configured && !disabled,
   });
   return (
     <div>
@@ -454,11 +538,13 @@ function RefField({
         placeholder="Find by name or code…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
+        disabled={disabled}
       />
       <select
         className="input"
         id={field.key}
         value={value}
+        disabled={disabled || q.isLoading}
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">{field.optional ? 'None' : 'Select a record'}</option>
@@ -621,6 +707,7 @@ export function ResourceForm({
             ) : f.ref ? (
               <RefField
                 field={f}
+                disabled={resource === 'exams' && f.ref === 'subjects' && !form.watch('class_id')}
                 value={String(form.watch(f.key) || '')}
                 endpoint={
                   f.key === 'class_teacher_id'
@@ -629,7 +716,11 @@ export function ResourceForm({
                       ? '/resources/teachers?assignable=1'
                       : f.ref === 'students' && preset?.class_id && resource !== 'enrollments'
                         ? `/resources/students?class_id=${preset.class_id}`
-                        : a.me?.school?.role === 'teacher' && f.ref === 'subjects'
+                        : ['school_admin', 'teacher'].includes(a.me?.school?.role || '') &&
+                            f.ref === 'subjects' &&
+                            (resource === 'exams' ||
+                              resource === 'marks' ||
+                              a.me?.school?.role === 'teacher')
                           ? `/resources/subjects?class_id=${form.watch('class_id') || preset?.class_id || '00000000-0000-4000-8000-000000000000'}${preset?.assessment_kind === 'OFFICIAL' ? '&assessment_kind=OFFICIAL' : ''}`
                           : undefined
                 }

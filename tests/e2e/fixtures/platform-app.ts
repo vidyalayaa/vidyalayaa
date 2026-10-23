@@ -14,7 +14,7 @@ export function fixtureToken(id: string, aal = 'aal2') {
     'fixture-signature',
   ].join('.');
 }
-interface PlatformApp {
+export interface PlatformApp {
   pools: ReturnType<typeof poolAdapters>;
   storage: SupabaseClient;
   objects: Map<string, Buffer>;
@@ -32,6 +32,7 @@ interface PlatformApp {
     aal?: string,
   ) => Promise<{ status: number; body: any }>;
   url: string;
+  registerIdentity: (id: string) => void;
 }
 
 // Only Auth and outbound email are simulated. The browser's REST traffic goes
@@ -193,6 +194,9 @@ export const test = base.extend<{}, { platformApp: PlatformApp }>({
           purgeJob,
           supportTicket,
           url,
+          registerIdentity: (id) => {
+            known.add(id);
+          },
           request: async (path, method = 'GET', body, user = root, school, aal = 'aal2') => {
             const response = await fetch(url + '/api/v1' + path, {
               method,

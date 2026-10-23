@@ -800,7 +800,14 @@ export function Members() {
           fields={[
             {
               key: 'role',
-              options: ['school_admin', 'principal', 'teacher', 'parent', 'student'],
+              options: [
+                'school_admin',
+                'principal',
+                'teacher',
+                'parent',
+                'student',
+                'finance_staff',
+              ],
               default: String(edit.role),
             },
             {

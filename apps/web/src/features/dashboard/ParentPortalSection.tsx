@@ -17,7 +17,8 @@ import { api, useAuth } from '../../lib/auth';
 import { Button } from '../../components/ui/button';
 import { Badge, Loading } from '../../components/common';
 import StudentProfileDialog from '../resources/StudentProfileDialog';
-import FeePaymentDialog from '../resources/FeePaymentDialog';
+import { Link } from 'react-router-dom';
+import { schoolPath } from '../../lib/portals';
 
 interface ChildSummary {
   id: string;
@@ -96,7 +97,6 @@ export default function ParentPortalSection() {
   const a = useAuth();
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [payFeeRecord, setPayFeeRecord] = useState<any | null>(null);
 
   const familyQuery = useQuery({
     queryKey: [a.school, 'parent-family'],
@@ -127,7 +127,7 @@ export default function ParentPortalSection() {
             Switch Child:
           </span>
           {children.map((child) => {
-            const isSelected = (activeChildId === child.id);
+            const isSelected = activeChildId === child.id;
             return (
               <button
                 key={child.id}
@@ -167,11 +167,15 @@ export default function ParentPortalSection() {
                   {o.student.first_name} {o.student.last_name}
                 </h3>
                 <p className="text-xs text-stone-300 font-mono mt-0.5">
-                  ID: {o.student.student_code} · {o.enrollment?.grade ? `Class ${o.enrollment.grade} ${o.enrollment.section || ''}` : 'Enrolled'}
+                  ID: {o.student.student_code} ·{' '}
+                  {o.enrollment?.grade
+                    ? `Class ${o.enrollment.grade} ${o.enrollment.section || ''}`
+                    : 'Enrolled'}
                 </p>
               </div>
               <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-white font-bold text-lg border border-white/10">
-                {o.student.first_name[0]}{o.student.last_name?.[0]}
+                {o.student.first_name[0]}
+                {o.student.last_name?.[0]}
               </span>
             </div>
 
@@ -179,7 +183,9 @@ export default function ParentPortalSection() {
               <div className="flex justify-between items-center">
                 <span className="text-stone-400">Campus Status</span>
                 <Badge>
-                  {o.attendance.today?.movement_status === 'ON_CAMPUS' ? '🟢 ON CAMPUS' : o.attendance.today?.attendance_status || 'NOT LOGGED'}
+                  {o.attendance.today?.movement_status === 'ON_CAMPUS'
+                    ? '🟢 ON CAMPUS'
+                    : o.attendance.today?.attendance_status || 'NOT LOGGED'}
                 </Badge>
               </div>
               {o.attendance.today?.first_arrival_at && (
@@ -203,9 +209,7 @@ export default function ParentPortalSection() {
             </div>
 
             <div className="relative z-10 flex items-center justify-between pt-2 border-t border-white/10">
-              <span className="text-xs text-stone-400 font-mono">
-                {a.me?.school?.school_name}
-              </span>
+              <span className="text-xs text-stone-400 font-mono">{a.me?.school?.school_name}</span>
               <Button
                 size="sm"
                 variant="outline"
@@ -244,7 +248,9 @@ export default function ParentPortalSection() {
 
               <div className="mt-5 grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="rounded-xl bg-green-50 p-2.5 border border-green-100">
-                  <p className="font-bold text-green-800 text-base">{o.attendance.summary.present}</p>
+                  <p className="font-bold text-green-800 text-base">
+                    {o.attendance.summary.present}
+                  </p>
                   <p className="text-green-700 text-xs mt-0.5">Present</p>
                 </div>
                 <div className="rounded-xl bg-amber-50 p-2.5 border border-amber-100">
@@ -270,19 +276,25 @@ export default function ParentPortalSection() {
                 <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
                   Fee Statement
                 </span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  o.fees.summary.balance > 0 ? 'bg-rose-100 text-rose-800' : 'bg-lime-100 text-lime-800'
-                }`}>
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    o.fees.summary.balance > 0
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-lime-100 text-lime-800'
+                  }`}
+                >
                   {o.fees.summary.balance > 0 ? 'Due Pending' : 'All Settled'}
                 </span>
               </div>
 
               <div className="mt-4">
-                <p className="text-xs text-stone-500">Outstanding Balance</p>
+                <p className="text-xs text-stone-500">Outstanding Balance (all academic years)</p>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className={`text-3xl font-extrabold tracking-tight ${
-                    o.fees.summary.balance > 0 ? 'text-rose-600' : 'text-stone-900'
-                  }`}>
+                  <span
+                    className={`text-3xl font-extrabold tracking-tight ${
+                      o.fees.summary.balance > 0 ? 'text-rose-600' : 'text-stone-900'
+                    }`}
+                  >
                     ₹ {Number(o.fees.summary.balance).toLocaleString()}
                   </span>
                 </div>
@@ -290,48 +302,36 @@ export default function ParentPortalSection() {
 
               <div className="mt-4 space-y-2">
                 {o.fees.records.slice(0, 2).map((fee) => (
-                  <div key={fee.id} className="flex items-center justify-between rounded-xl bg-stone-50 p-2.5 text-xs border border-stone-100">
+                  <div
+                    key={fee.id}
+                    className="flex items-center justify-between rounded-xl bg-stone-50 p-2.5 text-xs border border-stone-100"
+                  >
                     <div>
                       <p className="font-semibold text-stone-800">{fee.fee_type}</p>
                       <p className="text-stone-500 text-xs">Due {fee.due_on || 'Soon'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-stone-900">₹ {Number(fee.amount_due - fee.amount_paid).toLocaleString()}</p>
-                      {fee.status !== 'PAID' && (
-                        <button
-                          type="button"
-                          onClick={() => setPayFeeRecord(fee)}
-                          className="text-xs font-semibold text-lime-700 hover:underline"
-                        >
-                          Pay
-                        </button>
-                      )}
+                      <p className="font-bold text-stone-900">
+                        ₹ {Number(fee.amount_due - fee.amount_paid).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {o.fees.summary.balance > 0 && o.fees.records.find(f => f.status !== 'PAID') && (
-              <Button
-                variant="lime"
-                className="mt-4 w-full"
-                onClick={() => setPayFeeRecord(o.fees.records.find(f => f.status !== 'PAID'))}
-              >
-                <Wallet size={15} />
-                Pay Outstanding Fees
-              </Button>
-            )}
+            <Link
+              className="mt-4 block rounded-xl bg-lime-300 px-4 py-3 text-center text-sm font-semibold"
+              to={schoolPath('/r/fee_records', a.me?.school?.role) + '?student_id=' + activeChildId}
+            >
+              View fee statement & receipts
+            </Link>
           </div>
         </div>
       ) : null}
 
       {profileOpen && activeChildId && (
         <StudentProfileDialog studentId={activeChildId} close={() => setProfileOpen(false)} />
-      )}
-
-      {payFeeRecord && (
-        <FeePaymentDialog fee={payFeeRecord} close={() => setPayFeeRecord(null)} />
       )}
     </div>
   );

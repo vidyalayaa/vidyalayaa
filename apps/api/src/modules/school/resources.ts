@@ -412,6 +412,64 @@ export async function validateBusiness(
       );
   }
   if (name === 'timetable_entries') {
+    if (a.active!.role !== 'school_admin')
+      throw new ApiError(403, 'FORBIDDEN', 'Only School Admin can manage timetables.');
+    const old = isUpdate
+      ? (
+          await tx.query(
+            'SELECT class_id,subject_id,teacher_id,weekday,starts_at::text,ends_at::text FROM timetable_entries WHERE school_id=$1 AND id=$2',
+            [a.context.schoolId, values.id],
+          )
+        ).rows[0]
+      : undefined;
+    const normalized = (key: string, value: unknown) =>
+      ['starts_at', 'ends_at'].includes(key) && String(value).length === 5
+        ? `${value}:00`
+        : String(value);
+    const unchanged =
+      old &&
+      ['class_id', 'subject_id', 'teacher_id', 'weekday', 'starts_at', 'ends_at'].every(
+        (k) => normalized(k, old[k]) === normalized(k, values[k]),
+      );
+    if (!unchanged) {
+      if (
+        !(
+          await tx.query('SELECT app.timetable_assignment_valid($1,$2,$3,$4) AS allowed', [
+            a.context.schoolId,
+            values.class_id,
+            values.subject_id,
+            values.teacher_id,
+          ])
+        ).rows[0]?.allowed
+      )
+        throw new ApiError(
+          422,
+          'TIMETABLE_ASSIGNMENT_INVALID',
+          'Choose an active subject teacher assigned to this class and section.',
+        );
+      const config = (
+        await tx.query(
+          "SELECT settings->'timetable' AS config FROM schools WHERE id=$1 FOR SHARE",
+          [a.context.schoolId],
+        )
+      ).rows[0]?.config;
+      if (
+        config &&
+        (!config.days.includes(values.weekday) ||
+          !config.periods.some(
+            (p: { start_time: string; end_time: string }) =>
+              p.start_time === String(values.starts_at).slice(0, 5) &&
+              p.end_time === String(values.ends_at).slice(0, 5) &&
+              !/[1-9]/.test(String(values.starts_at).slice(6)) &&
+              !/[1-9]/.test(String(values.ends_at).slice(6)),
+          ))
+      )
+        throw new ApiError(
+          422,
+          'TIMETABLE_PERIOD_INVALID',
+          'Choose a configured school day and lecture period.',
+        );
+    }
     const conflict = await tx.query(
       'SELECT id FROM timetable_entries WHERE school_id=$1 AND retired_at IS NULL AND weekday=$2 AND (teacher_id=$3 OR class_id=$4) AND starts_at<$6::time AND ends_at>$5::time AND id<>coalesce($7::uuid,gen_random_uuid()) FOR UPDATE',
       [

@@ -40,7 +40,7 @@ export const fields: Record<Resource, Field[]> = {
   teachers: [
     { key: 'staff_code' },
     { key: 'email', type: 'email', optional: true },
-    select('staff_role', ['teacher', 'principal', 'school_admin']),
+    select('staff_role', ['teacher', 'principal', 'school_admin', 'finance_staff']),
     { key: 'full_name' },
     select('status', ['ACTIVE', 'INACTIVE']),
   ],

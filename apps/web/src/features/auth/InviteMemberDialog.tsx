@@ -89,6 +89,7 @@ export default function InviteMemberDialog({
             <option value="parent">Parent</option>
             <option value="student">Student</option>
             <option value="school_admin">School Admin</option>
+            <option value="finance_staff">Finance staff</option>
           </select>
         </div>
         <div>

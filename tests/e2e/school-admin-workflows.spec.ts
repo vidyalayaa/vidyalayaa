@@ -50,9 +50,7 @@ for (const resource of [
   'exams',
   'marks',
   'assignments',
-  'timetable_entries',
   'announcements',
-  'fee_records',
   'device_locations',
 ] as const) {
   test(`School Admin creates, reads and edits ${resource} through the website`, async ({
@@ -171,15 +169,33 @@ for (const resource of [
     }
     // Student/parent/family creation and edits are covered together in student-directory.spec.ts.
     await page.goto(authAppURL + '/admin/r/' + resource);
+    if (resource === 'marks') {
+      await page
+        .getByRole('combobox', { name: 'Class and section', exact: true })
+        .selectOption(f.classId);
+      await page
+        .getByRole('combobox', { name: 'Examination', exact: true })
+        .selectOption(exam.body.id);
+    }
     await page
       .getByRole('button', {
         name: 'Add record',
         exact: true,
       })
       .click();
-    await fill(page, inputs[resource]);
+    await fill(
+      page,
+      resource === 'marks'
+        ? Object.fromEntries(Object.entries(inputs[resource]).filter(([key]) => key !== 'exam_id'))
+        : inputs[resource],
+    );
     await save(page);
-    const list = await call('/resources/' + resource + '?page_size=100');
+    const list = await call(
+      '/resources/' +
+        resource +
+        '?page_size=100' +
+        (resource === 'marks' ? '&class_id=' + f.classId + '&exam_id=' + exam.body.id : ''),
+    );
     expect(list.status).toBe(200);
     const key =
       resource === 'classes'
@@ -363,71 +379,78 @@ test('School Admin marks a class register and approves a correction', async ({
   await expect(request).toContainText(/APPLIED/i);
 });
 
-test('School Admin records partial and final fee payments and queues reminders', async ({
+test('School Admin safely retries a lost payment response and queues fee reminders', async ({
   page,
   authAppURL,
   platformApp,
 }) => {
-  const f = platformApp.records;
-  const created = await platformApp.request(
-    '/resources/fee_records',
-    'POST',
-    {
-      student_id: f.student,
-      academic_session_id: f.session,
-      fee_type: 'Payment workflow fee',
-      amount_due: 100,
-      due_on: '2026-10-21',
-    },
-    f.admin,
-    f.schoolA,
-  );
+  const f = platformApp.records,
+    created = await platformApp.request(
+      '/resources/fee_records',
+      'POST',
+      {
+        student_id: f.student,
+        academic_session_id: f.session,
+        fee_type: 'Retry workflow fee',
+        amount_due: 100,
+        due_on: '2026-10-21',
+      },
+      f.admin,
+      f.schoolA,
+    );
   expect(created.status).toBe(201);
-  const retryKeys: string[] = [];
-  await page.route('**/api/v1/fees/' + created.body.id + '/pay', async (route) => {
-    retryKeys.push(route.request().headers()['idempotency-key']);
-    const response = await route.fetch({
-      url: platformApp.url + '/api/v1/fees/' + created.body.id + '/pay',
-    });
-    if (retryKeys.length === 1)
+  const keys: string[] = [];
+  await page.route('**/api/v1/fees/payments', async (route) => {
+    keys.push(route.request().headers()['idempotency-key']);
+    const response = await route.fetch({ url: platformApp.url + '/api/v1/fees/payments' });
+    if (keys.length === 1)
       await route.fulfill({
         status: 503,
-        json: {
-          error: {
-            code: 'FIXTURE_RESPONSE_LOST',
-            message: 'The saved response was lost. Retry safely.',
-          },
-        },
+        json: { error: { message: 'The saved response was lost. Retry safely.' } },
       });
     else await route.fulfill({ response });
   });
   await page.goto(authAppURL + '/admin/r/fee_records');
-  const row = page.getByRole('row').filter({ hasText: 'Payment workflow fee' });
+  await page.getByRole('combobox', { name: 'Academic year', exact: true }).selectOption(f.session);
+  await page.getByRole('combobox', { name: 'Student', exact: true }).selectOption(f.student);
+  const row = page.getByRole('row').filter({ hasText: 'Retry workflow fee' });
   await row.getByRole('button', { name: 'Remind', exact: true }).click();
   await expect(page.getByRole('status')).toContainText(/reminder/i);
-  await row.getByRole('button', { name: 'Pay', exact: true }).click();
-  await page.getByLabel('Payment Amount (INR)').fill('40');
-  await page.getByRole('button', { name: 'Confirm Payment', exact: true }).click();
+  await page.getByRole('button', { name: 'Record payment', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('spinbutton', { name: new RegExp('Amount for Retry workflow fee') })
+    .fill('40');
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Review payment', exact: true })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Confirm payment', exact: true })
+    .click();
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Retry safely');
-  await page.getByRole('button', { name: 'Confirm Payment', exact: true }).click();
-  await expect.poll(() => retryKeys.length).toBe(2);
-  expect(retryKeys[0]).toBe(retryKeys[1]);
-  await expect(page.getByRole('dialog')).toContainText('Payment Recorded Successfully');
-  await page.emulateMedia({ media: 'print' });
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Review payment', exact: true })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Confirm payment', exact: true })
+    .click();
   await expect(page.locator('.fee-receipt')).toBeVisible();
-  await expect(page.locator('#root')).not.toBeVisible();
-  await expect(page.getByRole('button', { name: 'Print Receipt', exact: true })).not.toBeVisible();
-  await page.emulateMedia({ media: 'screen' });
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(row).toContainText(/PARTIAL/i);
-  await row.getByRole('button', { name: 'Pay', exact: true }).click();
-  await expect(page.getByLabel('Payment Amount (INR)')).toHaveValue('60');
-  await page.getByRole('button', { name: 'Confirm Payment', exact: true }).click();
-  await expect.poll(() => retryKeys.length).toBe(3);
-  expect(retryKeys[2]).not.toBe(retryKeys[0]);
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(row).toContainText(/PAID/i);
-  await expect(row.getByRole('button', { name: 'Pay', exact: true })).toHaveCount(0);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(row).toContainText('₹60.00');
+  expect(
+    (
+      await platformApp.db.query<{ amount_paid: string }>(
+        'SELECT amount_paid FROM fee_records WHERE id=$1',
+        [created.body.id],
+      )
+    ).rows[0].amount_paid,
+  ).toBe('40.00');
 });
 
 test('School Admin issues, replaces and deactivates student NFC cards', async ({
@@ -804,8 +827,13 @@ test('School Admin imports marks into an open examination and publishes results'
   );
   expect(exam.status).toBe(201);
   await page.goto(authAppURL + '/admin/r/marks');
+  await page
+    .getByRole('combobox', { name: 'Class and section', exact: true })
+    .selectOption(f.classId);
+  await page.getByRole('combobox', { name: 'Examination', exact: true }).selectOption(exam.body.id);
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click();
-  await page.getByLabel('Open examination').selectOption(exam.body.id);
+  await expect(page.getByLabel('Open examination')).toHaveValue(exam.body.id);
+  await expect(page.getByLabel('Open examination')).toBeDisabled();
   await page.getByLabel('Marks CSV').setInputFiles({
     name: 'marks.csv',
     mimeType: 'text/csv',

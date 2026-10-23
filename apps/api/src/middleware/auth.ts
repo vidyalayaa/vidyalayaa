@@ -95,7 +95,7 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
       securityPolicy: active ? policies.get(active.school_id) : undefined,
       security_mfa_required:
         !!active &&
-        ['school_admin', 'principal'].includes(active.role) &&
+        ['school_admin', 'principal', 'finance_staff'].includes(active.role) &&
         policies.get(active.school_id)?.require_privileged_mfa === true &&
         !aal2,
       active,

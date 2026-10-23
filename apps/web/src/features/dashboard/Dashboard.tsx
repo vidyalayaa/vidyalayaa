@@ -27,6 +27,8 @@ import StudentPortalSection from './StudentPortalSection';
 import AdminActionStrip from './AdminActionStrip';
 import UpcomingEvents from '../calendar/UpcomingEvents';
 import { schoolPath } from '../../lib/portals';
+import Fees from '../fees/Fees';
+import FeeOverview from '../fees/FeeOverview';
 const Chart = lazy(() => import('./TrendChart'));
 interface DashboardData {
   date: string;
@@ -51,7 +53,7 @@ export default function Dashboard() {
     query = useQuery({
       queryKey: [a.school, 'dashboard'],
       queryFn: () => api<DashboardData>('/dashboard'),
-      enabled: configured && !!a.me?.school,
+      enabled: configured && !!a.me?.school && role !== 'finance_staff',
       refetchInterval: 30000,
     });
   const d = query.data,
@@ -86,6 +88,7 @@ export default function Dashboard() {
       color: 'rose',
     },
   ];
+  if (role === 'finance_staff') return <Fees />;
   return (
     <>
       <PageHeading
@@ -139,7 +142,12 @@ export default function Dashboard() {
       {configured && role === 'teacher' && <TeacherPortalSection />}
       {configured && role === 'student' && <StudentPortalSection />}
       {configured && a.me?.school?.permissions.includes('calendar.read') && <UpcomingEvents />}
-      {configured && (role === 'school_admin' || role === 'principal') && <AdminActionStrip />}
+      {configured && (role === 'school_admin' || role === 'principal') && (
+        <>
+          <AdminActionStrip />
+          <FeeOverview />
+        </>
+      )}
       <div className="hero-grid">
         <section className="welcome-card">
           <div className="hero-copy">

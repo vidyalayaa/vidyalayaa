@@ -76,8 +76,6 @@ for (const resource of [
   'exams',
   'marks',
   'assignments',
-  'timetable_entries',
-  'fee_records',
   'nfc_cards',
   'device_locations',
   'attendance_rule_versions',
