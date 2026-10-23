@@ -165,7 +165,7 @@ function operation(
                 name: 'X-School-Id',
                 in: 'header',
                 required:
-                  !['/me', '/invitations/pending', '/invitations/{id}/respond'].includes(path) &&
+                  !['/me', '/invitations/pending', '/invitations/{id}/respond'].includes(path) && !path.startsWith('/account/') &&
                   !path.startsWith('/platform/'),
                 schema: { type: 'string', format: 'uuid' },
               },
@@ -216,6 +216,11 @@ for (const name of Object.keys(resourceSchemas)) {
   operation(`/resources/${name}/{id}`, 'patch', `Update ${name}`);
 }
 operation('/me', 'get', 'Verified identity, memberships, permissions and entitlements');
+operation('/account/sessions','get','List only the current user’s provider sessions and recent account security alerts; no school selection required');
+operation('/account/sessions/logout-others','post','End all owned provider sessions except the current session; no user ID accepted');
+operation('/account/sessions/{id}','delete','End one owned provider session, cascade its refresh credentials and report whether it was current',undefined,'UserJWT',{
+  parameters:[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}],
+});
 operation('/dashboard', 'get', 'Role-scoped school dashboard');
 operation('/timetable/settings', 'get', 'School timing template; configured=false means unsaved defaults');
 operation('/timetable/settings', 'put', 'School Admin-only versioned timing update; preserves existing lectures', 'SchoolTimingsUpdate', 'UserJWT', {

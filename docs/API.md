@@ -171,3 +171,7 @@ Reader configuration changes retain a versioned snapshot and an explicit audit r
 ## Class and student fee management
 
 The existing fee records now support versioned class/section structures, dated installments, transport assignments and an append-only payment allocation/reversal ledger. Parents and students have read-only ownership-scoped statements and printable receipts. School Admin and record-bound finance staff can collect manual payments; only School Admin can override generated receipt numbers. See [Fee management](FEE_MANAGEMENT.md) for contracts, validation, migration and recovery details. Existing payment endpoints post to the same ledger.
+
+## Account login sessions
+
+Every role can view and end only its own provider-backed sessions using `/account/sessions`. These account routes do not require school selection. Revoked provider sessions are rejected on every subsequent authenticated API request. See [Security & Login Sessions](LOGIN_SESSIONS.md) for API contracts, privacy, notifications, migration and verification details.

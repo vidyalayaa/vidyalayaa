@@ -10,6 +10,7 @@ import {
   useParams,
   useLocation,
   Outlet,
+  Link,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resourceNames, type Resource } from '@vidyalayaa/contracts';
@@ -30,6 +31,7 @@ const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
 const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
 const Fees = lazy(() => import('./features/fees/Fees'));
+const LoginSessions = lazy(() => import('./features/auth/LoginSessions'));
 const AttendanceHistory = lazy(() =>
   import('./features/operations/SchoolTools').then((m) => ({ default: m.AttendanceHistory })),
 );
@@ -137,9 +139,9 @@ function Guard() {
   }
   if (a.me && !a.me.school) {
     if (a.me.platform_role === 'SUPER_ADMIN') {
-      if (!location.pathname.startsWith('/platform') && location.pathname !== '/settings')
+      if (!location.pathname.startsWith('/platform') && !location.pathname.startsWith('/settings'))
         return <Navigate to="/platform" replace />;
-    } else
+    } else if (location.pathname !== '/settings/security')
       return (
         <div className="callback-page">
           <div className="panel p-8">
@@ -160,6 +162,11 @@ function Guard() {
                 Accept an invitation above, or ask your school administrator to invite you.
               </p>
             )}
+            <p className="my-3">
+              <Link className="underline" to="/settings/security">
+                Security &amp; Login Sessions
+              </Link>
+            </p>
             <button
               className="text-sm underline"
               onClick={() => {
@@ -395,6 +402,7 @@ function schoolRoutes() {
         }
       />
       <Route path="settings" element={<Settings />} />
+      <Route path="settings/security" element={<LoginSessions />} />
     </>
   );
 }

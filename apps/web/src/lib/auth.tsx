@@ -189,6 +189,14 @@ export async function api<T = Record<string, unknown>>(
       'Your account or school changed. Reopen this page.',
     );
   if (response.status === 401 && refresh) {
+    const failure = await response
+      .clone()
+      .json()
+      .catch(() => ({}));
+    if (failure.error?.code === 'SESSION_ENDED') {
+      await supabase.auth.signOut({ scope: 'local' });
+      throw new HttpError('SESSION_ENDED', 401, 'This login session has ended. Sign in again.');
+    }
     const current = await supabase.auth.getSession();
     if (
       (current.data.session && current.data.session.user.id !== session?.user.id) ||
@@ -215,7 +223,7 @@ export async function api<T = Record<string, unknown>>(
       reauthenticationSchool = undefined;
       return api(path, options, false);
     }
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     throw new HttpError('UNAUTHENTICATED', 401, 'Your session expired. Sign in again.');
   }
   if (response.status === 204) return undefined as T;
@@ -318,6 +326,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     enabled: !!session,
     retry: false,
     staleTime: 30000,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   });
   useEffect(() => {
     if (
@@ -364,7 +374,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       intentionalSignOut = true;
       try {
-        await supabase.auth.signOut();
+        const result = await supabase.auth.signOut({ scope: 'local' });
+        if (result.error) throw result.error;
       } finally {
         intentionalSignOut = false;
       }

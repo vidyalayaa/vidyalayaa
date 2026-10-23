@@ -1,3 +1,4 @@
+import { providerSessionSchema } from './provider-sessions.js';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
@@ -11,6 +12,7 @@ export async function portableDatabase() {
   await db.exec(
     "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
   );
+  await db.exec(providerSessionSchema);
   for (const file of readdirSync('db/migrations').sort())
     await db.exec(readFileSync(`db/migrations/${file}`, 'utf8'));
   return db;
@@ -45,6 +47,7 @@ async function nativeFixtureDatabase(connection: string): Promise<PGlite> {
     await db.exec(
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
     );
+    await db.exec(providerSessionSchema);
     for (const file of readdirSync('db/migrations').sort())
       await db.exec(readFileSync(`db/migrations/${file}`, 'utf8'));
     return db;

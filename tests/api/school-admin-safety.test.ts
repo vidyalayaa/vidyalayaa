@@ -1,3 +1,4 @@
+import { fixtureBearer, withProviderSessions } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import request from 'supertest';
 import type { PGlite } from '@electric-sql/pglite';
@@ -25,14 +26,14 @@ beforeAll(async () => {
       TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
       TRUST_PROXY_HOPS: 0,
     } as Config,
-    { ...poolAdapters(db), supabase: auth },
+    { ...poolAdapters(db), supabase: withProviderSessions(db, auth) },
   );
 });
 afterAll(async () => db.close());
 const call = (method: 'get' | 'post', path: string, role = 'admin') =>
   request(app)
     [method]('/api/v1' + path)
-    .set('Authorization', 'Bearer ' + role)
+    .set('Authorization', 'Bearer ' + fixtureBearer(role))
     .set('X-School-Id', f.schoolA);
 async function fee(type: string, status = 'UNPAID') {
   return (

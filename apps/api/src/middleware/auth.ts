@@ -6,6 +6,7 @@ import { ApiError, asyncRoute, notFound } from '../lib/errors.js';
 import { transaction, type TenantContext } from '../lib/db.js';
 import { equalHash } from '../lib/crypto.js';
 export interface Actor extends Me {
+  sessionId: string;
   context: TenantContext;
   active?: Membership;
   aal2: boolean;
@@ -42,9 +43,11 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
     // getUser verified the signature and current identity; read aal only from that verified token.
     let aal2 = false;
     let sessionId: string | undefined;
+    let expired = false;
     let recentVerification = false;
     try {
       const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+      expired = typeof claims.exp === 'number' && claims.exp <= Date.now() / 1000;
       aal2 = claims.aal === 'aal2';
       recentVerification =
         aal2 &&
@@ -56,11 +59,27 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
             Date.now() / 1000 - x.timestamp >= 0 &&
             Date.now() / 1000 - x.timestamp <= 900,
         );
-      if (typeof claims.session_id === 'string' && /^[0-9a-f-]{36}$/i.test(claims.session_id))
+      if (
+        typeof claims.session_id === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claims.session_id)
+      )
         sessionId = claims.session_id;
     } catch {
       /* no step-up */
     }
+    if (expired)
+      throw new ApiError(
+        401,
+        'UNAUTHENTICATED',
+        'Your access token has expired. Refresh your session.',
+      );
+    if (!sessionId)
+      throw new ApiError(401, 'SESSION_ENDED', 'This login session has ended. Sign in again.');
+    const live = (
+      await pool.query('SELECT app.observe_login_session($1,$2) AS live', [me.id, sessionId])
+    ).rows[0]?.live;
+    if (live !== true)
+      throw new ApiError(401, 'SESSION_ENDED', 'This login session has ended. Sign in again.');
     if (!aal2 && data.user.factors?.some((factor) => factor.status === 'verified'))
       throw new ApiError(403, 'MFA_REQUIRED', 'Complete multi-factor authentication to continue.');
     if (sessionId)
@@ -86,6 +105,7 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
     if (selected && !active) throw notFound();
     res.locals.actor = {
       ...me,
+      sessionId,
       features: {},
       limits: {},
       subscription_status: null,

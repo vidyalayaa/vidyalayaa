@@ -1,3 +1,4 @@
+import { providerSessionSchema } from '../helpers/provider-sessions.js';
 import { it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
@@ -14,6 +15,7 @@ it('preserves legacy exams, marks, and null-subject assignments without granting
     const files = (await readdir('db/migrations'))
       .sort()
       .filter((file) => file <= '20261021154148_teacher_subject_authorization.sql');
+    await db.exec(providerSessionSchema);
     for (const file of files.slice(0, -1))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     const f = await fixture(db);

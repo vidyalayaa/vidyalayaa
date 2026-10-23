@@ -12,6 +12,7 @@ import { monitorWorker } from './health.js';
 import { purgeApprovedSchool } from './offboarding.js';
 import { generateSchoolExport } from './school-exports.js';
 import { applyRetention } from './retention.js';
+import { sendLoginAlerts } from './login-alerts.js';
 const env = z
   .object({
     WORKER_DATABASE_URL: z.string().min(1),
@@ -40,6 +41,9 @@ async function run() {
   while (!stopping) {
     let ok = true;
     try {
+      await sendLoginAlerts(pool);
+      if (Date.now() - lastJobs >= 60000)
+        await pool.query('SELECT app.prune_account_security_events()');
       const schools = (
         await pool.query<{ worker_schools: string }>('SELECT app.worker_schools()')
       ).rows.map((x) => x.worker_schools);

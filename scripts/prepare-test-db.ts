@@ -1,3 +1,4 @@
+import { providerSessionSchema } from '../tests/helpers/provider-sessions.js';
 import pg from 'pg';
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith('_test'))
@@ -8,6 +9,7 @@ try {
   await db.query(
     "CREATE SCHEMA IF NOT EXISTS auth;CREATE SCHEMA IF NOT EXISTS storage;DO $$ BEGIN IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon; END IF; IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated;END IF;END $$;CREATE TABLE IF NOT EXISTS auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_confirmed_at timestamptz;CREATE TABLE IF NOT EXISTS storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
   );
+  await db.query(providerSessionSchema);
 } finally {
   await db.end();
 }

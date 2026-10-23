@@ -1,3 +1,4 @@
+import { providerSessionSchema } from '../helpers/provider-sessions.js';
 import { it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
@@ -12,6 +13,7 @@ it('upgrades the nine-migration release without losing identities, child links o
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
     );
     const files = (await readdir('db/migrations')).sort();
+    await db.exec(providerSessionSchema);
     for (const file of files.slice(0, 9))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     const f = await fixture(db),
@@ -29,6 +31,7 @@ it('upgrades the nine-migration release without losing identities, child links o
     const old = (
       await db.query('SELECT id,school_id,student_id,parent_id FROM student_parents ORDER BY id')
     ).rows;
+
     for (const file of files.slice(9))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     expect(

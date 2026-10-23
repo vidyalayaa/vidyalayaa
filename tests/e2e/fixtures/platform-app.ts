@@ -1,3 +1,4 @@
+import { withProviderSessions } from '../../helpers/provider-sessions';
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -7,10 +8,12 @@ import { portableDatabase, poolAdapters, fixture } from '../../helpers/database'
 import { createApp } from '../../../apps/api/src/app';
 import type { Config } from '../../../apps/api/src/lib/config';
 
-export function fixtureToken(id: string, aal = 'aal2') {
+export function fixtureToken(id: string, aal = 'aal2', sid = id) {
   return [
     Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
-    Buffer.from(JSON.stringify({ sub: id, aal, session_id: id })).toString('base64url'),
+    Buffer.from(
+      JSON.stringify({ sub: id, aal, session_id: sid, exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString('base64url'),
     'fixture-signature',
   ].join('.');
 }
@@ -174,7 +177,7 @@ export const test = base.extend<{}, { platformApp: PlatformApp }>({
             TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
             TRUST_PROXY_HOPS: 0,
           } as Config,
-          { ...pools, supabase: auth },
+          { ...pools, supabase: withProviderSessions(db, auth) },
         );
         server = app.listen(0, '127.0.0.1');
         await new Promise<void>((resolve, reject) => {

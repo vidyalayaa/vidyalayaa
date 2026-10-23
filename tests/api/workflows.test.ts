@@ -1,3 +1,4 @@
+import { fixtureBearer, withProviderSessions } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import request from 'supertest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -47,7 +48,7 @@ beforeAll(async () => {
       },
     },
   } as unknown as SupabaseClient;
-  app = createApp(config, { ...pools, supabase: auth });
+  app = createApp(config, { ...pools, supabase: withProviderSessions(db, auth) });
 });
 afterAll(async () => {
   await db.close();
@@ -55,7 +56,7 @@ afterAll(async () => {
 function call(method: 'get' | 'post' | 'patch', path: string, role = 'admin') {
   return request(app)
     [method]('/api/v1' + path)
-    .set('Authorization', `Bearer ${role}`)
+    .set('Authorization', `Bearer ${fixtureBearer(role)}`)
     .set('X-School-Id', f.schoolA);
 }
 describe('identity, RBAC and scope', () => {
@@ -230,14 +231,14 @@ describe('atomic writes and school workflows', () => {
       (
         await request(app)
           .put('/api/v1/school/retention')
-          .set('Authorization', 'Bearer admin')
+          .set('Authorization', 'Bearer ' + fixtureBearer('admin'))
           .set('X-School-Id', f.schoolA)
           .send({ ...body, approved: false })
       ).status,
     ).toBe(422);
     const response = await request(app)
       .put('/api/v1/school/retention')
-      .set('Authorization', 'Bearer admin')
+      .set('Authorization', 'Bearer ' + fixtureBearer('admin'))
       .set('X-School-Id', f.schoolA)
       .send(body);
     expect(response.status).toBe(200);
@@ -247,7 +248,7 @@ describe('atomic writes and school workflows', () => {
       (
         await request(app)
           .delete('/api/v1/school/retention')
-          .set('Authorization', 'Bearer admin')
+          .set('Authorization', 'Bearer ' + fixtureBearer('admin'))
           .set('X-School-Id', f.schoolA)
       ).status,
     ).toBe(204);

@@ -1,3 +1,4 @@
+import { fixtureBearer, withProviderSessions } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -44,7 +45,7 @@ beforeAll(async () => {
       TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
       TRUST_PROXY_HOPS: 0,
     } as Config,
-    { ...pools, supabase: auth },
+    { ...pools, supabase: withProviderSessions(db, auth) },
   );
 });
 afterAll(async () => {
@@ -53,7 +54,7 @@ afterAll(async () => {
 const call = (method: 'get' | 'post' | 'patch', path: string, role = 'admin', school?: string) =>
   request(app)
     [method]('/api/v1' + path)
-    .set('Authorization', 'Bearer ' + role)
+    .set('Authorization', 'Bearer ' + fixtureBearer(role))
     .set('X-School-Id', school || f.schoolA);
 
 it('revokes an already generated school-wide PDF after Principal demotion', async () => {
@@ -228,7 +229,7 @@ it('keeps one browser endpoint subscribed to both authorized schools and revokes
   ).toBe(2);
   const r = await request(app)
     .delete('/api/v1/push-tokens')
-    .set('Authorization', 'Bearer parent')
+    .set('Authorization', 'Bearer ' + fixtureBearer('parent'))
     .set('X-School-Id', f.schoolA)
     .send({ token_hash: hash(token) });
   expect(r.status).toBe(204);
@@ -365,7 +366,7 @@ it('limits family profile and history and restricts school security and full exp
     (
       await request(app)
         .put('/api/v1/school/security')
-        .set('Authorization', 'Bearer admin')
+        .set('Authorization', 'Bearer ' + fixtureBearer('admin'))
         .set('X-School-Id', f.schoolA)
         .send({
           require_privileged_mfa: true,
