@@ -60,6 +60,16 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
   const dbCode = err?.code as string | undefined;
+  if (dbCode === '28000' && err.message === 'SESSION_EXPIRED') {
+    res
+      .status(401)
+      .json({
+        error: { code: 'SESSION_ENDED', message: 'This login session has ended. Sign in again.' },
+        request_id,
+        server_time: new Date().toISOString(),
+      });
+    return;
+  }
   const knownConstraint =
     dbCode === '23514' &&
     (

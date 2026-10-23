@@ -45,6 +45,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test tests/e2e/workspace.spec.ts tests/e2e/mfa.spec.ts tests/e2e/auth-callback.spec.ts tests/e2e/google-login.spec.ts tests/e2e/onboarding.spec.ts tests/e2e/school-workflows.spec.ts tests/e2e/platform.spec.ts tests/e2e/audit-workflows.spec.ts --workers=2
       - run: npx playwright test tests/e2e/fees.spec.ts tests/e2e/fees-roles.spec.ts --workers=1
+      - run: npx playwright test tests/e2e/login-sessions.spec.ts --workers=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

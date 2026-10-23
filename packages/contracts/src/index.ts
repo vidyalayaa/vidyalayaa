@@ -627,3 +627,4 @@ export interface InvitationCandidate {
 export * from './timetable.js';
 
 export * from './fees.js';
+export * from './sessions.js';

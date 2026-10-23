@@ -1,3 +1,4 @@
+import { fixtureBearer, withProviderSessions } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import request from 'supertest';
 import type { PGlite } from '@electric-sql/pglite';
@@ -34,14 +35,14 @@ beforeAll(async () => {
       TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
       TRUST_PROXY_HOPS: 0,
     } as Config,
-    { ...poolAdapters(db), supabase: auth },
+    { ...poolAdapters(db), supabase: withProviderSessions(db, auth) },
   );
 });
 afterAll(async () => db.close());
 const call = (path: string, role = 'principal', aal = 'aal2') =>
   request(app)
     .get('/api/v1' + path)
-    .set('Authorization', 'Bearer ' + token(role, aal))
+    .set('Authorization', 'Bearer ' + fixtureBearer(token(role, aal)))
     .set('X-School-Id', f.schoolA);
 
 it('counts the entire actionable correction queue and excludes terminal and self-authored requests', async () => {
@@ -162,7 +163,7 @@ it('keeps Principal reads available while a read-only subscription blocks announ
     expect((await call('/resources/students')).status).toBe(200);
     const result = await request(app)
       .post('/api/v1/resources/announcements')
-      .set('Authorization', 'Bearer ' + token())
+      .set('Authorization', 'Bearer ' + fixtureBearer(token()))
       .set('X-School-Id', f.schoolA)
       .send({
         title: 'Cancelled plan must not publish',

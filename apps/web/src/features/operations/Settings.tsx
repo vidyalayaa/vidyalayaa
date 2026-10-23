@@ -133,6 +133,13 @@ export default function Settings() {
           </div>
         </Panel>
         <Panel title="Account security" subtitle="A little extra protection goes a long way.">
+          <div className="px-6 pt-4">
+            <Button asChild variant="outline">
+              <Link to="/settings/security">
+                Security &amp; Login Sessions <ArrowUpRight size={16} />
+              </Link>
+            </Button>
+          </div>
           <AuthenticatorSetup />
         </Panel>
       </div>

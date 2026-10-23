@@ -22,6 +22,7 @@ import { billingRouter } from './modules/platform/billing.js';
 import { platformRouter, supportApprovalRouter } from './modules/platform/router.js';
 import { sharedRateLimit, auditDenied } from './middleware/security-events.js';
 import { recipientInvitationRouter } from './modules/identity/invitations.js';
+import { sessionsRouter } from './modules/identity/sessions.js';
 export interface Dependencies {
   api: pg.Pool;
   device: pg.Pool;
@@ -165,12 +166,14 @@ export function createApp(config: Config, deps: Dependencies) {
         securityPolicy: _policy,
         recentVerification: _recent,
         active,
+        sessionId: _sessionId,
         ...me
       } = a;
       res.json({ ...me, ...e, school: active });
     }),
   );
   app.use('/api/v1/invitations', recipientInvitationRouter(deps.api));
+  app.use('/api/v1/account/sessions', sessionsRouter(deps.api));
   app.use(
     '/api/v1/platform',
     firmwareRouter(deps.platform, deps.supabase, config.FIRMWARE_RELEASE_PUBLIC_KEY),

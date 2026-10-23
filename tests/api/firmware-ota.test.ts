@@ -1,3 +1,4 @@
+import { fixtureBearer, withProviderSessions } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import request from 'supertest';
 import { generateKeyPairSync, sign, createHash, constants } from 'node:crypto';
@@ -86,14 +87,14 @@ beforeAll(async () => {
       TRUST_PROXY_HOPS: 0,
       FIRMWARE_RELEASE_PUBLIC_KEY: publicKey,
     } as Config,
-    { ...pools, supabase },
+    { ...pools, supabase: withProviderSessions(db, supabase) },
   );
 });
 afterAll(async () => db.close());
 const platform = (method: 'get' | 'post' | 'patch', path: string, t = token) =>
   request(app)
     [method]('/api/v1/platform' + path)
-    .set('Authorization', 'Bearer ' + t);
+    .set('Authorization', 'Bearer ' + fixtureBearer(t));
 it('rejects school-side publication and invalid release signatures', async () => {
   expect((await platform('get', '/firmware-releases', 'admin')).status).toBe(403);
   const bad = { ...manifest, signature: 'A'.repeat(512) };

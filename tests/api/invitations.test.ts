@@ -1,3 +1,4 @@
+import { fixtureBearer, withProviderSessions } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import request from 'supertest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -71,7 +72,7 @@ function call(
 ) {
   const r = request(app)
     [method]('/api/v1' + path)
-    .set('Authorization', 'Bearer ' + token(user, aal));
+    .set('Authorization', 'Bearer ' + fixtureBearer(token(user, aal)));
   return school ? r.set('X-School-Id', school) : r;
 }
 beforeAll(async () => {
@@ -131,7 +132,7 @@ beforeAll(async () => {
       TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
       TRUST_PROXY_HOPS: 0,
     } as Config,
-    { ...pools, supabase: auth },
+    { ...pools, supabase: withProviderSessions(db, auth) },
   );
 });
 afterAll(async () => {

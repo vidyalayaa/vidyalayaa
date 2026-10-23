@@ -1,3 +1,4 @@
+import { providerSessionSchema } from '../helpers/provider-sessions.js';
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
@@ -15,6 +16,7 @@ beforeAll(async () => {
   await db.exec(
     "CREATE SCHEMA auth; CREATE SCHEMA storage; CREATE ROLE anon; CREATE ROLE authenticated; CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}'); CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
   );
+  await db.exec(providerSessionSchema);
   for (const file of readdirSync('db/migrations').sort()) {
     const sql = readFileSync(`db/migrations/${file}`, 'utf8');
     await db.exec(sql);
