@@ -11,6 +11,7 @@ export async function sendPushTargets(
   deliveryId: string,
   targets: PushTarget[],
   message: string,
+  metadata?: { title: string; school_id: string },
 ) {
   const ctx = { schoolId, actorType: 'SYSTEM' as const };
   let sent = false,
@@ -33,6 +34,18 @@ export async function sendPushTargets(
       continue;
     }
     if (row.status === 'DEAD' || !row.active) continue;
+    const permitted = await transaction(
+      pool,
+      ctx,
+      async (tx) =>
+        (
+          await tx.query(
+            `SELECT app.notification_enabled(o.school_id,o.kind,'PUSH') AND o.cancelled_at IS NULL AND (o.kind<>'CUSTOM' OR EXISTS(SELECT FROM notification_recipient_targets r JOIN school_memberships m ON m.school_id=r.school_id AND m.user_id=r.user_id JOIN users u ON u.id=m.user_id WHERE r.school_id=o.school_id AND r.outbox_id=o.id AND r.user_id=d.recipient_user_id AND m.status='ACTIVE' AND u.status='ACTIVE')) AS allowed FROM notification_deliveries d JOIN notification_outbox o ON o.school_id=d.school_id AND o.id=d.outbox_id WHERE d.school_id=$1 AND d.id=$2`,
+            [schoolId, deliveryId],
+          )
+        ).rows[0]?.allowed,
+    );
+    if (!permitted) throw new DeliveryError('DELIVERY_CANCELLED_OR_POLICY_CHANGED', true);
     try {
       const wait = Number(
         (
@@ -48,6 +61,7 @@ export async function sendPushTargets(
         target.address,
         message,
         `${deliveryId}:${target.id}`,
+        metadata,
       );
       sent = true;
       await transaction(pool, ctx, (tx) =>

@@ -48,6 +48,8 @@ const tables = [
   'attendance_corrections',
   'attendance_reconciliation_requests',
   'notification_preferences',
+  'school_notification_settings',
+  'notification_recipient_targets',
   'notification_outbox',
   'notification_deliveries',
   'notification_attempts',

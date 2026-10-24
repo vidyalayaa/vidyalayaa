@@ -80,7 +80,7 @@ export default function Settings() {
               </p>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
-              {a.me?.school?.role === 'parent' && (
+              {a.me?.school?.permissions.includes('notifications.push') && (
                 <Button
                   variant="outline"
                   size="sm"

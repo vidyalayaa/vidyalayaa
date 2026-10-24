@@ -51,7 +51,7 @@ const Reports = lazy(() =>
   import('./features/operations/Screens').then((m) => ({ default: m.Reports })),
 );
 const Notifications = lazy(() =>
-  import('./features/operations/Screens').then((m) => ({ default: m.Notifications })),
+  import('./features/notifications/Notifications'),
 );
 const Members = lazy(() =>
   import('./features/operations/Screens').then((m) => ({ default: m.Members })),

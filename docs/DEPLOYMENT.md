@@ -340,3 +340,7 @@ gh workflow run deploy.yml --ref APPROVED_COMPATIBLE_COMMIT -f environment=produ
 ```
 
 The environment must require a named reviewer. Keep additive database migrations in place; do not drop columns/tables to make an old image boot. Never select a pre-audit image that omits report reauthorization or audience checks. Recheck identical API/worker SHA, health, login, school isolation and report access. If no approved compatible image exists, stop affected writes and forward-fix; do not claim an untested rollback is safe.
+
+## School notification controls and FCM
+
+See [School notifications](SCHOOL_NOTIFICATIONS.md) for School Admin recipient selection, automatic-alert controls, FCM credentials, browser enrollment, deployment compatibility, API contracts and troubleshooting. Deploy the matching API and worker before exposing the new compose UI.

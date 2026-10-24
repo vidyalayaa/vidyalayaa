@@ -15,11 +15,12 @@ export async function deliver(
   address: string,
   message: string,
   id: string,
+  metadata?: { title: string; school_id: string },
 ): Promise<string> {
   const state = circuits.get(channel);
   if (state && state.until > Date.now()) throw new DeliveryError('CIRCUIT_OPEN', false, 60);
   try {
-    const result = await send(channel, address, message, id);
+    const result = await send(channel, address, message, id, metadata);
     circuits.delete(channel);
     return result;
   } catch (e) {
@@ -29,7 +30,13 @@ export async function deliver(
     throw e;
   }
 }
-async function send(channel: string, address: string, message: string, id: string) {
+async function send(
+  channel: string,
+  address: string,
+  message: string,
+  id: string,
+  metadata?: { title: string; school_id: string },
+) {
   if (channel === 'PUSH') {
     if (!getApps().length) {
       if (!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64)
@@ -41,11 +48,20 @@ async function send(channel: string, address: string, message: string, id: strin
       });
     }
     try {
+      const destination = new URL(
+        '/notifications',
+        process.env.PUBLIC_WEB_URL || 'http://localhost:5173',
+      );
       return await getMessaging().send({
         token: address,
-        notification: { title: 'Vidyalayaa', body: message },
-        data: { delivery_id: id },
-        webpush: { fcmOptions: { link: process.env.PUBLIC_WEB_URL || '/' } },
+        notification: { title: metadata?.title || 'Vidyalayaa', body: message },
+        data: { delivery_id: id, ...(metadata ? { school_id: metadata.school_id } : {}) },
+        webpush: {
+          notification: { tag: id },
+          ...(destination.protocol === 'https:'
+            ? { fcmOptions: { link: destination.toString() } }
+            : {}),
+        },
       });
     } catch (e) {
       const code = (e as { code?: string }).code || 'PUSH_FAILED';

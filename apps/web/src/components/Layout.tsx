@@ -1,3 +1,4 @@
+import PushUpdates from '../features/notifications/PushUpdates';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -417,6 +418,7 @@ export default function Layout() {
               You’re offline. Reconnect before saving changes. Loaded records may be out of date.
             </div>
           )}
+          <PushUpdates />
           <Outlet />
           {!!support.data?.data.length && (
             <div className="notice mt-5" role="status">

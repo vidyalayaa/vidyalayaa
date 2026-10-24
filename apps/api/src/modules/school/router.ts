@@ -1,3 +1,4 @@
+import { notificationsRouter } from './notifications.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
 import { studentDirectoryRouter } from './student-directory.js';
@@ -180,6 +181,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
   router.use('/timetable', timetableRouter(pool, { requireWrite, withIdempotency }));
   router.use('/fees', feesRouter(pool, { requireWrite, withIdempotency }));
+  router.use('/notifications', notificationsRouter(pool, { requireWrite }));
   router.get(
     '/school/retention',
     permission('school.manage'),
@@ -1737,45 +1739,9 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
       res.send(Buffer.from(await object.data.arrayBuffer()));
     }),
   );
-  router.get(
-    '/notifications',
-    permission('notifications.read'),
-    asyncRoute(async (req, res) => {
-      const a = res.locals.actor;
-      res.json(
-        await transaction(
-          pool,
-          a.context,
-          (tx) => {
-            const select =
-                'SELECT d.id,d.channel,d.status,d.created_at,d.sent_at,d.last_error,t.kind,t.payload FROM notification_deliveries d JOIN notification_outbox t ON t.school_id=d.school_id AND t.id=d.outbox_id',
-              where = `WHERE d.school_id=$1 ${a.active!.role === 'parent' ? `AND EXISTS(SELECT 1 FROM parents p WHERE p.school_id=d.school_id AND p.id=d.parent_id AND p.user_id=$2 AND p.status='ACTIVE') AND (t.student_id IS NULL OR ${studentScope(a, 't.student_id', '$2')}) AND (t.kind<>'ANNOUNCEMENT' OR (t.payload->>'audience' IN ('SCHOOL','CLASS','PARENTS') AND EXISTS(SELECT 1 FROM announcements an WHERE an.school_id=t.school_id AND an.id=(t.payload->>'announcement_id')::uuid AND an.published_at<=now() AND an.audience<>'STAFF'))) AND (t.payload->>'class_id' IS NULL OR ${classScope(a, "(t.payload->>'class_id')::uuid", '$2')})` : 'AND $2::uuid IS NOT NULL'}`;
-            return req.query.cursor === '1'
-              ? cursorPage(
-                  tx,
-                  select,
-                  where,
-                  [a.context.schoolId, a.id],
-                  'd.created_at',
-                  'd.id',
-                  'uuid',
-                  req.query,
-                )
-              : paged(
-                  tx,
-                  `${select} ${where} ORDER BY d.created_at DESC,d.id DESC`,
-                  [a.context.schoolId, a.id],
-                  req.query,
-                );
-          },
-          true,
-        ),
-      );
-    }),
-  );
   router.post(
     '/push-tokens',
-    permission('notifications.preferences'),
+    permission('notifications.push'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
         b = z

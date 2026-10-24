@@ -13,3 +13,6 @@ db/migrations/20261023070540_school_timetable.sql text eol=lf
 db/migrations/20261023083655_fee_management.sql text eol=lf
 db/migrations/20261023151112_login_sessions.sql text eol=lf
 db/migrations/20261023113535_fix_calendar_dedupe_key.sql text eol=lf
+db/migrations/20261024085300_school_notifications.sql text eol=lf
+db/migrations/20261024093039_notification_queue_role_guard.sql text eol=lf
+db/migrations/20261024093708_notification_purge_cleanup.sql text eol=lf

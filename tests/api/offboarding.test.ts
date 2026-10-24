@@ -25,6 +25,19 @@ beforeAll(async () => {
     "INSERT INTO school_invitations(school_id,email,full_name,role_code,invited_by,status,parent_id) VALUES($1,'historic-parent@example.invalid','Historic linked parent','parent',$2,'REVOKED',$3)",
     [f.schoolA, f.admin, f.parentId],
   );
+  await db.query(
+    'INSERT INTO school_notification_settings(school_id,updated_by) VALUES($1,$3),($2,$3)',
+    [f.schoolA, f.schoolB, f.admin],
+  );
+  const custom = crypto.randomUUID();
+  await db.query(
+    "INSERT INTO notification_outbox(id,school_id,kind,dedupe_key,payload,status) VALUES($1,$2,'CUSTOM','purge-custom-fixture','{}','COMPLETED')",
+    [custom, f.schoolA],
+  );
+  await db.query(
+    'INSERT INTO notification_recipient_targets(school_id,outbox_id,user_id) VALUES($1,$2,$3)',
+    [f.schoolA, custom, f.parent],
+  );
   job = (
     await db.query<{ id: string }>(
       "INSERT INTO school_offboarding(school_id,requested_by,policy_ref,reason,export_until,delete_after) VALUES($1,$2,'TEST-CONTRACT','Isolated test offboarding',now()+interval '1 day',now()+interval '2 days') RETURNING id",
@@ -128,6 +141,21 @@ it('fails closed on legal hold, missing final export and failed storage removal'
     )
   ).rows[0];
   expect(result).toEqual({ status: 'PURGED', last_error: null });
+  expect(
+    (await db.query('SELECT id FROM school_notification_settings WHERE school_id=$1', [f.schoolA]))
+      .rows,
+  ).toHaveLength(0);
+  expect(
+    (await db.query('SELECT id FROM school_notification_settings WHERE school_id=$1', [f.schoolB]))
+      .rows,
+  ).toHaveLength(1);
+  expect(
+    (
+      await db.query('SELECT id FROM notification_recipient_targets WHERE school_id=$1', [
+        f.schoolA,
+      ])
+    ).rows,
+  ).toHaveLength(0);
   expect(objects.has(f.schoolB + '/foreign.pdf')).toBe(true);
   expect(
     (await db.query('SELECT id FROM students WHERE school_id=$1', [f.schoolA])).rows,

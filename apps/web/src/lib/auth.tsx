@@ -333,7 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (
       !session ||
       !me.data?.school ||
-      me.data.school.role !== 'parent' ||
+      !me.data.school.permissions.includes('notifications.push') ||
       typeof Notification === 'undefined' ||
       Notification.permission !== 'granted'
     )
