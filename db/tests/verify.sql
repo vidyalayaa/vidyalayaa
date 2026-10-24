@@ -20,3 +20,8 @@ DO $$ DECLARE n integer; BEGIN
  IF has_table_privilege('app_api','auth.sessions','SELECT') OR has_table_privilege('authenticated','app.login_session_activity','SELECT') OR has_table_privilege('app_platform','app.account_security_events','SELECT') OR has_function_privilege('authenticated','app.end_account_sessions(uuid,uuid,boolean)','EXECUTE') THEN RAISE EXCEPTION 'Private login sessions or controls exposed';END IF;
  IF NOT EXISTS(SELECT FROM pg_class WHERE oid='app.account_security_events'::regclass AND relrowsecurity AND relforcerowsecurity) OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='app.account_security_events'::regclass AND polname='own_security_events') THEN RAISE EXCEPTION 'Account security ownership protection missing';END IF;
 END $$;
+
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='notification_outbox'::regclass AND polname='notification_read' AND NOT polpermissive) OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='notification_outbox'::regclass AND polname='custom_worker_protocol') THEN RAISE EXCEPTION 'Notification ownership or deployment guard missing';END IF;
+ IF has_table_privilege('authenticated','notification_recipient_targets','SELECT') OR has_table_privilege('anon','school_notification_settings','SELECT') OR has_table_privilege('app_api','notification_recipient_targets','INSERT') OR has_function_privilege('authenticated','app.queue_custom_notification(text,text,uuid[],text,text)','EXECUTE') THEN RAISE EXCEPTION 'Notification privileged surface exposed';END IF;
+END $$;

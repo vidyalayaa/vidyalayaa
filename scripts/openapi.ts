@@ -11,6 +11,7 @@ import {
   reconciliationRequestSchema,
   retirementSchema,
   notificationPrivacySchema,
+  customNotificationSchema, notificationSettingsSchema,
   campusAssociationSchema,
   supportRequestSchema,
   supportResponseSchema,
@@ -114,6 +115,8 @@ const schemas = {
   Reconciliation: reconciliationRequestSchema,
   Retirement: retirementSchema,
   NotificationPrivacy: notificationPrivacySchema,
+  CustomNotification: customNotificationSchema,
+  SchoolNotificationSettings: notificationSettingsSchema,
   CampusAssociation: campusAssociationSchema,
   SupportRequest: supportRequestSchema,
   SupportResponse: supportResponseSchema,
@@ -518,6 +521,16 @@ operation(
   'patch',
   'Change reader state and safe tuning; partial config preserves omitted keys',
 );
+operation('/notifications/members','get','School Admin: paginated active members and push-device counts; search/role filters. Never returns raw tokens.');
+operation('/notifications/preview','post','School Admin: validate school recipients and preview FCM readiness.','CustomNotification');
+operation('/notifications/messages','post','School Admin: queue custom FCM message with mandatory Idempotency-Key; durable recipient snapshot.','CustomNotification');
+operation('/notifications/messages','get','School Admin / Principal: paginated school outbox; kind/status filters.');
+operation('/notifications/messages/{id}/deliveries','get','School Admin / Principal: paginated delivery status, no device credentials.');
+operation('/notifications/messages/{id}/cancel','post','School Admin: cancel pending work with audited reason; cannot recall accepted messages.','Reconciliation');
+operation('/notifications/settings','get','School Admin: school channel and event controls, optimistic version.');
+operation('/notifications/settings','put','School Admin: save versioned school notification controls.','SchoolNotificationSettings');
+operation('/push-tokens','post','Any active school member: register encrypted FCM endpoint for own account.');
+operation('/push-tokens','delete','Unregister only own endpoint by SHA-256 token_hash.');
 operation('/reports', 'get', 'Own reports');
 operation('/reports', 'post', 'Queue a private report', 'ReportRequest');
 operation('/reports/{id}/download', 'get', 'Obtain a short-lived authorized download');

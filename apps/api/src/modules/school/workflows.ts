@@ -37,7 +37,7 @@ export function workflowsRouter(pool: pg.Pool) {
   const r = Router();
   r.post(
     '/notifications/:id/retry',
-    permission('users.manage'),
+    permission('notifications.manage'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
         id = uuid.parse(req.params.id),

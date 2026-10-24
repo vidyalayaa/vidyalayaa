@@ -91,11 +91,17 @@ it('delivers STAFF publications only to active school staff, never linked parent
   });
   expect(r.status).toBe(201);
   await drainOutbox(pools.worker, f.schoolA, 'ab'.repeat(32));
-  const results = await db.query<{ parent_id: string | null; recipient_user_id: string }>(
-    "SELECT d.parent_id,d.recipient_user_id FROM notification_deliveries d JOIN notification_outbox o ON o.id=d.outbox_id WHERE o.payload->>'announcement_id'=$1",
+  const results = await db.query<{
+    parent_id: string | null;
+    recipient_user_id: string;
+    channel: string;
+  }>(
+    "SELECT d.parent_id,d.recipient_user_id,d.channel FROM notification_deliveries d JOIN notification_outbox o ON o.id=d.outbox_id WHERE o.payload->>'announcement_id'=$1",
     [r.body.id],
   );
-  expect(results.rows.length).toBe(3);
+  expect(results.rows.length).toBe(6);
+  expect(results.rows.filter((x) => x.channel === 'EMAIL')).toHaveLength(3);
+  expect(results.rows.filter((x) => x.channel === 'PUSH')).toHaveLength(3);
   expect(results.rows.every((x) => x.parent_id === null && x.recipient_user_id !== f.parent)).toBe(
     true,
   );
@@ -258,8 +264,12 @@ it('checks every resource read and denied write for all five school memberships'
     for (const name of resourceNames) {
       const read = await call('get', `/resources/${name}/${foreign}`, role);
       expect(read.status, `${role} read ${name}`).toBe(
-        role === 'teacher' && ['classes','subjects','enrollments','school_holidays'].includes(name)
-          ? 404 : permissions.includes(definitions[name].read) ? 404 : 403,
+        role === 'teacher' &&
+          ['classes', 'subjects', 'enrollments', 'school_holidays'].includes(name)
+          ? 404
+          : permissions.includes(definitions[name].read)
+            ? 404
+            : 403,
       );
       if (!definitions[name].write || !permissions.includes(definitions[name].write!)) {
         const write = await call('post', `/resources/${name}`, role).send({});

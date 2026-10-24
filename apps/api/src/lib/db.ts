@@ -74,7 +74,7 @@ export async function transaction<T>(
           : 'BEGIN',
     );
     await c.query(
-      "SELECT set_config('app.school_id',$1,true),set_config('app.user_id',$2,true),set_config('app.actor_type',$3,true),set_config('app.request_id',$4,true),set_config('lock_timeout','5s',true),set_config('statement_timeout','30s',true)",
+      "SELECT set_config('app.school_id',$1,true),set_config('app.user_id',$2,true),set_config('app.actor_type',$3,true),set_config('app.request_id',$4,true),set_config('app.notification_protocol','custom-v1',true),set_config('lock_timeout','5s',true),set_config('statement_timeout','30s',true)",
       [ctx.schoolId, ctx.userId || '', ctx.actorType || 'USER', ctx.requestId || ''],
     );
     const result = await fn(c);
