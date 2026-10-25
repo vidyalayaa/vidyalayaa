@@ -61,13 +61,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   }
   const dbCode = err?.code as string | undefined;
   if (dbCode === '28000' && err.message === 'SESSION_EXPIRED') {
-    res
-      .status(401)
-      .json({
-        error: { code: 'SESSION_ENDED', message: 'This login session has ended. Sign in again.' },
-        request_id,
-        server_time: new Date().toISOString(),
-      });
+    res.status(401).json({
+      error: { code: 'SESSION_ENDED', message: 'This login session has ended. Sign in again.' },
+      request_id,
+      server_time: new Date().toISOString(),
+    });
     return;
   }
   const knownConstraint =
@@ -82,6 +80,8 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         CAMPUS_LIMIT_REACHED: 'The organization has reached a participating school campus limit.',
         LAST_SCHOOL_ADMIN:
           'Add another active School Admin before changing the last administrator.',
+        STUDENT_PARENT_LIMIT:
+          'A student can have at most two active parents. Revoke an existing family connection before adding another.',
         INVITATION_PENDING:
           'The person must accept a school invitation before access can be activated.',
         TIMETABLE_ASSIGNMENT_INVALID:

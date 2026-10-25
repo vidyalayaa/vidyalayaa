@@ -1,12 +1,16 @@
 import { Router } from 'express';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type pg from 'pg';
 import { z } from 'zod';
-import { studentAdmissionSchema, uuid } from '@vidyalayaa/contracts';
-import { transaction, audit, type Tx } from '../../lib/db.js';
+import { studentAdmissionSchema, studentImportRequestSchema, uuid } from '@vidyalayaa/contracts';
+import { transaction, type Tx } from '../../lib/db.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import type { Actor } from '../../middleware/auth.js';
 import { paged } from '../../lib/pagination.js';
-import { validateBusiness } from './resources.js';
+import { saveStudentAdmission } from './student-admissions.js';
+import { importStudentAdmissions } from './student-import.js';
+import { studentExportRows } from './student-export.js';
 
 interface WriteControls {
   requireWrite: (tx: Tx, a: Actor, feature?: string) => Promise<void>;
@@ -24,20 +28,6 @@ const placement = `e.status='ACTIVE' AND c.retired_at IS NULL
  AND e.starts_on<=(now() AT TIME ZONE sc.timezone)::date
  AND (e.ends_on IS NULL OR e.ends_on>=(now() AT TIME ZONE sc.timezone)::date)`;
 const matches = `concat_ws(' ',s.student_code,s.first_name,s.last_name,s.email::text) ILIKE $2`;
-async function insert(
-  tx: Tx,
-  sid: string,
-  table: 'students' | 'parents' | 'enrollments' | 'student_parents',
-  values: Record<string, unknown>,
-) {
-  const keys = Object.keys(values);
-  return (
-    await tx.query(
-      `INSERT INTO ${table}(school_id,${keys.join(',')}) VALUES($1,${keys.map((_, i) => `$${i + 2}`).join(',')}) RETURNING *`,
-      [sid, ...keys.map((k) => values[k])],
-    )
-  ).rows[0];
-}
 export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   const r = Router();
   r.use((_req, res, next) => {
@@ -171,6 +161,73 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
     }),
   );
   r.post(
+    '/imports',
+    asyncRoute(async (req, res) => {
+      const a: Actor = res.locals.actor,
+        b = studentImportRequestSchema.parse(req.body),
+        key = req.header('Idempotency-Key');
+      if (
+        !['users.manage', 'students.write', 'parents.write'].every((p) =>
+          a.active!.permissions.includes(p),
+        )
+      )
+        throw new ApiError(403, 'FORBIDDEN', 'Student and family import permissions are required.');
+      if (!b.validate_only && !key)
+        throw new ApiError(
+          422,
+          'IDEMPOTENCY_KEY_REQUIRED',
+          'A retry key is required to import students safely.',
+        );
+      const result = await transaction(pool, a.context, async (tx) => {
+        await writes.requireWrite(tx, a);
+        const run = () => importStudentAdmissions(tx, a, b.rows, b.validate_only);
+        return b.validate_only
+          ? run()
+          : writes.withIdempotency(tx, a, key, { operation: 'student.import', rows: b.rows }, run);
+      });
+      res.status(b.validate_only ? 200 : 201).json(result);
+    }),
+  );
+  r.get(
+    '/export.csv',
+    asyncRoute(async (req, res) => {
+      const a: Actor = res.locals.actor;
+      const q = z
+        .object({
+          search: z.string().trim().max(120).default(''),
+          academic_session_id: uuid.optional(),
+        })
+        .strict()
+        .parse(req.query);
+      // Directory middleware already requires a School Admin and student/parent read permissions.
+      res.type('text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="vidyalayaa-students.csv"');
+      res.setHeader('Cache-Control', 'no-store');
+      try {
+        await transaction(
+          pool,
+          a.context,
+          (tx) =>
+            pipeline(
+              Readable.from(
+                studentExportRows(tx, a.context.schoolId, q.search, q.academic_session_id),
+              ),
+              res,
+            ),
+          true,
+          'repeatable read',
+        );
+      } catch (error) {
+        if (res.headersSent || res.destroyed) {
+          res.destroy();
+          return;
+        }
+        res.removeHeader('Content-Disposition');
+        throw error;
+      }
+    }),
+  );
+  r.post(
     '/admissions',
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
@@ -196,101 +253,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
           key,
           { operation: 'student.admission', ...b },
           async () => {
-            for (const table of ['students', 'parents', 'student_parents', 'enrollments'])
-              await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
-                `${a.context.schoolId}:${table}`,
-              ]);
-            const classroom = (
-              await tx.query(
-                'SELECT c.id,c.academic_session_id FROM classes c JOIN academic_sessions ac ON ac.school_id=c.school_id AND ac.id=c.academic_session_id WHERE c.school_id=$1 AND c.id=$2 AND c.retired_at IS NULL AND ac.retired_at IS NULL FOR SHARE OF c,ac',
-                [a.context.schoolId, b.enrollment.class_id],
-              )
-            ).rows[0];
-            if (!classroom) throw notFound();
-            if (
-              b.student.status === 'ACTIVE' &&
-              Number(
-                (
-                  await tx.query(
-                    "SELECT count(*) FROM students WHERE school_id=$1 AND status='ACTIVE'",
-                    [a.context.schoolId],
-                  )
-                ).rows[0].count,
-              ) >= (a.limits.max_students ?? 0)
-            )
-              throw new ApiError(409, 'PLAN_LIMIT_REACHED', 'The student limit has been reached.');
-            await validateBusiness(tx, a, 'students', b.student, false);
-            const student = await insert(tx, a.context.schoolId, 'students', b.student);
-            await audit(tx, a.context.schoolId, a.id, 'students.create', 'students', student.id);
-            const enrollment = await insert(tx, a.context.schoolId, 'enrollments', {
-              ...b.enrollment,
-              student_id: student.id,
-              academic_session_id: classroom.academic_session_id,
-              status: 'ACTIVE',
-            });
-            await audit(
-              tx,
-              a.context.schoolId,
-              a.id,
-              'enrollments.create',
-              'enrollments',
-              enrollment.id,
-            );
-            const parents = [],
-              connections = [];
-            for (const guardian of b.guardians) {
-              let parent;
-              if (guardian.parent_id) {
-                parent = (
-                  await tx.query(
-                    "SELECT * FROM parents WHERE school_id=$1 AND id=$2 AND status='ACTIVE' FOR SHARE",
-                    [a.context.schoolId, guardian.parent_id],
-                  )
-                ).rows[0];
-                if (!parent) throw notFound();
-              } else {
-                const v = guardian.parent!;
-                if (
-                  v.email &&
-                  (
-                    await tx.query(
-                      'SELECT id FROM parents WHERE school_id=$1 AND email=$2::citext',
-                      [a.context.schoolId, v.email.trim()],
-                    )
-                  ).rowCount
-                )
-                  throw new ApiError(
-                    409,
-                    'PARENT_EXISTS',
-                    'A parent with this email already exists. Select the existing parent to link this child.',
-                  );
-                parent = await insert(tx, a.context.schoolId, 'parents', {
-                  ...v,
-                  email: v.email?.trim() || null,
-                  status: 'ACTIVE',
-                });
-                await audit(tx, a.context.schoolId, a.id, 'parents.create', 'parents', parent.id);
-              }
-              const connection = await insert(tx, a.context.schoolId, 'student_parents', {
-                student_id: student.id,
-                parent_id: parent.id,
-                relationship: guardian.relationship,
-                is_primary_contact: guardian.is_primary_contact,
-                can_receive_alerts: guardian.can_receive_alerts,
-                status: 'ACTIVE',
-              });
-              await audit(
-                tx,
-                a.context.schoolId,
-                a.id,
-                'student_parents.create',
-                'student_parents',
-                connection.id,
-              );
-              parents.push(parent);
-              connections.push(connection);
-            }
-            return { student, enrollment, parents, connections };
+            return saveStudentAdmission(tx, a, b);
           },
         );
       });

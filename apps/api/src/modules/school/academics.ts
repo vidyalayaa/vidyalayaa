@@ -184,10 +184,10 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
        FROM classes t LEFT JOIN teachers ct ON ct.school_id=t.school_id AND ct.id=t.class_teacher_id
        CROSS JOIN LATERAL (
          SELECT count(DISTINCT e.student_id)::int AS student_count,
-           count(DISTINCT e.student_id) FILTER(WHERE s.sex='MALE')::int AS male_count,
-           count(DISTINCT e.student_id) FILTER(WHERE s.sex='FEMALE')::int AS female_count,
-           count(DISTINCT e.student_id) FILTER(WHERE s.sex='OTHER')::int AS other_count,
-           count(DISTINCT e.student_id) FILTER(WHERE s.sex='NOT_SPECIFIED')::int AS unspecified_count
+           count(DISTINCT e.student_id) FILTER(WHERE s.gender='MALE')::int AS male_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.gender='FEMALE')::int AS female_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.gender='OTHER')::int AS other_count,
+           count(DISTINCT e.student_id) FILTER(WHERE s.gender='NOT_SPECIFIED')::int AS unspecified_count
          FROM enrollments e JOIN students s ON s.school_id=e.school_id AND s.id=e.student_id
          WHERE e.school_id=t.school_id AND e.class_id=t.id AND ${currentEnrollment}
        ) roster

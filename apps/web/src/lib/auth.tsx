@@ -165,6 +165,7 @@ export async function api<T = Record<string, unknown>>(
   path: string,
   options: RequestInit = {},
   refresh = true,
+  responseType: 'json' | 'blob' = 'json',
 ): Promise<T> {
   if (!supabase)
     throw new HttpError('SETUP_REQUIRED', 503, 'Connect Supabase and the API to use this feature.');
@@ -221,12 +222,23 @@ export async function api<T = Record<string, unknown>>(
         );
       discardDraftCheckpoint();
       reauthenticationSchool = undefined;
-      return api(path, options, false);
+      return api(path, options, false, responseType);
     }
     await supabase.auth.signOut({ scope: 'local' });
     throw new HttpError('UNAUTHENTICATED', 401, 'Your session expired. Sign in again.');
   }
   if (response.status === 204) return undefined as T;
+  if (response.ok && responseType === 'blob') {
+    const blob = await response.blob();
+    const current = await supabase.auth.getSession();
+    if (selectedSchool !== requestSchool || current.data.session?.user.id !== session?.user.id)
+      throw new HttpError(
+        'CONTEXT_CHANGED',
+        409,
+        'Your account or school changed. Download again from the current school.',
+      );
+    return blob as T;
+  }
   const body = await response.json();
   if (
     !response.ok &&

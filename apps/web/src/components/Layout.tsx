@@ -26,6 +26,7 @@ import {
   Layers3,
   ClipboardCheck,
   HeartHandshake,
+  Compass,
 } from 'lucide-react';
 import { configured, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
@@ -319,6 +320,10 @@ export default function Layout() {
           )}
         </nav>
         <div className="sidebar-bottom">
+          <Link to="/explore" className="nav-item" onClick={() => setOpen(false)}>
+            <Compass size={18} />
+            Explore Vidyalayaa
+          </Link>
           <div className="support-card">
             <div className="support-circle">
               <HelpCircle size={19} />

@@ -28,7 +28,7 @@ export const fields: Record<Resource, Field[]> = {
     { key: 'first_name' },
     { key: 'last_name', optional: true },
     { key: 'date_of_birth', type: 'date', optional: true },
-    select('sex', ['NOT_SPECIFIED', 'MALE', 'FEMALE', 'OTHER']),
+    select('gender', ['NOT_SPECIFIED', 'MALE', 'FEMALE', 'OTHER']),
     select('status', ['ACTIVE', 'TRANSFERRED', 'GRADUATED', 'WITHDRAWN']),
   ],
   parents: [

@@ -11,7 +11,8 @@ import {
   reconciliationRequestSchema,
   retirementSchema,
   notificationPrivacySchema,
-  customNotificationSchema, notificationSettingsSchema,
+  customNotificationSchema,
+  notificationSettingsSchema,
   campusAssociationSchema,
   supportRequestSchema,
   supportResponseSchema,
@@ -31,10 +32,18 @@ import {
   deviceTuningSchema,
   retentionPolicySchema,
   classAttendanceSchema,
-  feePaymentSchema, feeDate,
-  feeStructureSchema, feeAssessmentSchema, feeCollectionSchema, feeReasonSchema, transportRouteSchema, transportAssignmentSchema,
+  feePaymentSchema,
+  feeDate,
+  feeStructureSchema,
+  feeAssessmentSchema,
+  feeCollectionSchema,
+  feeReasonSchema,
+  transportRouteSchema,
+  transportAssignmentSchema,
   classSubjectSchema,
   studentAdmissionSchema,
+  studentImportRequestSchema,
+  studentImportRowSchema,
   calendarEventSchema,
   calendarEventUpdateSchema,
   calendarDeleteSchema,
@@ -130,9 +139,17 @@ const schemas = {
   ManualAttendance: manualSchema,
   ClassAttendance: classAttendanceSchema,
   FeePayment: feePaymentSchema,
-  FeeStructure: feeStructureSchema, FeeAssessment: feeAssessmentSchema, FeeCollection: feeCollectionSchema, FeeCorrection: feeReasonSchema, FeeTransportEnd:feeReasonSchema.extend({ended_on:feeDate}), FeeTransportRoute: transportRouteSchema, FeeTransportAssignment: transportAssignmentSchema,
+  FeeStructure: feeStructureSchema,
+  FeeAssessment: feeAssessmentSchema,
+  FeeCollection: feeCollectionSchema,
+  FeeCorrection: feeReasonSchema,
+  FeeTransportEnd: feeReasonSchema.extend({ ended_on: feeDate }),
+  FeeTransportRoute: transportRouteSchema,
+  FeeTransportAssignment: transportAssignmentSchema,
   ClassSubject: classSubjectSchema,
   StudentAdmission: studentAdmissionSchema,
+  StudentImportRequest: studentImportRequestSchema,
+  StudentImportRow: studentImportRowSchema,
   CalendarEvent: calendarEventSchema,
   CalendarEventUpdate: calendarEventUpdateSchema,
   CalendarEventDelete: calendarDeleteSchema,
@@ -168,7 +185,8 @@ function operation(
                 name: 'X-School-Id',
                 in: 'header',
                 required:
-                  !['/me', '/invitations/pending', '/invitations/{id}/respond'].includes(path) && !path.startsWith('/account/') &&
+                  !['/me', '/invitations/pending', '/invitations/{id}/respond'].includes(path) &&
+                  !path.startsWith('/account/') &&
                   !path.startsWith('/platform/'),
                 schema: { type: 'string', format: 'uuid' },
               },
@@ -204,14 +222,43 @@ function operation(
   }
 }
 for (const name of Object.keys(resourceSchemas)) {
-  operation(`/resources/${name}`, 'get', `List scoped ${name}`, undefined, 'UserJWT',
-    ['marks', 'subjects', 'exams'].includes(name) ? {
-      parameters: [
-        { name: 'X-School-Id', in: 'header', required: true, schema: { type: 'string', format: 'uuid' } },
-        { name: 'class_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Exact class/section record. Marks are filtered through the examination class; subjects use configured section assignments.' },
-        ...(name === 'marks' ? [{ name: 'exam_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Combines with class_id; an examination from another class returns no matching marks.' }] : []),
-      ],
-    } : {});
+  operation(
+    `/resources/${name}`,
+    'get',
+    `List scoped ${name}`,
+    undefined,
+    'UserJWT',
+    ['marks', 'subjects', 'exams'].includes(name)
+      ? {
+          parameters: [
+            {
+              name: 'X-School-Id',
+              in: 'header',
+              required: true,
+              schema: { type: 'string', format: 'uuid' },
+            },
+            {
+              name: 'class_id',
+              in: 'query',
+              schema: { type: 'string', format: 'uuid' },
+              description:
+                'Exact class/section record. Marks are filtered through the examination class; subjects use configured section assignments.',
+            },
+            ...(name === 'marks'
+              ? [
+                  {
+                    name: 'exam_id',
+                    in: 'query',
+                    schema: { type: 'string', format: 'uuid' },
+                    description:
+                      'Combines with class_id; an examination from another class returns no matching marks.',
+                  },
+                ]
+              : []),
+          ],
+        }
+      : {},
+  );
   operation(`/resources/${name}`, 'post', `Create ${name}`, name, 'UserJWT', {
     parameters: [{ name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } }],
   });
@@ -219,20 +266,76 @@ for (const name of Object.keys(resourceSchemas)) {
   operation(`/resources/${name}/{id}`, 'patch', `Update ${name}`);
 }
 operation('/me', 'get', 'Verified identity, memberships, permissions and entitlements');
-operation('/account/sessions','get','List only the current user’s provider sessions and recent account security alerts; no school selection required');
-operation('/account/sessions/logout-others','post','End all owned provider sessions except the current session; no user ID accepted');
-operation('/account/sessions/{id}','delete','End one owned provider session, cascade its refresh credentials and report whether it was current',undefined,'UserJWT',{
-  parameters:[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}],
-});
+operation(
+  '/account/sessions',
+  'get',
+  'List only the current user’s provider sessions and recent account security alerts; no school selection required',
+);
+operation(
+  '/account/sessions/logout-others',
+  'post',
+  'End all owned provider sessions except the current session; no user ID accepted',
+);
+operation(
+  '/account/sessions/{id}',
+  'delete',
+  'End one owned provider session, cascade its refresh credentials and report whether it was current',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+  },
+);
 operation('/dashboard', 'get', 'Role-scoped school dashboard');
-operation('/timetable/settings', 'get', 'School timing template; configured=false means unsaved defaults');
-operation('/timetable/settings', 'put', 'School Admin-only versioned timing update; preserves existing lectures', 'SchoolTimingsUpdate', 'UserJWT', {
-  parameters:[{name:'X-School-Id',in:'header',required:true,schema:{type:'string',format:'uuid'}},{name:'Idempotency-Key',in:'header',schema:{type:'string'}}],
-});
+operation(
+  '/timetable/settings',
+  'get',
+  'School timing template; configured=false means unsaved defaults',
+);
+operation(
+  '/timetable/settings',
+  'put',
+  'School Admin-only versioned timing update; preserves existing lectures',
+  'SchoolTimingsUpdate',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } },
+    ],
+  },
+);
 operation('/timetable/classes', 'get', 'Paginated authorized timetable classes and sections');
-for (const child of ['entries','assignments']) operation(`/timetable/classes/{id}/${child}`, 'get', child==='entries'?'Paginated weekly class lectures with labels':'School Admin-only active subject/teacher assignments for this class',undefined,'UserJWT',{
-  parameters:[{name:'X-School-Id',in:'header',required:true,schema:{type:'string',format:'uuid'}},{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}},{name:'page',in:'query',schema:{type:'integer',minimum:1}},{name:'page_size',in:'query',schema:{type:'integer',minimum:1,maximum:100}}],
-});
+for (const child of ['entries', 'assignments'])
+  operation(
+    `/timetable/classes/{id}/${child}`,
+    'get',
+    child === 'entries'
+      ? 'Paginated weekly class lectures with labels'
+      : 'School Admin-only active subject/teacher assignments for this class',
+    undefined,
+    'UserJWT',
+    {
+      parameters: [
+        {
+          name: 'X-School-Id',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      ],
+    },
+  );
 operation('/attendance', 'get', 'Paginated daily attendance');
 operation('/attendance/manual', 'post', 'Manual classroom attendance', 'ManualAttendance');
 operation(
@@ -385,7 +488,7 @@ operation(
       },
     ],
     description:
-      'Requires students.write and parents.write as well as directory read permissions. Supply one to five guardians, each with exactly one parent_id or parent details. At most one primary contact. The academic session is derived from the selected class. Existing email matches require explicit selection; existing parents are never overwritten. No Auth accounts or invitations are created.',
+      'Requires students.write and parents.write as well as directory read permissions. Supply one or two guardians, each with exactly one parent_id or parent details. At most one primary contact. The academic session is derived from the selected class. Existing email matches require explicit selection; existing parents are never overwritten. No Auth accounts or invitations are created.',
   },
 );
 const admissionResponses = (
@@ -396,20 +499,172 @@ admissionResponses['201'] = {
     'Student, enrollment, parents and family connections saved together; safe retries return the same saved records.',
 };
 delete admissionResponses['200'];
-operation('/calendar/classes','get','Calendar read: paginated accessible class/section choices; families see only current authorized enrollment sections',undefined,'UserJWT',{
-  parameters:[{name:'page',in:'query',schema:{type:'integer',minimum:1}},{name:'page_size',in:'query',schema:{type:'integer',minimum:1,maximum:100}}],
-});
-operation('/calendar/events','get','Calendar read: all applicable events overlapping an inclusive date range, with current role/ownership enforcement',undefined,'UserJWT',{
-  parameters:[{name:'from',in:'query',required:true,schema:{type:'string',format:'date'}},{name:'to',in:'query',required:true,schema:{type:'string',format:'date'}},{name:'kind',in:'query',schema:{type:'string',enum:['HOLIDAY','SCHOOL_EVENT','EXAM_DAY','ACTIVITY','ANNOUNCEMENT','OTHER','WEEKEND_OVERRIDE','SHORT_DAY']}},{name:'class_ids',in:'query',schema:{type:'string'},description:'Comma-separated accessible section UUIDs; school-wide events remain included.'},{name:'page',in:'query',schema:{type:'integer',minimum:1}},{name:'page_size',in:'query',schema:{type:'integer',minimum:1,maximum:100}}],
-  description:'calendar.read; date span <=366 days. Returns paginated events with id,title,description,kind,start_date,end_date,audience,class_ids,targets,version. Target labels are projected through class authorization. Existing multi-day events overlapping the range are included even when they start before it.',
-});
-const calendarId={name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}};
-operation('/calendar/events/{id}','get','Calendar read: one applicable event or scope-safe 404',undefined,'UserJWT',{parameters:[calendarId]});
-operation('/calendar/events','post','School Admin calendar.write only: create one school-wide or multi-section event','CalendarEvent','UserJWT',{parameters:[{name:'Idempotency-Key',in:'header',schema:{type:'string'}}]});
-const calendarResponses=(paths['/calendar/events'].post as {responses:Record<string,unknown>}).responses;
-calendarResponses['201']={description:'Calendar event created; idempotent retries return the same event.'};delete calendarResponses['200'];
-operation('/calendar/events/{id}','patch','School Admin only: update complete event details and targets with expected_version','CalendarEventUpdate','UserJWT',{parameters:[calendarId,{name:'Idempotency-Key',in:'header',schema:{type:'string'}}]});
-operation('/calendar/events/{id}','delete','School Admin only: remove event from calendars while preserving audited history','CalendarEventDelete','UserJWT',{parameters:[calendarId,{name:'Idempotency-Key',in:'header',schema:{type:'string'}}]});
+operation(
+  '/student-directory/imports',
+  'post',
+  'School Admin only; validate or atomically import complete student admissions with enrollments and family connections',
+  'StudentImportRequest',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        schema: { type: 'string', minLength: 8, maxLength: 200 },
+        description: 'Required when validate_only is false.',
+      },
+    ],
+    description:
+      'Requires users.manage, students.write and parents.write plus directory reads. Rows follow StudentImportRow (1-500). Class grade/section/session resolve only inside the selected school. Blank session uses the current one. Each row supplies one or two NEW or explicit EXISTING guardians; EXISTING uses a unique active same-school parent email and leaves name/phone blank. Preview rolls back all records/audits. Commit saves the entire file or nothing, with idempotent retries. Does not create accounts, invitations or passwords.',
+  },
+);
+operation(
+  '/student-directory/export.csv',
+  'get',
+  'School Admin only; stream school-scoped full student, enrollment and family CSV',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'search', in: 'query', schema: { type: 'string', maxLength: 120 } },
+      { name: 'academic_session_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+    ],
+    description:
+      'UTF-8 CSV with BOM, no-store and attachment disposition. Streams keyset batches under a repeatable-read snapshot, including inactive/unassigned students. Current enrollment is preferred, otherwise latest enrollment. Includes all linked parents, including read-only parent/link/enrollment statuses and extra parent columns when existing records have more than two active. Spreadsheet formulas are neutralized. Does not export credentials, attendance, marks or fee histories.',
+  },
+);
+const studentImportResponses = (
+  paths['/student-directory/imports'].post as { responses: Record<string, unknown> }
+).responses;
+studentImportResponses['200'] = {
+  description:
+    'Entire file validated without retaining admission records; returns validated and imported counts (imported is zero).',
+};
+studentImportResponses['201'] = {
+  description:
+    'Entire file imported atomically; returns validated and imported counts. Matching retry keys return the same result.',
+};
+const studentExportResponses = (
+  paths['/student-directory/export.csv'].get as { responses: Record<string, unknown> }
+).responses;
+studentExportResponses['200'] = {
+  description: 'UTF-8 CSV attachment; school-scoped student, enrollment and parent records.',
+  content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+};
+operation(
+  '/calendar/classes',
+  'get',
+  'Calendar read: paginated accessible class/section choices; families see only current authorized enrollment sections',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+    ],
+  },
+);
+operation(
+  '/calendar/events',
+  'get',
+  'Calendar read: all applicable events overlapping an inclusive date range, with current role/ownership enforcement',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'from', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+      { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+      {
+        name: 'kind',
+        in: 'query',
+        schema: {
+          type: 'string',
+          enum: [
+            'HOLIDAY',
+            'SCHOOL_EVENT',
+            'EXAM_DAY',
+            'ACTIVITY',
+            'ANNOUNCEMENT',
+            'OTHER',
+            'WEEKEND_OVERRIDE',
+            'SHORT_DAY',
+          ],
+        },
+      },
+      {
+        name: 'class_ids',
+        in: 'query',
+        schema: { type: 'string' },
+        description:
+          'Comma-separated accessible section UUIDs; school-wide events remain included.',
+      },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+    ],
+    description:
+      'calendar.read; date span <=366 days. Returns paginated events with id,title,description,kind,start_date,end_date,audience,class_ids,targets,version. Target labels are projected through class authorization. Existing multi-day events overlapping the range are included even when they start before it.',
+  },
+);
+const calendarId = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: { type: 'string', format: 'uuid' },
+};
+operation(
+  '/calendar/events/{id}',
+  'get',
+  'Calendar read: one applicable event or scope-safe 404',
+  undefined,
+  'UserJWT',
+  { parameters: [calendarId] },
+);
+operation(
+  '/calendar/events',
+  'post',
+  'School Admin calendar.write only: create one school-wide or multi-section event',
+  'CalendarEvent',
+  'UserJWT',
+  { parameters: [{ name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } }] },
+);
+const calendarResponses = (paths['/calendar/events'].post as { responses: Record<string, unknown> })
+  .responses;
+calendarResponses['201'] = {
+  description: 'Calendar event created; idempotent retries return the same event.',
+};
+delete calendarResponses['200'];
+operation(
+  '/calendar/events/{id}',
+  'patch',
+  'School Admin only: update complete event details and targets with expected_version',
+  'CalendarEventUpdate',
+  'UserJWT',
+  {
+    parameters: [calendarId, { name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } }],
+  },
+);
+operation(
+  '/calendar/events/{id}',
+  'delete',
+  'School Admin only: remove event from calendars while preserving audited history',
+  'CalendarEventDelete',
+  'UserJWT',
+  {
+    parameters: [calendarId, { name: 'Idempotency-Key', in: 'header', schema: { type: 'string' } }],
+  },
+);
 operation(
   '/academics/classes',
   'get',
@@ -521,16 +776,56 @@ operation(
   'patch',
   'Change reader state and safe tuning; partial config preserves omitted keys',
 );
-operation('/notifications/members','get','School Admin: paginated active members and push-device counts; search/role filters. Never returns raw tokens.');
-operation('/notifications/preview','post','School Admin: validate school recipients and preview FCM readiness.','CustomNotification');
-operation('/notifications/messages','post','School Admin: queue custom FCM message with mandatory Idempotency-Key; durable recipient snapshot.','CustomNotification');
-operation('/notifications/messages','get','School Admin / Principal: paginated school outbox; kind/status filters.');
-operation('/notifications/messages/{id}/deliveries','get','School Admin / Principal: paginated delivery status, no device credentials.');
-operation('/notifications/messages/{id}/cancel','post','School Admin: cancel pending work with audited reason; cannot recall accepted messages.','Reconciliation');
-operation('/notifications/settings','get','School Admin: school channel and event controls, optimistic version.');
-operation('/notifications/settings','put','School Admin: save versioned school notification controls.','SchoolNotificationSettings');
-operation('/push-tokens','post','Any active school member: register encrypted FCM endpoint for own account.');
-operation('/push-tokens','delete','Unregister only own endpoint by SHA-256 token_hash.');
+operation(
+  '/notifications/members',
+  'get',
+  'School Admin: paginated active members and push-device counts; search/role filters. Never returns raw tokens.',
+);
+operation(
+  '/notifications/preview',
+  'post',
+  'School Admin: validate school recipients and preview FCM readiness.',
+  'CustomNotification',
+);
+operation(
+  '/notifications/messages',
+  'post',
+  'School Admin: queue custom FCM message with mandatory Idempotency-Key; durable recipient snapshot.',
+  'CustomNotification',
+);
+operation(
+  '/notifications/messages',
+  'get',
+  'School Admin / Principal: paginated school outbox; kind/status filters.',
+);
+operation(
+  '/notifications/messages/{id}/deliveries',
+  'get',
+  'School Admin / Principal: paginated delivery status, no device credentials.',
+);
+operation(
+  '/notifications/messages/{id}/cancel',
+  'post',
+  'School Admin: cancel pending work with audited reason; cannot recall accepted messages.',
+  'Reconciliation',
+);
+operation(
+  '/notifications/settings',
+  'get',
+  'School Admin: school channel and event controls, optimistic version.',
+);
+operation(
+  '/notifications/settings',
+  'put',
+  'School Admin: save versioned school notification controls.',
+  'SchoolNotificationSettings',
+);
+operation(
+  '/push-tokens',
+  'post',
+  'Any active school member: register encrypted FCM endpoint for own account.',
+);
+operation('/push-tokens', 'delete', 'Unregister only own endpoint by SHA-256 token_hash.');
 operation('/reports', 'get', 'Own reports');
 operation('/reports', 'post', 'Queue a private report', 'ReportRequest');
 operation('/reports/{id}/download', 'get', 'Obtain a short-lived authorized download');
@@ -754,34 +1049,149 @@ operation(
     },
   },
 );
-for (const [path,method,summary,schema] of [
- ['/fees/options','get','Accessible fee year and class choices',''],
- ['/fees/students','get','Paginated authorized fee students; academic_session_id required',''],
- ['/fees/students/{id}','get','Authoritative academic/transport statement and payment history; academic_session_id required',''],
- ['/fees/assessments/{id}','get','Authorized installment lookup for existing student-profile payment links',''],
- ['/fees/payments/{id}','get','Authorized immutable receipt and reversal status',''],
- ['/fees/structures','get','Paginated class fee versions; academic_session_id and grade required',''],
- ['/fees/structures','post','Create an immutable class-wide or section fee version','FeeStructure'],
- ['/fees/assessments/preview','post','Preview only unassessed enrollment installments','FeeAssessment'],
- ['/fees/assessments','post','Idempotently assess class-section or student without rewriting prior charges','FeeAssessment'],
- ['/fees/assessments/{id}/void','post','Void an unpaid assessment with audit reason','FeeCorrection'],
- ['/fees/payments','post','Record balanced multi-installment payment; required durable Idempotency-Key; manual receipt override School Admin-only','FeeCollection'],
- ['/fees/payments/{id}/reverse','post','Reverse full payment with immutable original receipt; required Idempotency-Key','FeeCorrection'],
- ['/fees/routes','get','List transport routes for authorized school staff',''],
- ['/fees/routes','post','Create transport route','FeeTransportRoute'],
- ['/fees/routes/{id}','patch','Edit or deactivate route; posted student prices unchanged','FeeTransportRoute'],
- ['/fees/transport','post','Assign service and assess transport installments; required Idempotency-Key','FeeTransportAssignment'],
- ['/fees/transport/{id}/end','post','End service; reason plus ended_on date; void future unpaid installments','FeeTransportEnd'],
- ['/fees/reports','get','Staff-only year/class/section/student/category summaries, paginated assessments and date-wise net collections',''],
- ['/fees/reports/export','get','Staff-only Excel-compatible CSV JSON download; max 10000 rows, spreadsheet formula protection',''],
-] as const) operation(path,method,summary,schema||undefined);
-for(const path of ['/fees/students','/fees/students/{id}','/fees/structures','/fees/reports','/fees/reports/export']){
- const op=paths[path].get as {parameters:unknown[]};
- const fields=path==='/fees/structures'?['academic_session_id','grade','page','page_size']:path==='/fees/students/{id}'?['academic_session_id']:path.startsWith('/fees/reports')?['academic_session_id','grade','class_id','student_id','category','search','from','to','page','page_size']:['academic_session_id','grade','class_id','search','page','page_size'];
- for(const name of fields)op.parameters.push({name,in:'query',required:(name==='academic_session_id'&&!path.startsWith('/fees/reports'))||(path==='/fees/structures'&&name==='grade'),schema:name.endsWith('_id')?{type:'string',format:'uuid'}:name==='page'||name==='page_size'?{type:'integer',minimum:1,...(name==='page_size'?{maximum:100}:{})}:name==='from'||name==='to'?{type:'string',format:'date'}:{type:'string'}});
+for (const [path, method, summary, schema] of [
+  ['/fees/options', 'get', 'Accessible fee year and class choices', ''],
+  ['/fees/students', 'get', 'Paginated authorized fee students; academic_session_id required', ''],
+  [
+    '/fees/students/{id}',
+    'get',
+    'Authoritative academic/transport statement and payment history; academic_session_id required',
+    '',
+  ],
+  [
+    '/fees/assessments/{id}',
+    'get',
+    'Authorized installment lookup for existing student-profile payment links',
+    '',
+  ],
+  ['/fees/payments/{id}', 'get', 'Authorized immutable receipt and reversal status', ''],
+  [
+    '/fees/structures',
+    'get',
+    'Paginated class fee versions; academic_session_id and grade required',
+    '',
+  ],
+  [
+    '/fees/structures',
+    'post',
+    'Create an immutable class-wide or section fee version',
+    'FeeStructure',
+  ],
+  [
+    '/fees/assessments/preview',
+    'post',
+    'Preview only unassessed enrollment installments',
+    'FeeAssessment',
+  ],
+  [
+    '/fees/assessments',
+    'post',
+    'Idempotently assess class-section or student without rewriting prior charges',
+    'FeeAssessment',
+  ],
+  [
+    '/fees/assessments/{id}/void',
+    'post',
+    'Void an unpaid assessment with audit reason',
+    'FeeCorrection',
+  ],
+  [
+    '/fees/payments',
+    'post',
+    'Record balanced multi-installment payment; required durable Idempotency-Key; manual receipt override School Admin-only',
+    'FeeCollection',
+  ],
+  [
+    '/fees/payments/{id}/reverse',
+    'post',
+    'Reverse full payment with immutable original receipt; required Idempotency-Key',
+    'FeeCorrection',
+  ],
+  ['/fees/routes', 'get', 'List transport routes for authorized school staff', ''],
+  ['/fees/routes', 'post', 'Create transport route', 'FeeTransportRoute'],
+  [
+    '/fees/routes/{id}',
+    'patch',
+    'Edit or deactivate route; posted student prices unchanged',
+    'FeeTransportRoute',
+  ],
+  [
+    '/fees/transport',
+    'post',
+    'Assign service and assess transport installments; required Idempotency-Key',
+    'FeeTransportAssignment',
+  ],
+  [
+    '/fees/transport/{id}/end',
+    'post',
+    'End service; reason plus ended_on date; void future unpaid installments',
+    'FeeTransportEnd',
+  ],
+  [
+    '/fees/reports',
+    'get',
+    'Staff-only year/class/section/student/category summaries, paginated assessments and date-wise net collections',
+    '',
+  ],
+  [
+    '/fees/reports/export',
+    'get',
+    'Staff-only Excel-compatible CSV JSON download; max 10000 rows, spreadsheet formula protection',
+    '',
+  ],
+] as const)
+  operation(path, method, summary, schema || undefined);
+for (const path of [
+  '/fees/students',
+  '/fees/students/{id}',
+  '/fees/structures',
+  '/fees/reports',
+  '/fees/reports/export',
+]) {
+  const op = paths[path].get as { parameters: unknown[] };
+  const fields =
+    path === '/fees/structures'
+      ? ['academic_session_id', 'grade', 'page', 'page_size']
+      : path === '/fees/students/{id}'
+        ? ['academic_session_id']
+        : path.startsWith('/fees/reports')
+          ? [
+              'academic_session_id',
+              'grade',
+              'class_id',
+              'student_id',
+              'category',
+              'search',
+              'from',
+              'to',
+              'page',
+              'page_size',
+            ]
+          : ['academic_session_id', 'grade', 'class_id', 'search', 'page', 'page_size'];
+  for (const name of fields)
+    op.parameters.push({
+      name,
+      in: 'query',
+      required:
+        (name === 'academic_session_id' && !path.startsWith('/fees/reports')) ||
+        (path === '/fees/structures' && name === 'grade'),
+      schema: name.endsWith('_id')
+        ? { type: 'string', format: 'uuid' }
+        : name === 'page' || name === 'page_size'
+          ? { type: 'integer', minimum: 1, ...(name === 'page_size' ? { maximum: 100 } : {}) }
+          : name === 'from' || name === 'to'
+            ? { type: 'string', format: 'date' }
+            : { type: 'string' },
+    });
 }
-for(const path of ['/fees/payments','/fees/payments/{id}/reverse','/fees/transport']){
- const op=paths[path].post as {parameters:unknown[]};op.parameters.push({name:'Idempotency-Key',in:'header',required:true,schema:{type:'string',minLength:8,maxLength:200,pattern:'^[a-zA-Z0-9:_-]+$'}});
+for (const path of ['/fees/payments', '/fees/payments/{id}/reverse', '/fees/transport']) {
+  const op = paths[path].post as { parameters: unknown[] };
+  op.parameters.push({
+    name: 'Idempotency-Key',
+    in: 'header',
+    required: true,
+    schema: { type: 'string', minLength: 8, maxLength: 200, pattern: '^[a-zA-Z0-9:_-]+$' },
+  });
 }
 for (const [path, methods] of Object.entries(paths))
   for (const op of Object.values(methods)) {

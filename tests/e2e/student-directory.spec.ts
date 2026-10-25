@@ -27,7 +27,7 @@ test('School Admin saves student, class and multiple guardians in one form and o
     last_name: 'Learner',
     email: 'connected@example.test',
     date_of_birth: '2013-04-05',
-    sex: 'FEMALE',
+    gender: 'FEMALE',
     class_id: f.classId,
     roll_number: '42',
     starts_on: '2026-01-01',
@@ -42,6 +42,10 @@ test('School Admin saves student, class and multiple guardians in one form and o
     'parent-1-id': f.parentId,
     'parent-1-relationship': 'FATHER',
   });
+  await expect(page.getByRole('button', { name: 'Add another parent', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole('combobox', { name: 'Gender', exact: true })).toHaveValue('FEMALE');
   const axe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
   expect(axe.violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual(
     [],
@@ -64,7 +68,7 @@ test('School Admin saves student, class and multiple guardians in one form and o
     f.schoolA,
   );
   expect(rows.body.total).toBe(1);
-  expect(rows.body.data[0].sex).toBe('FEMALE');
+  expect(rows.body.data[0].gender).toBe('FEMALE');
   const family = await platformApp.request(
     '/resources/student_parents?student_id=' + rows.body.data[0].id,
     'GET',
@@ -129,7 +133,7 @@ test('School Admin saves student, class and multiple guardians in one form and o
   });
   await page.getByRole('dialog').getByRole('button', { name: 'Close dialog', exact: true }).click();
   await card.getByRole('button', { name: 'Edit student', exact: true }).click();
-  await fill(page, { first_name: 'Connected Updated', sex: 'MALE' });
+  await fill(page, { first_name: 'Connected Updated', gender: 'MALE' });
   await page.getByRole('button', { name: 'Save record', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await card.click();

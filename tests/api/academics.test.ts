@@ -116,23 +116,28 @@ beforeAll(async () => {
 });
 afterAll(async () => db.close());
 
-it('counts recorded sex in the correct section and excludes future, ended and inactive students', async () => {
+it('counts recorded gender in the correct section and excludes future, ended and inactive students', async () => {
   const section = await create('classes', {
     academic_session_id: f.session,
     grade: '11',
-    section: 'SEX_COUNTS',
+    section: 'GENDER_COUNTS',
     class_teacher_id: teacher2,
   });
   const ids: string[] = [];
-  for (const [code, sex, status, starts_on] of [
-    ['SEX_M', 'MALE', 'ACTIVE', '2026-01-01'],
-    ['SEX_F', 'FEMALE', 'ACTIVE', '2026-01-01'],
-    ['SEX_O', 'OTHER', 'ACTIVE', '2026-01-01'],
-    ['SEX_U', 'NOT_SPECIFIED', 'ACTIVE', '2026-01-01'],
-    ['SEX_FUTURE', 'MALE', 'ACTIVE', '2099-01-01'],
-    ['SEX_WITHDRAWN', 'FEMALE', 'WITHDRAWN', '2026-01-01'],
+  for (const [code, gender, status, starts_on] of [
+    ['GENDER_M', 'MALE', 'ACTIVE', '2026-01-01'],
+    ['GENDER_F', 'FEMALE', 'ACTIVE', '2026-01-01'],
+    ['GENDER_O', 'OTHER', 'ACTIVE', '2026-01-01'],
+    ['GENDER_U', 'NOT_SPECIFIED', 'ACTIVE', '2026-01-01'],
+    ['GENDER_FUTURE', 'MALE', 'ACTIVE', '2099-01-01'],
+    ['GENDER_WITHDRAWN', 'FEMALE', 'WITHDRAWN', '2026-01-01'],
   ]) {
-    const student = await create('students', { student_code: code, first_name: code, sex, status });
+    const student = await create('students', {
+      student_code: code,
+      first_name: code,
+      gender,
+      status,
+    });
     ids.push(student.id);
     await create('enrollments', {
       student_id: student.id,
@@ -150,9 +155,9 @@ it('counts recorded sex in the correct section and excludes future, ended and in
     other_count: 1,
     unspecified_count: 1,
   });
-  expect((await call('patch', '/resources/students/' + ids[1]).send({ sex: 'MALE' })).status).toBe(
-    200,
-  );
+  expect(
+    (await call('patch', '/resources/students/' + ids[1]).send({ gender: 'MALE' })).status,
+  ).toBe(200);
   expect(await stats()).toMatchObject({
     student_count: 4,
     male_count: 2,
@@ -160,18 +165,19 @@ it('counts recorded sex in the correct section and excludes future, ended and in
     other_count: 1,
     unspecified_count: 1,
   });
-  const invalid = await call('patch', '/resources/students/' + ids[0]).send({ sex: 'INVALID' });
+  const invalid = await call('patch', '/resources/students/' + ids[0]).send({ gender: 'INVALID' });
   expect(invalid.status).toBe(422);
   expect(
-    (await call('patch', '/resources/students/' + ids[0], 'teacher').send({ sex: 'FEMALE' }))
+    (await call('patch', '/resources/students/' + ids[0], 'teacher').send({ gender: 'FEMALE' }))
       .status,
   ).toBe(403);
   expect(
-    (await call('patch', '/resources/students/' + f.foreignStudent).send({ sex: 'FEMALE' })).status,
+    (await call('patch', '/resources/students/' + f.foreignStudent).send({ gender: 'FEMALE' }))
+      .status,
   ).toBe(404);
-  await expect(db.query("UPDATE students SET sex='INVALID' WHERE id=$1", [ids[0]])).rejects.toThrow(
-    /students_sex_check/,
-  );
+  await expect(
+    db.query("UPDATE students SET gender='INVALID' WHERE id=$1", [ids[0]]),
+  ).rejects.toThrow(/students_gender_check/);
   // Retire this isolated section so the existing pagination/group assertions remain stable.
   await db.query('UPDATE classes SET retired_at=now() WHERE id=$1', [section.id]);
 });

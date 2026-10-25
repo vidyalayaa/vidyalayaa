@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_STUDENT_PARENTS } from './student-directory.js';
 export const retentionPolicySchema = z
   .object({
     policy_ref: z.string().trim().min(5).max(200),
@@ -240,7 +241,7 @@ export const resourceSchemas = {
       first_name: text,
       last_name: nullableText,
       date_of_birth: date.nullable().optional(),
-      sex: z.enum(['NOT_SPECIFIED', 'MALE', 'FEMALE', 'OTHER']).default('NOT_SPECIFIED'),
+      gender: z.enum(['NOT_SPECIFIED', 'MALE', 'FEMALE', 'OTHER']).default('NOT_SPECIFIED'),
       user_id: uuid.nullable().optional(),
       status: z.enum(['ACTIVE', 'TRANSFERRED', 'GRADUATED', 'WITHDRAWN']).default('ACTIVE'),
     })
@@ -448,7 +449,7 @@ export const studentAdmissionSchema = z
           .strict(),
       )
       .min(1)
-      .max(5),
+      .max(MAX_STUDENT_PARENTS, 'A student can have at most two parents.'),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -482,6 +483,7 @@ export const studentAdmissionSchema = z
     });
   });
 export * from './student-directory.js';
+export * from './student-import.js';
 
 export const classSubjectSchema = z
   .object({

@@ -72,7 +72,7 @@ test('Academics groups sections with subjects, Class Teacher and counts without 
   const learner = await admin('/resources/students', 'POST', {
     student_code: 'ACA_VIEW_B',
     first_name: 'View section B learner',
-    sex: 'FEMALE',
+    gender: 'FEMALE',
   });
   expect(
     (

@@ -10,7 +10,6 @@ import {
   useParams,
   useLocation,
   Outlet,
-  Link,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resourceNames, type Resource } from '@vidyalayaa/contracts';
@@ -18,7 +17,6 @@ import { AuthProvider, configured, useAuth, HttpError } from './lib/auth';
 import Layout from './components/Layout';
 import { Loading, ErrorState, Empty } from './components/common';
 import AuthenticatorSetup from './features/auth/AuthenticatorSetup';
-import PendingInvitations from './features/auth/PendingInvitations';
 import { resourceInfo } from './features/resources/metadata';
 import { TeacherRoster, TeacherAssessments } from './features/operations/Teaching';
 
@@ -32,6 +30,8 @@ const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
 const Fees = lazy(() => import('./features/fees/Fees'));
 const LoginSessions = lazy(() => import('./features/auth/LoginSessions'));
+const Explore = lazy(() => import('./features/explore/Explore'));
+const SchoolWelcome = lazy(() => import('./features/explore/SchoolWelcome'));
 const AttendanceHistory = lazy(() =>
   import('./features/operations/SchoolTools').then((m) => ({ default: m.AttendanceHistory })),
 );
@@ -50,9 +50,7 @@ const Corrections = lazy(() =>
 const Reports = lazy(() =>
   import('./features/operations/Screens').then((m) => ({ default: m.Reports })),
 );
-const Notifications = lazy(() =>
-  import('./features/notifications/Notifications'),
-);
+const Notifications = lazy(() => import('./features/notifications/Notifications'));
 const Members = lazy(() =>
   import('./features/operations/Screens').then((m) => ({ default: m.Members })),
 );
@@ -141,43 +139,7 @@ function Guard() {
     if (a.me.platform_role === 'SUPER_ADMIN') {
       if (!location.pathname.startsWith('/platform') && !location.pathname.startsWith('/settings'))
         return <Navigate to="/platform" replace />;
-    } else if (location.pathname !== '/settings/security')
-      return (
-        <div className="callback-page">
-          <div className="panel p-8">
-            <PendingInvitations />
-            <h1 className="text-xl">Choose your school</h1>
-            {a.me.memberships.length ? (
-              a.me.memberships.map((m) => (
-                <button
-                  key={m.school_id}
-                  className="input my-3 text-left"
-                  onClick={() => a.setSchool(m.school_id)}
-                >
-                  {m.school_name}
-                </button>
-              ))
-            ) : (
-              <p className="my-3">
-                Accept an invitation above, or ask your school administrator to invite you.
-              </p>
-            )}
-            <p className="my-3">
-              <Link className="underline" to="/settings/security">
-                Security &amp; Login Sessions
-              </Link>
-            </p>
-            <button
-              className="text-sm underline"
-              onClick={() => {
-                if (window.confirm('Are you sure you want to sign out?')) a.logout();
-              }}
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      );
+    } else if (location.pathname !== '/settings/security') return <SchoolWelcome />;
   }
   return <Layout key={`${a.me?.id}:${a.school}:${a.me?.school?.role}`} />;
 }
@@ -409,6 +371,7 @@ function schoolRoutes() {
 const router = createBrowserRouter(
   createRoutesFromElements(
     <>
+      <Route path="/explore" element={<Explore />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
