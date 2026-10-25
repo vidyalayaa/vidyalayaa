@@ -54,6 +54,12 @@ it('upgrades existing notification records without resending, rewriting tokens o
       ).rows[0],
     ).toEqual({ status: 'COMPLETED', created_by: null, cancelled_at: null });
     expect((await db.query('SELECT * FROM notification_recipient_targets')).rows).toHaveLength(0);
+    // Verify the current schema only after advancing beyond this historical
+    // notification-only upgrade; later migrations include the Gender rename.
+    for (const file of readdirSync('db/migrations')
+      .sort()
+      .filter((f) => f > migration))
+      await db.exec(readFileSync('db/migrations/' + file, 'utf8'));
     await db.exec(readFileSync('db/tests/verify.sql', 'utf8'));
   } finally {
     await db.close();

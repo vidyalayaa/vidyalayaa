@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { studentAdmissionSchema } from '@vidyalayaa/contracts';
+import { studentAdmissionSchema, MAX_STUDENT_PARENTS } from '@vidyalayaa/contracts';
 import { api, useAuth } from '../../lib/auth';
 import { readDraft, saveDraft, deleteDraft } from '../../lib/drafts';
 import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
@@ -46,7 +46,7 @@ export default function StudentAdmissionForm({
     last_name: '',
     email: '',
     date_of_birth: '',
-    sex: 'NOT_SPECIFIED',
+    gender: 'NOT_SPECIFIED',
     status: 'ACTIVE',
     class_id: presetClass,
     roll_number: '',
@@ -97,7 +97,7 @@ export default function StudentAdmissionForm({
           last_name: values.last_name || null,
           email: values.email || null,
           date_of_birth: values.date_of_birth || null,
-          sex: values.sex,
+          gender: values.gender,
           status: values.status,
         },
         enrollment: {
@@ -185,13 +185,13 @@ export default function StudentAdmissionForm({
               {input('last_name', 'Last name')}
               {input('email', 'Student email (optional)', 'email')}
               {input('date_of_birth', 'Date of birth', 'date')}
-              <label className="block text-sm font-medium" htmlFor="sex">
-                Sex
+              <label className="block text-sm font-medium" htmlFor="gender">
+                Gender
                 <select
-                  id="sex"
+                  id="gender"
                   className="input mt-2"
-                  value={values.sex}
-                  onChange={(e) => change('sex', e.target.value)}
+                  value={values.gender}
+                  onChange={(e) => change('gender', e.target.value)}
                 >
                   <option value="NOT_SPECIFIED">Not specified</option>
                   <option value="MALE">Male</option>
@@ -341,7 +341,7 @@ export default function StudentAdmissionForm({
                 </section>
               ))}
             </div>
-            {guardians.length < 5 && (
+            {guardians.length < MAX_STUDENT_PARENTS && (
               <Button
                 className="mt-3"
                 type="button"
@@ -355,8 +355,8 @@ export default function StudentAdmissionForm({
               </Button>
             )}
             <p className="mt-3 text-xs text-stone-500">
-              Save the family first. Account invitations can then be sent from Members &
-              invitations.
+              Maximum two parents per student. Save the family first. Account invitations can then
+              be sent from Members & invitations.
             </p>
           </section>
         </fieldset>

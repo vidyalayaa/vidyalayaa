@@ -23,7 +23,7 @@ import {
   LockKeyhole,
 } from 'lucide-react';
 import { api, configured, useAuth, supabase } from '../../lib/auth';
-import { label, display, sexLabel, toDateTimeLocal, fromDateTimeLocal } from '../../lib/utils';
+import { label, display, genderLabel, toDateTimeLocal, fromDateTimeLocal } from '../../lib/utils';
 import { readDraft, saveDraft, deleteDraft } from '../../lib/drafts';
 import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
 import { fields, resourceInfo, sampleRule, type Field } from './metadata';
@@ -753,7 +753,7 @@ export function ResourceForm({
               >
                 {f.options?.map((o) => (
                   <option key={o} value={o}>
-                    {f.key === 'sex' ? sexLabel(o) : label(o)}
+                    {f.key === 'gender' ? genderLabel(o) : label(o)}
                   </option>
                 ))}
               </select>

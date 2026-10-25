@@ -54,7 +54,7 @@ export default function Login() {
   return (
     <div className="login-page">
       <section className="login-story">
-        <Link to="/" className="brand">
+        <Link to="/explore" className="brand">
           <span className="brand-symbol">
             v<span />
           </span>
@@ -320,6 +320,10 @@ export default function Login() {
           )}
           <p className="login-help">
             Need an account? Contact your school administrator.
+            <br />
+            <Link to="/explore">
+              Explore Vidyalayaa <ArrowUpRight size={13} />
+            </Link>
             <br />
             <a href="mailto:vidyalayaainfo@gmail.com">
               Get help with Vidyalayaa <ArrowUpRight size={13} />

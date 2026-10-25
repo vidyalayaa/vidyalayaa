@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, GraduationCap, Plus, Users } from 'lucide-react';
 import type { DirectoryClass, DirectoryStudent, Page } from '@vidyalayaa/contracts';
 import { api, useAuth } from '../../lib/auth';
-import { display, sexLabel } from '../../lib/utils';
+import { saveCsv } from '../../lib/csv';
+import { display, genderLabel } from '../../lib/utils';
 import { Badge, Empty, ErrorState, Loading, PageHeading } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
@@ -44,6 +45,22 @@ export default function StudentDirectory() {
     [dirty, setDirty] = useState(false),
     [importing, setImporting] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [exporting, setExporting] = useState(false),
+    [exportError, setExportError] = useState('');
+  async function exportCsv() {
+    setExporting(true);
+    setExportError('');
+    try {
+      const query = new URLSearchParams({ search: search.trim() });
+      if (session) query.set('academic_session_id', session);
+      const blob = await api<Blob>(`/student-directory/export.csv?${query}`, {}, true, 'blob');
+      saveCsv(blob, 'vidyalayaa-students.csv');
+    } catch (e) {
+      setExportError((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
   useEffect(() => setSearch(params.get('search') || ''), [params]);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 250);
@@ -81,6 +98,9 @@ export default function StudentDirectory() {
         description="Every learner, with their class and family connected."
         actions={
           <>
+            <Button variant="outline" disabled={exporting} onClick={exportCsv}>
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </Button>
             {canWrite && (
               <>
                 <Button variant="outline" onClick={() => setImporting(true)}>
@@ -95,6 +115,11 @@ export default function StudentDirectory() {
           </>
         }
       />
+      {exportError && (
+        <p className="field-error mb-4" role="alert">
+          {exportError}
+        </p>
+      )}
       <div className="mb-6 flex flex-wrap gap-4 rounded-2xl border border-stone-200 bg-white p-4">
         <label className="min-w-0 flex-1 basis-full text-sm sm:basis-0">
           Find a student
@@ -360,8 +385,8 @@ function Roster({
                     <span className="block">
                       <span className="font-medium">Birth date: </span>
                       {s.date_of_birth ? display(s.date_of_birth.slice(0, 10)) : 'Not specified'}
-                      {' · Sex: '}
-                      {sexLabel(s.sex)}
+                      {' · gender: '}
+                      {genderLabel(s.gender)}
                     </span>
                   </span>
                   <span className="mt-4 inline-block text-sm font-medium underline underline-offset-4">

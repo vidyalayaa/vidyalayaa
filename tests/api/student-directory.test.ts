@@ -66,17 +66,64 @@ beforeAll(async () => {
 });
 afterAll(async () => db.close());
 
-it('persists sex from combined admission and rejects invalid values without partial family records', async () => {
-  const b = payload('SEX_ADMISSION');
-  const invalid = await admit({ ...b, student: { ...b.student, sex: 'INVALID' } });
+it('persists gender from combined admission and rejects invalid values without partial family records', async () => {
+  const b = payload('GENDER_ADMISSION');
+  const invalid = await admit({ ...b, student: { ...b.student, gender: 'INVALID' } });
   expect(invalid.status).toBe(422);
-  expect((await call('get', '/resources/students?search=SEX_ADMISSION')).body.total).toBe(0);
-  const r = await admit({ ...b, student: { ...b.student, sex: 'FEMALE' } });
+  expect((await call('get', '/resources/students?search=GENDER_ADMISSION')).body.total).toBe(0);
+  const r = await admit({ ...b, student: { ...b.student, gender: 'FEMALE' } });
   expect(r.status).toBe(201);
-  expect(r.body.student.sex).toBe('FEMALE');
-  expect((await call('get', `/students/${r.body.student.id}/overview`)).body.student.sex).toBe(
+  expect(r.body.student.gender).toBe('FEMALE');
+  expect((await call('get', `/students/${r.body.student.id}/overview`)).body.student.gender).toBe(
     'FEMALE',
   );
+});
+it('accepts two parents but rejects a third through admission and direct family-link APIs', async () => {
+  const body = payload('TWO_PARENTS');
+  const extra = [1, 2].map((i) => ({
+    parent: { full_name: `Limit parent ${i}`, email: `limit-${i}@example.test` },
+    relationship: 'FATHER',
+  }));
+  const invalid = await admit({ ...body, guardians: [...body.guardians, ...extra] });
+  expect(invalid.status).toBe(422);
+  expect(JSON.stringify(invalid.body)).toContain('at most two');
+  const valid = await admit({ ...body, guardians: [...body.guardians, extra[0]] });
+  expect(valid.status, JSON.stringify(valid.body)).toBe(201);
+  expect(valid.body.connections).toHaveLength(2);
+  const parent = (
+    await db.query(
+      "INSERT INTO parents(school_id,full_name) VALUES($1,'Third limit parent') RETURNING id",
+      [f.schoolA],
+    )
+  ).rows[0].id;
+  const link = {
+    student_id: valid.body.student.id,
+    parent_id: parent,
+    relationship: 'GUARDIAN',
+    is_primary_contact: false,
+    can_receive_alerts: true,
+    status: 'ACTIVE',
+  };
+  const third = await call('post', '/resources/student_parents').send(link);
+  expect(third.status).toBe(409);
+  expect(third.body.error.code).toBe('STUDENT_PARENT_LIMIT');
+  await call('patch', `/resources/student_parents/${valid.body.connections[1].id}`)
+    .send({ status: 'REVOKED' })
+    .expect(200);
+  expect((await call('post', '/resources/student_parents').send(link)).status).toBe(201);
+  const reactivated = await call(
+    'patch',
+    `/resources/student_parents/${valid.body.connections[1].id}`,
+  ).send({ status: 'ACTIVE' });
+  expect(reactivated.status).toBe(409);
+  expect(reactivated.body.error.code).toBe('STUDENT_PARENT_LIMIT');
+  expect(
+    (
+      await db.query("SELECT id FROM student_parents WHERE student_id=$1 AND status='ACTIVE'", [
+        valid.body.student.id,
+      ])
+    ).rows,
+  ).toHaveLength(2);
 });
 
 it('atomically creates student, enrollment, parent and authorized family connection with audited safe retries', async () => {
@@ -85,7 +132,7 @@ it('atomically creates student, enrollment, parent and authorized family connect
     r = await admit(body, key);
   expect(r.status, JSON.stringify(r.body)).toBe(201);
   expect(r.body.student.student_code).toBe('ADM001');
-  expect(r.body.student.sex).toBe('NOT_SPECIFIED');
+  expect(r.body.student.gender).toBe('NOT_SPECIFIED');
   expect(r.body.student.date_of_birth.slice(0, 10)).toBe('2012-04-03');
   expect(r.body.enrollment).toMatchObject({
     student_id: r.body.student.id,

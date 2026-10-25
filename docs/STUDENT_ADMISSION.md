@@ -4,9 +4,9 @@
 
 Open **Students → Add student**. One form contains:
 
-1. Student code, first/last name, email, birth date, sex and status. Sex accepts Male, Female, Other or Not specified and can also be edited later. Existing students and older imports default to Not specified.
+1. Student code, first/last name, email, birth date, gender and status. gender accepts Male, Female, Other or Not specified and can also be edited later. Existing students and older imports default to Not specified.
 2. Class/section, roll number, enrollment start and optional end date. The server derives the academic session from the selected class.
-3. One to five parents/guardians. Enter a new parent's name/email/phone, or explicitly select an existing parent for siblings. Set each relationship, the primary contact and alert eligibility.
+3. One or two parents/guardians. Enter a new parent's name/email/phone, or explicitly select an existing parent for siblings. Set each relationship, the primary contact and alert eligibility.
 
 **Save student & family** creates the student, enrollment, new parent records and family connections together. Any validation, duplicate, permission, quota or relationship failure rolls back the entire admission. Retry keys prevent repeated submissions creating duplicate records. The new student's full profile opens after success.
 
@@ -26,7 +26,7 @@ Search matches student name, code and email across the school. Classes are loade
 
 The old **All student records** button, separate School Admin Parents/Family links navigation, and disconnected entry pages have been removed. Old `?view=records`, `/admin/r/parents` and `/admin/r/student_parents` links redirect to the class-wise Students workspace; student search parameters are retained. Existing parent contact details and family relationships/alert settings can be edited inside the selected student's profile. Underlying records and resource APIs remain intact, and Principal/Teacher/Parent/Student views retain their existing role restrictions.
 
-Existing imports keep their existing contract and do not invent parent links. Imported or older unplaced students remain in the unassigned group. Class enrollment management is inside each student's profile, with existing dates, roll numbers, status and history retained. The Student 360 current enrollment no longer selects a future or expired placement as current.
+The Students page's CSV import now supports complete admissions, including enrollment, gender, parent details and family connections. Download its template before preparing the file. **Export CSV** downloads full matching student and parent records across all pages. See [student CSV import and export](STUDENT_CSV.md). The older generic record-only import API remains compatible; older unplaced students remain in the unassigned group. Class enrollment management is inside each student's profile, with existing dates, roll numbers, status and history retained. The Student 360 current enrollment no longer selects a future or expired placement as current.
 
 ## API
 
@@ -39,6 +39,8 @@ All paths use `/api/v1`, verified Supabase authentication and the selected `X-Sc
 | `GET /student-directory/enrollment-classes` | Non-archived class/session choices, labeled with session |
 | `GET /student-directory/parents` | Active, same-school parent choices |
 | `POST /student-directory/admissions` | Shared `studentAdmissionSchema`; required `Idempotency-Key`; returns `{student,enrollment,parents,connections}` with 201 |
+| `POST /student-directory/imports` | Shared CSV admission contract; validate or atomically save 1–500 complete admissions with required commit retry key |
+| `GET /student-directory/export.csv` | School-scoped, no-store CSV download with optional search/session filters and full parent details |
 
 GET lists accept `search` (up to 120 characters), `page` and `page_size` (1–100). Body fields cannot override school, session or authenticated account links. Each guardian supplies exactly one of `parent_id` or `parent: {full_name,email?,phone?}`, plus `relationship`, `is_primary_contact` and `can_receive_alerts`. No new `user_id` can be supplied through this form.
 
@@ -46,7 +48,7 @@ Existing non-bypass API database roles, forced tenant RLS, composite foreign key
 
 ## Deployment and verification
 
-The combined admission workflow uses existing tables and RLS. The recorded-sex addition requires the additive migration documented in [STUDENT_SEX.md](STUDENT_SEX.md). Apply it before deploying matching contracts, API and web builds. Existing student, parent, invitation, teacher, academic and financial records are retained.
+The combined admission workflow uses existing tables and RLS. The recorded-gender addition requires the additive migration documented in [STUDENT_GENDER.md](STUDENT_GENDER.md). Apply it before deploying matching contracts, API and web builds. Existing student, parent, invitation, teacher, academic and financial records are retained.
 
 Tests exercise the real Express API and a disposable database with migrations, runtime roles and RLS. External authentication and delivery providers are simulated; live invitations and production writes are not exercised.
 
@@ -60,10 +62,10 @@ npm run lint
 npm run check:secrets
 ```
 
-Latest combined admission, recorded-sex and Academics verification:
+Latest combined admission, recorded-gender and Academics verification:
 
-- **182 unit/API/database/security tests passed** across 29 files, including nine admission/directory tests and an upgrade test preserving existing records when sex is added.
-- **30 targeted desktop/mobile checks passed in the final run**: combined admission and profiles, sex saving/editing, guardian reuse and duplicate rollback, private drafts, class/section ownership, more than 100 classes, student editing, embedded academic sessions, enrollment history, counts without roster requests, legacy URL redirects, Principal profiles/restrictions and Teacher student/parent access.
+- **182 unit/API/database/security tests passed** across 29 files, including nine admission/directory tests and an upgrade test preserving existing records when gender is added.
+- **30 targeted desktop/mobile checks passed in the final run**: combined admission and profiles, gender saving/editing, guardian reuse and duplicate rollback, private drafts, class/section ownership, more than 100 classes, student editing, embedded academic sessions, enrollment history, counts without roster requests, legacy URL redirects, Principal profiles/restrictions and Teacher student/parent access.
 - New directory and admission form checks found no serious/critical Axe violations. Viewport-overflow assertions passed, and desktop/mobile directory screenshots were visually reviewed.
 - Type checking, source linting, secret scanning and whitespace checks passed. OpenAPI was regenerated from the shared contract.
 - The full production build passed for contracts, API, worker and website. Browser fixtures shut down their temporary servers; no permanent development server was started.

@@ -17,7 +17,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api, useAuth } from '../../lib/auth';
-import { display, label, sexLabel } from '../../lib/utils';
+import { display, label, genderLabel } from '../../lib/utils';
 import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import { Badge, Loading, ErrorState } from '../../components/common';
@@ -36,7 +36,7 @@ interface StudentOverview {
     first_name: string;
     last_name: string | null;
     date_of_birth: string | null;
-    sex: string;
+    gender: string;
     status: string;
     created_at: string;
     email: string | null;
@@ -435,8 +435,8 @@ export default function StudentProfileDialog({
               <section className="rounded-xl border border-stone-100 bg-stone-50/70 p-4 text-xs text-stone-600">
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   <div>
-                    <span className="font-semibold text-stone-700">Sex:</span>{' '}
-                    {sexLabel(d.student.sex)}
+                    <span className="font-semibold text-stone-700">Gender:</span>{' '}
+                    {genderLabel(d.student.gender)}
                   </div>
                   <div>
                     <span className="font-semibold text-stone-700">Date of Birth:</span>{' '}

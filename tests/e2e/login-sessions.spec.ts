@@ -55,9 +55,12 @@ test.describe('unassigned account', () => {
   }) => {
     await page.goto(authAppURL + '/settings');
     await expect(
-      page.getByRole('heading', { name: 'Choose your school', exact: true }),
+      page.getByRole('heading', { name: 'Welcome to Vidyalayaa.', exact: true }),
     ).toBeVisible();
-    await page.getByRole('link', { name: 'Security & Login Sessions', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Explore Vidyalayaa', exact: true })).toBeVisible();
+    // Account security remains available by its explicit route, without becoming
+    // the landing experience for people who have not joined a school.
+    await page.goto(authAppURL + '/settings/security');
     await expect(
       page.getByRole('heading', { name: 'Security & Login Sessions', exact: true }),
     ).toBeVisible();

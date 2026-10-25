@@ -7,9 +7,9 @@ import { citext } from '@electric-sql/pglite/contrib/citext';
 import { readFile, readdir } from 'node:fs/promises';
 import { fixture } from '../helpers/database.js';
 
-it('adds recorded sex without altering existing students, enrollments, family links or RLS', async () => {
+it('renames the recorded field to gender without changing existing values, enrollment, family links or RLS', async () => {
   const db = new PGlite({ extensions: { btree_gist, pgcrypto, citext } });
-  const migration = '20261022141625_student_sex_counts.sql';
+  const migration = '20261025101545_student_gender.sql';
   try {
     await db.exec(
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
@@ -18,26 +18,38 @@ it('adds recorded sex without altering existing students, enrollments, family li
     for (const file of (await readdir('db/migrations')).sort().filter((f) => f < migration))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     const f = await fixture(db);
+    const oldColumn = (
+      await db.query<{ column_name: string }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='students' AND column_default LIKE '%NOT_SPECIFIED%'",
+      )
+    ).rows[0].column_name;
+    await db.query(`UPDATE students SET ${oldColumn}='FEMALE' WHERE id=$1`, [f.student]);
     const before = (await db.query('SELECT * FROM students ORDER BY id')).rows;
     const enrollments = (await db.query('SELECT * FROM enrollments ORDER BY id')).rows;
     const links = (await db.query('SELECT * FROM student_parents ORDER BY id')).rows;
     await db.exec(await readFile('db/migrations/' + migration, 'utf8'));
     const after = (await db.query('SELECT * FROM students ORDER BY id')).rows;
-    expect(after.map(({ sex, ...row }) => row)).toEqual(before);
-    expect(after.every((row) => row.sex === 'NOT_SPECIFIED')).toBe(true);
+    expect(after).toEqual(
+      before.map((row) =>
+        Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [key === oldColumn ? 'gender' : key, value]),
+        ),
+      ),
+    );
+    expect(after.find((row) => row.id === f.student)?.gender).toBe('FEMALE');
     expect((await db.query('SELECT * FROM enrollments ORDER BY id')).rows).toEqual(enrollments);
     expect((await db.query('SELECT * FROM student_parents ORDER BY id')).rows).toEqual(links);
     await expect(
-      db.query("UPDATE students SET sex='INVALID' WHERE id=$1", [f.student]),
-    ).rejects.toThrow(/students_sex_check/);
-    await expect(db.query('UPDATE students SET sex=NULL WHERE id=$1', [f.student])).rejects.toThrow(
-      /not-null/,
-    );
+      db.query("UPDATE students SET gender='INVALID' WHERE id=$1", [f.student]),
+    ).rejects.toThrow(/students_gender_check/);
+    await expect(
+      db.query('UPDATE students SET gender=NULL WHERE id=$1', [f.student]),
+    ).rejects.toThrow(/not-null/);
     await db.exec(
       `BEGIN;SET LOCAL ROLE app_api;SELECT set_config('app.school_id','${f.schoolA}',true),set_config('app.user_id','${f.admin}',true);`,
     );
-    expect((await db.query('SELECT id,sex FROM students')).rows).toEqual([
-      { id: f.student, sex: 'NOT_SPECIFIED' },
+    expect((await db.query('SELECT id,gender FROM students')).rows).toEqual([
+      { id: f.student, gender: 'FEMALE' },
     ]);
     await db.exec('ROLLBACK');
     expect(

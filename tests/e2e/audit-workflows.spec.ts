@@ -72,7 +72,7 @@ test('School Admin validates an import before committing the same rows', async (
     r.fulfill({ json: { ...empty, unassigned_count: 0 } }),
   );
   const calls: { rows: unknown[]; validate_only: boolean }[] = [];
-  await page.route('**/api/v1/imports/students', async (r) => {
+  await page.route('**/api/v1/student-directory/imports', async (r) => {
     const body = r.request().postDataJSON();
     calls.push(body);
     expect(r.request().headers()['idempotency-key']).toBeTruthy();
@@ -80,12 +80,18 @@ test('School Admin validates an import before committing the same rows', async (
   });
   await page.goto(authAppURL + '/admin/r/students');
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click();
-  await page.getByLabel('CSV preview').fill('student_code,first_name\nS001,Synthetic learner');
+  await page
+    .getByLabel('CSV preview')
+    .fill(
+      'student_code,first_name,class_grade,class_section,starts_on,parent_1_full_name\nS001,Synthetic learner,8,A,2026-01-01,Fixture parent',
+    );
   await expect(page.getByRole('button', { name: 'Import validated records' })).toBeDisabled();
   await page.getByRole('button', { name: 'Validate file', exact: true }).click();
   await expect(page.getByText('All rows validated. Ready to import.')).toBeVisible();
   await page.getByRole('button', { name: 'Import validated records' }).click();
-  await expect(page.getByText('1 records imported.')).toBeVisible();
+  await expect(
+    page.getByText('1 student imported with class enrollments and family connections.'),
+  ).toBeVisible();
   expect(calls.map((x) => x.validate_only)).toEqual([true, false]);
   expect(calls[0].rows).toEqual(calls[1].rows);
 });

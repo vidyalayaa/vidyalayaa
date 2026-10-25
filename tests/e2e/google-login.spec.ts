@@ -199,11 +199,9 @@ test('a Google account without membership receives no school role', async ({
   const { start, state } = await fixture(page, null);
   await start(authAppURL);
   await expect(
-    page.getByRole('heading', { name: 'Choose your school', exact: true }),
+    page.getByRole('heading', { name: 'Welcome to Vidyalayaa.', exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText('Accept an invitation above, or ask your school administrator to invite you.'),
-  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Explore Vidyalayaa', exact: true })).toBeVisible();
   expect(state.exchanges).toBe(1);
 });
 

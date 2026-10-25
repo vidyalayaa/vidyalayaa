@@ -13,6 +13,7 @@ let db: PGlite,
 const root = crypto.randomUUID(),
   known = new Set<string>([root]);
 const enrolled = new Set<string>();
+const parentChildren = new Map<string, string>();
 let mailed = 0,
   failMail = false;
 const token = (id: string, aal = 'aal2') =>
@@ -39,11 +40,18 @@ async function schoolRecord(email: string, role = 'teacher', sid = f.schoolA) {
       "INSERT INTO parents(id,school_id,full_name,email) VALUES($1,$2,'Existing parent',$3)",
       [id, sid, email],
     );
-    if (sid === f.schoolA)
+    if (sid === f.schoolA) {
+      const child = crypto.randomUUID();
+      await db.query(
+        "INSERT INTO students(id,school_id,student_code,first_name) VALUES($1,$2,$3,'Invitation test child')",
+        [child, sid, child],
+      );
+      parentChildren.set(id, child);
       await db.query(
         "INSERT INTO student_parents(school_id,student_id,parent_id,relationship) VALUES($1,$2,$3,'GUARDIAN')",
-        [sid, f.student, id],
+        [sid, child, id],
       );
+    }
   } else
     await db.query(
       "INSERT INTO teachers(id,school_id,staff_code,full_name,email,staff_role) VALUES($1,$2,$3,'Existing staff',$4,$5)",
@@ -652,7 +660,8 @@ for (const role of ['student', 'parent', 'teacher', 'principal'] as const)
     expect(records.status).toBe(200);
     const ids = records.body.data.map((r: { id: string }) => r.id);
     if (role === 'student') expect(ids).toEqual([record]);
-    else if (role === 'parent' || role === 'teacher') expect(ids).toEqual([f.student]);
+    else if (role === 'parent') expect(ids).toEqual([parentChildren.get(record)]);
+    else if (role === 'teacher') expect(ids).toEqual([f.student]);
     else expect(ids).toContain(f.student);
     expect(ids).not.toContain(f.foreignStudent);
     expect(
@@ -672,7 +681,7 @@ it('requires a child link for parents and rechecks it before acceptance', async 
   expect(blocked.body.error.code).toBe('PARENT_CHILD_REQUIRED');
   await db.query(
     "INSERT INTO student_parents(school_id,student_id,parent_id,relationship) VALUES($1,$2,$3,'GUARDIAN')",
-    [f.schoolA, f.student, record],
+    [f.schoolA, parentChildren.get(record), record],
   );
   const invitation = await call('post', '/invitations', f.admin, f.schoolA).send(body);
   expect(invitation.status).toBe(201);

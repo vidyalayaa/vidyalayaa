@@ -515,39 +515,51 @@ test('School Admin imports students and archives a subject without removing hist
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click();
   await page
     .getByLabel('CSV preview')
-    .fill('student_code,first_name\nIMPORT_WEB,Imported website learner');
+    .fill(
+      'student_code,first_name,class_grade,class_section,starts_on,parent_1_full_name\nIMPORT_WEB,Imported website learner,8,A,2026-01-01,Imported website parent',
+    );
   await page.getByRole('button', { name: 'Validate file', exact: true }).click();
   await expect(page.getByText('All rows validated. Ready to import.')).toBeVisible();
   await page.getByRole('button', { name: 'Import validated records', exact: true }).click();
-  await expect(page.getByText('1 records imported.')).toBeVisible();
+  await expect(
+    page.getByText('1 student imported with class enrollments and family connections.'),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
-  await page.locator('summary').filter({ hasText: 'Not currently enrolled' }).click();
+  await page
+    .locator('summary')
+    .filter({ has: page.getByRole('heading', { name: 'Class 8', exact: true }) })
+    .click();
   await expect(
     page.getByRole('article', { name: 'Student IMPORT_WEB', exact: true }),
   ).toBeVisible();
   const f = platformApp.records;
+  const subject = await platformApp.request(
+    '/resources/subjects',
+    'POST',
+    { code: 'ARCHIVE_WEB', name: 'Archive website subject' },
+    f.admin,
+    f.schoolA,
+  );
+  expect(subject.status).toBe(201);
+  // The legacy catalogue URL now redirects to class-wise Academics. Verify the
+  // existing retirement API and retained row without depending on that removed UI.
   expect(
     (
       await platformApp.request(
-        '/resources/subjects',
+        `/resources/subjects/${subject.body.id}/retire`,
         'POST',
-        { code: 'ARCHIVE_WEB', name: 'Archive website subject' },
+        { reason: 'Generated retirement preserving historical records' },
         f.admin,
         f.schoolA,
       )
     ).status,
-  ).toBe(201);
-  await page.goto(authAppURL + '/admin/r/subjects');
-  await page
-    .getByRole('row')
-    .filter({ hasText: 'ARCHIVE_WEB' })
-    .getByRole('button', { name: 'Archive', exact: true })
-    .click();
-  await page
-    .getByLabel('Reason', { exact: true })
-    .fill('Generated retirement preserving historical records');
-  await save(page, 'Save');
-  await expect(page.getByRole('row').filter({ hasText: 'ARCHIVE_WEB' })).toHaveCount(0);
+  ).toBe(204);
+  const retained = await platformApp.db.query<{ retired_at: Date | null }>(
+    'SELECT retired_at FROM subjects WHERE id=$1',
+    [subject.body.id],
+  );
+  expect(retained.rows).toHaveLength(1);
+  expect(retained.rows[0].retired_at).not.toBeNull();
 });
 
 test('School Admin profile settings refresh the workspace name', async ({ page, authAppURL }) => {
