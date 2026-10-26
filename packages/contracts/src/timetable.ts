@@ -87,6 +87,13 @@ export interface TimetableEntry {
   teacher_label: string;
   class_label: string;
   assignment_valid: boolean;
+  class_grade?: string;
+  class_section?: string;
+  session_name?: string;
+}
+export interface TimetableClock {
+  server_time: string;
+  timezone: string;
 }
 export const defaultSchoolTimings: SchoolTimings = {
   days: [1, 2, 3, 4, 5, 6],

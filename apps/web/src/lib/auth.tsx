@@ -1,5 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { createClient, type Session, type User } from '@supabase/supabase-js';
+import {
+  createClient,
+  type Session,
+  type User,
+  type UserAttributes,
+  type EmailOtpType,
+} from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Me } from '@vidyalayaa/contracts';
 import { clearDrafts, suspendDrafts, resumeDrafts, discardDraftCheckpoint } from './drafts';
@@ -11,6 +17,10 @@ const url = import.meta.env.VITE_SUPABASE_URL,
 const setupURL = new URL(window.location.href);
 const isSetupCallback = setupURL.pathname === '/auth/callback';
 const isGoogleCallback = setupURL.pathname === '/auth/google/callback';
+const isAccountVerification = setupURL.pathname === '/auth/verify';
+const verificationURL = isAccountVerification ? new URL(setupURL) : null;
+// Do not leave one-use verification credentials in history, analytics or copied URLs.
+if (isAccountVerification) window.history.replaceState(window.history.state, '', setupURL.pathname);
 const googleReturnKey = 'vidyalayaa.oauth.returnTo';
 const googleReturnTo = isGoogleCallback
   ? safeReturnTo(sessionStorage.getItem(googleReturnKey))
@@ -22,11 +32,167 @@ export const supabase = configured
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: !isSetupCallback && !isGoogleCallback,
+        detectSessionInUrl: !isSetupCallback && !isGoogleCallback && !isAccountVerification,
         flowType: 'pkce',
       },
     })
   : null;
+export class AccountMfaRequired extends Error {}
+export async function requestPasswordLink(email: string) {
+  if (!supabase) throw new Error('Connect your workspace before signing in.');
+  const result = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: location.origin + '/auth/callback',
+  });
+  if (result.error) throw result.error;
+}
+export async function assertAccountIdentity(id: string) {
+  if (!supabase) throw new Error('Sign in to continue.');
+  const current = await supabase.auth.getUser();
+  if (current.error || current.data.user?.id !== id)
+    throw new Error('Your sign-in changed. Reopen this page before changing your account.');
+  return current.data.user;
+}
+export async function confirmAccountAssurance(id: string, code: string) {
+  await assertAccountIdentity(id);
+  const factor = await getSignInFactor();
+  if (factor) {
+    if (!code)
+      throw new AccountMfaRequired('Enter your authenticator code to confirm this change.');
+    const result = await supabase!.auth.mfa.challengeAndVerify({ factorId: factor, code });
+    if (result.error) throw new Error('The authenticator code could not be verified.');
+    await assertAccountIdentity(id);
+  }
+}
+export async function updateOwnAccount(id: string, attributes: UserAttributes) {
+  await assertAccountIdentity(id);
+  let current = await supabase!.auth.getSession();
+  if (current.data.session?.user.id !== id)
+    throw new Error('Your sign-in changed. Reopen this page.');
+  if ((current.data.session.expires_at || 0) < Date.now() / 1000 + 30) {
+    await supabase!.auth.refreshSession();
+    current = await supabase!.auth.getSession();
+  }
+  const session = current.data.session;
+  if (!session || session.user.id !== id)
+    throw new Error('Sign in again before changing your account.');
+  // Bind the write to the verified owner's credentials. A different account
+  // signing in in another tab must never become the target of a pending form.
+  const operation = createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: `vidyalayaa-operation-${crypto.randomUUID()}`,
+    },
+  });
+  const established = await operation.auth.setSession({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+  });
+  if (established.error || established.data.user?.id !== id)
+    throw new Error('Your sign-in changed. Request a new setup link before choosing a password.');
+  await assertAccountIdentity(id);
+  const result = await operation.auth.updateUser(attributes, {
+    emailRedirectTo: location.origin + '/auth/verify',
+  });
+  if (result.error) throw result.error;
+  if (result.data.user?.id !== id) throw new Error('The account update could not be verified.');
+  // Refresh only the same account; never overwrite another tab's new identity.
+  const latest = await supabase!.auth.getSession();
+  if (attributes.email && latest.data.session?.user.id === id)
+    await supabase!.auth.refreshSession();
+  return result.data.user;
+}
+
+type VerifiedAction = {
+  kind: 'password' | 'email_change' | 'signin';
+  identity?: Pick<User, 'id' | 'email'>;
+};
+let verificationCompletion: Promise<VerifiedAction> | undefined;
+export function discardAuthAction() {
+  verificationCompletion = undefined;
+  setupCompletion = undefined;
+  setupURL.search = '';
+  setupURL.hash = '';
+  if (verificationURL) {
+    verificationURL.search = '';
+    verificationURL.hash = '';
+  }
+}
+export function completeAccountVerification() {
+  return (verificationCompletion ??= (async () => {
+    if (!supabase || !verificationURL) throw new Error('Request a fresh verification link.');
+    const query = verificationURL.searchParams;
+    const fragment = new URLSearchParams(verificationURL.hash.slice(1));
+    if (
+      ['error', 'error_code', 'error_description'].some(
+        (key) => query.has(key) || fragment.has(key),
+      )
+    )
+      throw new Error(
+        'This verification link has expired, was already used, or is invalid. Request a fresh link.',
+      );
+    const type = query.get('type') || fragment.get('type') || '';
+    const hash = fragment.get('token_hash') || query.get('token_hash');
+    let kind: VerifiedAction['kind'] = ['invite', 'recovery'].includes(type)
+      ? 'password'
+      : type === 'email_change'
+        ? 'email_change'
+        : 'signin';
+    let data: { user: User | null; session: Session | null };
+    if (
+      hash &&
+      hash.length <= 512 &&
+      ['signup', 'invite', 'email', 'magiclink', 'recovery', 'email_change'].includes(type)
+    ) {
+      const result = await supabase.auth.verifyOtp({
+        token_hash: hash,
+        type: type as EmailOtpType,
+      });
+      if (result.error)
+        throw new Error(
+          'This verification link has expired, was already used, or is invalid. Request a fresh link.',
+        );
+      data = result.data;
+    } else if (query.get('code')) {
+      let recovery = false;
+      const watcher = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') recovery = true;
+      });
+      try {
+        const result = await supabase.auth.exchangeCodeForSession(
+          query.get('code')!,
+          query.get('sb_flow_id') ? { flowId: query.get('sb_flow_id')! } : undefined,
+        );
+        if (result.error)
+          throw new Error('This verification link could not be verified. Request a fresh link.');
+        data = result.data;
+        kind = recovery ? 'password' : 'signin';
+      } finally {
+        watcher.data.subscription.unsubscribe();
+      }
+    } else if (
+      fragment.get('access_token') &&
+      fragment.get('refresh_token') &&
+      ['invite', 'recovery', 'email_change', 'signup', 'magiclink'].includes(type)
+    ) {
+      const result = await supabase.auth.setSession({
+        access_token: fragment.get('access_token')!,
+        refresh_token: fragment.get('refresh_token')!,
+      });
+      if (result.error)
+        throw new Error('This verification link could not be verified. Request a fresh link.');
+      data = result.data;
+    } else throw new Error('This verification link is missing or invalid. Request a fresh link.');
+    if (kind === 'email_change') return { kind };
+    if (!data.session || !data.user)
+      throw new Error('No verified session was returned. Request a fresh link.');
+    const verified = await supabase.auth.getUser(data.session.access_token);
+    if (verified.error || verified.data.user?.id !== data.user.id)
+      throw new Error('We could not verify your account. Request a fresh link.');
+    return { kind, identity: { id: verified.data.user.id, email: verified.data.user.email } };
+  })());
+}
 export async function startGoogleSignIn(returnTo: string | null) {
   if (!supabase) throw new Error('Connect your workspace before signing in.');
   // The provider can be enabled in Supabase without rebuilding the website.

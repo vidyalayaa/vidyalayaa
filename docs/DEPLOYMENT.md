@@ -1,5 +1,10 @@
 # Vidyalayaa deployment and operations guide
 
+Account email/password settings and branded Auth emails:
+[AUTH_ACCOUNT_SETTINGS.md](AUTH_ACCOUNT_SETTINGS.md) contains the provider
+configuration, migration, deployment order and live inbox acceptance steps.
+Deploy the new verification callback before activating the hosted templates.
+
 Version 1.3 | 20 October 2026 | Architecture specification v1.0
 
 21 October Teacher update: apply the additive teacher authorization migration before deploying matching website/API/worker builds. See [Teacher assignments and migration notes](TEACHER_ASSIGNMENTS.md).

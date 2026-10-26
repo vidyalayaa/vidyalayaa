@@ -5,7 +5,6 @@ import { transaction, audit, type Tx } from '../../lib/db.js';
 import { paged } from '../../lib/pagination.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import type { Actor } from '../../middleware/auth.js';
-import { resourceSelect } from './resources.js';
 
 interface Controls {
   requireWrite: (tx: Tx, a: Actor, feature?: string) => Promise<void>;
@@ -40,6 +39,41 @@ export function timetableRouter(pool: pg.Pool, controls: Controls) {
       );
     next();
   });
+  r.get(
+    '/clock',
+    asyncRoute(async (_req, res) => {
+      const a: Actor = res.locals.actor;
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ server_time: new Date().toISOString(), timezone: a.active!.timezone });
+    }),
+  );
+  r.get(
+    '/mine',
+    asyncRoute(async (req, res) => {
+      const a: Actor = res.locals.actor;
+      if (a.active!.role !== 'teacher')
+        throw new ApiError(403, 'FORBIDDEN', 'A teacher account is required for My Timetable.');
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          (tx) =>
+            paged(
+              tx,
+              `SELECT t.*,labels.*,true AS assignment_valid
+       FROM timetable_entries t JOIN teachers own ON own.school_id=t.school_id AND own.id=t.teacher_id
+       CROSS JOIN LATERAL app.timetable_entry_labels(t.school_id,t.id) labels
+       WHERE t.school_id=$1 AND own.user_id=$2 AND own.status='ACTIVE' AND own.staff_role='teacher' AND t.retired_at IS NULL
+       AND app.timetable_assignment_valid(t.school_id,t.class_id,t.subject_id,t.teacher_id)
+       ORDER BY t.weekday,t.starts_at,t.ends_at,t.id`,
+              [a.context.schoolId, a.id],
+              req.query,
+            ),
+          true,
+        ),
+      );
+    }),
+  );
   r.get(
     '/settings',
     asyncRoute(async (_req, res) => {
@@ -95,8 +129,9 @@ export function timetableRouter(pool: pg.Pool, controls: Controls) {
             await assertVisible(tx, a, id);
             return paged(
               tx,
-              `SELECT ${resourceSelect('timetable_entries')},${a.active!.role === 'school_admin' ? 'app.timetable_assignment_valid(t.school_id,t.class_id,t.subject_id,t.teacher_id)' : 'true'} AS assignment_valid
-        FROM timetable_entries t WHERE t.school_id=$1 AND t.class_id=$2 AND t.retired_at IS NULL ORDER BY t.weekday,t.starts_at,t.id`,
+              `SELECT t.*,labels.*,${a.active!.role === 'school_admin' ? 'app.timetable_assignment_valid(t.school_id,t.class_id,t.subject_id,t.teacher_id)' : 'true'} AS assignment_valid
+        FROM timetable_entries t CROSS JOIN LATERAL app.timetable_entry_labels(t.school_id,t.id) labels
+        WHERE t.school_id=$1 AND t.class_id=$2 AND t.retired_at IS NULL ORDER BY t.weekday,t.starts_at,t.id`,
               [a.context.schoolId, id],
               req.query,
             );

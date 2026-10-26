@@ -3,6 +3,9 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.auth.example
+output/auth-config-backup.json
+output/account-settings-*.png
 coverage/
 playwright-report/
 test-results/

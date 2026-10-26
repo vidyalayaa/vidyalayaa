@@ -134,6 +134,11 @@ export default function Settings() {
         </Panel>
         <Panel title="Account security" subtitle="A little extra protection goes a long way.">
           <div className="px-6 pt-4">
+            <Button asChild variant="outline" className="mb-3 mr-3">
+              <Link to="/settings/account">
+                Email &amp; password <ArrowUpRight size={16} />
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link to="/settings/security">
                 Security &amp; Login Sessions <ArrowUpRight size={16} />

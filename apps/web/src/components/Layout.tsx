@@ -1,5 +1,5 @@
 import PushUpdates from '../features/notifications/PushUpdates';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -32,10 +32,12 @@ import { configured, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
 import { Dialog } from './ui/dialog';
 import { cn } from '../lib/utils';
+import { Loading } from './common';
 import { schoolPath } from '../lib/portals';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/auth';
 import { display } from '../lib/utils';
+const ParentWorkspace = lazy(() => import('../features/parents/ParentWorkspace'));
 const navigationFeatures: Record<string, string> = {
   '/r/assignments': 'assignments',
   '/r/timetable_entries': 'timetable',
@@ -361,26 +363,28 @@ export default function Layout() {
             </span>
           </div>
           <div className="topbar-actions">
-            <form
-              className="global-search"
-              onSubmit={(e) => {
-                e.preventDefault();
-                navigate(
-                  (platformOnly ? '/platform/schools' : path('/r/students')) +
-                    `?search=${encodeURIComponent(search)}`,
-                );
-              }}
-            >
-              <Search size={16} />
-              <input
-                aria-label={platformOnly ? 'Search schools' : 'Search students'}
-                maxLength={120}
-                placeholder="Find something…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <kbd>↵</kbd>
-            </form>
+            {role !== 'parent' && (
+              <form
+                className="global-search"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  navigate(
+                    (platformOnly ? '/platform/schools' : path('/r/students')) +
+                      `?search=${encodeURIComponent(search)}`,
+                  );
+                }}
+              >
+                <Search size={16} />
+                <input
+                  aria-label={platformOnly ? 'Search schools' : 'Search students'}
+                  maxLength={120}
+                  placeholder="Find something…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <kbd>↵</kbd>
+              </form>
+            )}
             <Link
               to={
                 platformOnly
@@ -424,7 +428,13 @@ export default function Layout() {
             </div>
           )}
           <PushUpdates />
-          <Outlet />
+          {role === 'parent' && family && !/\/settings(?:\/|$)/.test(location.pathname) ? (
+            <Suspense fallback={<Loading />}>
+              <ParentWorkspace />
+            </Suspense>
+          ) : (
+            <Outlet />
+          )}
           {!!support.data?.data.length && (
             <div className="notice mt-5" role="status">
               <ShieldCheck size={18} />

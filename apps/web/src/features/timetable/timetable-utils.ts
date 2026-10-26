@@ -8,6 +8,49 @@ export const weekdays = [
   'Saturday',
   'Sunday',
 ];
+const clockFormats = new Map<string, Intl.DateTimeFormat>();
+export interface LocalSchoolTime {
+  weekday: number;
+  seconds: number;
+  time: string;
+}
+export function localSchoolTime(now: Date, timezone: string): LocalSchoolTime {
+  let formatter = clockFormats.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+      fractionalSecondDigits: 3,
+    });
+    clockFormats.set(timezone, formatter);
+  }
+  const parts = Object.fromEntries(formatter.formatToParts(now).map((p) => [p.type, p.value]));
+  const day = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(parts.weekday) + 1;
+  return {
+    weekday: day,
+    seconds:
+      Number(parts.hour) * 3600 +
+      Number(parts.minute) * 60 +
+      Number(parts.second) +
+      Number(parts.fractionalSecond || 0) / 1000,
+    time: `${parts.hour}:${parts.minute}:${parts.second}`,
+  };
+}
+export function lectureIsRunning(
+  entry: Pick<TimetableEntry, 'weekday' | 'starts_at' | 'ends_at'>,
+  now: LocalSchoolTime | null,
+) {
+  return (
+    !!now &&
+    entry.weekday === now.weekday &&
+    seconds(entry.starts_at) <= now.seconds &&
+    now.seconds < seconds(entry.ends_at)
+  );
+}
 export function clock(v: string) {
   return Number(v.split(':')[2] || 0) ? v : v.slice(0, 5);
 }

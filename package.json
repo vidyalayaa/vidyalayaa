@@ -11,6 +11,8 @@
     "node": ">=24.12 <25"
   },
   "scripts": {
+    "auth:emails": "node scripts/auth-emails.mjs",
+    "auth:configure": "node scripts/configure-auth.mjs",
     "dev": "concurrently -n web,api,worker \"npm run dev -w @vidyalayaa/web\" \"npm run dev -w @vidyalayaa/api\" \"npm run dev -w @vidyalayaa/worker\"",
     "build": "npm run build -w @vidyalayaa/contracts && npm run build -w @vidyalayaa/api && npm run build -w @vidyalayaa/worker && npm run build -w @vidyalayaa/web",
     "typecheck": "tsc --noEmit -p apps/api && tsc --noEmit -p apps/worker && tsc --noEmit -p apps/web",

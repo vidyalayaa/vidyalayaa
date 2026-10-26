@@ -23,6 +23,7 @@ import { platformRouter, supportApprovalRouter } from './modules/platform/router
 import { sharedRateLimit, auditDenied } from './middleware/security-events.js';
 import { recipientInvitationRouter } from './modules/identity/invitations.js';
 import { sessionsRouter } from './modules/identity/sessions.js';
+import { accountRouter } from './modules/identity/account.js';
 export interface Dependencies {
   api: pg.Pool;
   device: pg.Pool;
@@ -174,6 +175,7 @@ export function createApp(config: Config, deps: Dependencies) {
   );
   app.use('/api/v1/invitations', recipientInvitationRouter(deps.api));
   app.use('/api/v1/account/sessions', sessionsRouter(deps.api));
+  app.use('/api/v1/account', accountRouter(deps.api));
   app.use(
     '/api/v1/platform',
     firmwareRouter(deps.platform, deps.supabase, config.FIRMWARE_RELEASE_PUBLIC_KEY),

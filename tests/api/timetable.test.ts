@@ -277,6 +277,121 @@ it('keeps timing retries idempotent, preserves unrelated settings and refuses wr
     await db.query("UPDATE subscriptions SET status='ACTIVE' WHERE school_id=$1", [f.schoolA]);
   }
 });
+it('combines only the authenticated teacher’s assigned lectures and shows complete authorized class labels without exposing staff records', async () => {
+  const coTeacher = (
+    await call('post', '/resources/teachers').send({
+      staff_code: 'TT_CO',
+      full_name: 'Co-teacher timetable',
+    })
+  ).body.id;
+  const english = (
+    await call('post', '/resources/subjects').send({ code: 'TT_EN', name: 'English timetable' })
+  ).body.id;
+  const section = (
+    await call('post', '/resources/classes').send({
+      academic_session_id: f.session,
+      grade: '11',
+      section: 'MY_VIEW',
+      class_teacher_id: coTeacher,
+    })
+  ).body.id;
+  const assignment = (
+    await call('post', '/resources/teacher_class_assignments').send({
+      teacher_id: f.teacherId,
+      class_id: section,
+      subject_id: f.subject,
+      starts_on: '2026-01-01',
+    })
+  ).body.id;
+  expect(
+    (
+      await call('post', '/resources/teacher_class_assignments').send({
+        teacher_id: coTeacher,
+        class_id: f.classId,
+        subject_id: english,
+        starts_on: '2026-01-01',
+      })
+    ).status,
+  ).toBe(201);
+  const create = async (values: Record<string, unknown>) => {
+    const r = await call('post', '/resources/timetable_entries').send({
+      ...lecture(),
+      weekday: 4,
+      ...values,
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    return r.body;
+  };
+  const ownOne = await create({}),
+    ownTwo = await create({ class_id: section, starts_at: '08:40', ends_at: '09:20' }),
+    otherLesson = await create({
+      teacher_id: coTeacher,
+      subject_id: english,
+      starts_at: '09:20',
+      ends_at: '10:00',
+    });
+  const mine = await call('get', '/timetable/mine?teacher_id=' + coTeacher, 'teacher');
+  expect(mine.status, JSON.stringify(mine.body)).toBe(200);
+  expect(mine.body.data.map((r: any) => r.id)).toEqual(
+    expect.arrayContaining([ownOne.id, ownTwo.id]),
+  );
+  expect(mine.body.data.map((r: any) => r.id)).not.toContain(otherLesson.id);
+  expect(mine.body.data.every((r: any) => r.teacher_id === f.teacherId)).toBe(true);
+  expect(mine.body.data.find((r: any) => r.id === ownTwo.id)).toMatchObject({
+    class_grade: '11',
+    class_section: 'MY_VIEW',
+    teacher_label: 'Teacher Test',
+  });
+  const complete = await call('get', '/timetable/classes/' + f.classId + '/entries', 'teacher');
+  expect(complete.body.data.find((r: any) => r.id === otherLesson.id)).toMatchObject({
+    subject_label: 'English timetable',
+    teacher_label: 'Co-teacher timetable',
+  });
+  await transaction(
+    poolAdapters(db).api,
+    { schoolId: f.schoolA, userId: f.teacher },
+    async (tx) => {
+      expect((await tx.query('SELECT id FROM teachers WHERE id=$1', [coTeacher])).rows).toEqual([]);
+    },
+  );
+  for (const role of ['parent', 'student', 'principal', 'admin'])
+    expect((await call('get', '/timetable/mine', role)).status).toBe(403);
+  const hidden = (
+    await db.query<{ id: string }>(
+      "INSERT INTO timetable_entries(school_id,class_id,subject_id,teacher_id,weekday,starts_at,ends_at) VALUES($1,$2,$3,$4,5,'08:00','08:40') RETURNING id",
+      [f.schoolA, other, f.subject, coTeacher],
+    )
+  ).rows[0].id;
+  await transaction(
+    poolAdapters(db).api,
+    { schoolId: f.schoolA, userId: f.teacher },
+    async (tx) => {
+      expect(
+        (await tx.query('SELECT * FROM app.timetable_entry_labels($1,$2)', [f.schoolA, hidden]))
+          .rows,
+      ).toEqual([]);
+    },
+  );
+  await db.query('UPDATE teacher_class_assignments SET retired_at=now() WHERE id=$1', [assignment]);
+  expect(
+    (await call('get', '/timetable/mine', 'teacher')).body.data.map((r: any) => r.id),
+  ).not.toContain(ownTwo.id);
+  expect((await call('get', '/timetable/classes/' + section + '/entries', 'teacher')).status).toBe(
+    404,
+  );
+});
+it('provides an authenticated uncached school clock without granting management or other-school access', async () => {
+  for (const role of ['teacher', 'parent', 'student', 'principal', 'admin']) {
+    const r = await call('get', '/timetable/clock', role);
+    expect(r.status).toBe(200);
+    expect(r.body.timezone).toBe('Asia/Kolkata');
+    expect(Number.isFinite(Date.parse(r.body.server_time))).toBe(true);
+    expect(r.headers['cache-control']).toBe('no-store');
+  }
+  expect(
+    (await call('get', '/timetable/clock', 'teacher').set('X-School-Id', f.schoolB)).status,
+  ).toBe(404);
+});
 it('keeps legacy lectures after timing changes, permits room edits and validates rescheduling against the new periods', async () => {
   const config = {
     ...defaultSchoolTimings,

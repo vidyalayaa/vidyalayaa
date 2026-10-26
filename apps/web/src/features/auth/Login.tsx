@@ -1,3 +1,5 @@
+import PasswordSetupForm from './PasswordSetupForm';
+import EmailSignIn from './EmailSignIn';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -16,6 +18,7 @@ import {
   configured,
   supabase,
   useAuth,
+  requestPasswordLink,
 } from '../../lib/auth';
 import { safeReturnTo } from '../../lib/auth-return';
 import { Button } from '../../components/ui/button';
@@ -193,10 +196,7 @@ export default function Login() {
                   if (r.error) throw r.error;
                   navigate(returnTo, { replace: true });
                 } else if (recovery) {
-                  const r = await supabase.auth.resetPasswordForEmail(String(f.get('email')), {
-                    redirectTo: location.origin + '/auth/callback',
-                  });
-                  if (r.error) throw r.error;
+                  await requestPasswordLink(String(f.get('email')));
                   setMessage('If this account exists, a recovery link has been sent.');
                 } else {
                   const r = await supabase.auth.signInWithPassword({
@@ -299,6 +299,15 @@ export default function Login() {
               <ArrowRight size={16} />
             </Button>
           </form>
+          {!factor && !recovery && !checkingMfa && (
+            <EmailSignIn
+              onVerified={async () => {
+                const id = await getSignInFactor();
+                if (id) setFactor(id);
+                else navigate(returnTo, { replace: true });
+              }}
+            />
+          )}
           {factor && (
             <button
               type="button"
@@ -382,10 +391,7 @@ export function GoogleCallback() {
 export function AuthCallback() {
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(true);
-  const [pending, setPending] = useState(false);
   const [identity, setIdentity] = useState<{ id: string; email?: string } | null>(null);
-  const submitting = useRef(false);
-  const navigate = useNavigate();
   useEffect(() => {
     let ignore = false;
     completePasswordSetup()
@@ -420,70 +426,15 @@ export function AuthCallback() {
               : 'Use a new password setup email to continue securely.'}
         </p>
         {identity && (
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!supabase || submitting.current) return;
-              const fields = new FormData(e.currentTarget);
-              const password = String(fields.get('password'));
-              if (password !== String(fields.get('confirmation'))) {
-                setError('The passwords do not match.');
-                return;
-              }
-              submitting.current = true;
-              setPending(true);
-              setError('');
-              try {
-                // A stale or rejected callback must never update a different account
-                // that happens to be signed in in this browser.
-                const current = await supabase.auth.getUser();
-                if (current.error || current.data.user?.id !== identity.id) {
-                  setIdentity(null);
-                  throw new Error(
-                    'Your sign-in changed. Request a new setup link before choosing a password.',
-                  );
-                }
-                const result = await supabase.auth.updateUser({ password });
-                if (result.error) throw result.error;
-                navigate('/settings', { replace: true });
-              } catch (cause) {
-                setError((cause as Error).message);
-              } finally {
-                submitting.current = false;
-                setPending(false);
-              }
+          <PasswordSetupForm
+            identity={identity}
+            invalidate={() => {
+              setIdentity(null);
+              setError(
+                'Your sign-in changed. Request a new setup link before choosing a password.',
+              );
             }}
-          >
-            <label className="field-label" htmlFor="new-password">
-              New password
-            </label>
-            <input
-              id="new-password"
-              name="password"
-              className="input"
-              type="password"
-              minLength={12}
-              autoComplete="new-password"
-              disabled={pending}
-              required
-            />
-            <label className="field-label mt-4" htmlFor="confirm-password">
-              Confirm password
-            </label>
-            <input
-              id="confirm-password"
-              name="confirmation"
-              className="input"
-              type="password"
-              minLength={12}
-              autoComplete="new-password"
-              disabled={pending}
-              required
-            />
-            <Button className="mt-4" variant="lime" disabled={pending}>
-              {pending ? 'Saving your password…' : 'Set password & continue'}
-            </Button>
-          </form>
+          />
         )}
         {error && (
           <p className="field-error" role="alert">

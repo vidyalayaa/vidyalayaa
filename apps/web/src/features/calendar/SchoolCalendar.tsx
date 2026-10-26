@@ -33,7 +33,7 @@ function eventBackground(events: CalendarEvent[]) {
   if (kinds.length === 1) return kindColors[kinds[0]];
   return `linear-gradient(135deg,${kinds.map((k, i) => `${kindColors[k]} ${(i / kinds.length) * 100}% ${((i + 1) / kinds.length) * 100}%`).join(',')})`;
 }
-export default function SchoolCalendar() {
+export default function SchoolCalendar({ basePath = '/calendar' }: { basePath?: string }) {
   const a = useAuth(),
     qc = useQueryClient(),
     [params] = useSearchParams();
@@ -58,8 +58,8 @@ export default function SchoolCalendar() {
     a.me?.school?.role === 'school_admin' && a.me.school.permissions.includes('calendar.write');
   const allowed = !!a.me?.school?.permissions.includes('calendar.read');
   const classes = useQuery({
-    queryKey: [a.school, 'calendar-classes'],
-    queryFn: ({ signal }) => allCalendarPages<CalendarClass>('/calendar/classes', signal),
+    queryKey: [a.school, 'calendar-classes', basePath],
+    queryFn: ({ signal }) => allCalendarPages<CalendarClass>(basePath + '/classes', signal),
     enabled: configured && allowed,
   });
   const groups = groupClasses(classes.data || []),
@@ -84,8 +84,8 @@ export default function SchoolCalendar() {
     ...(filterIds.length ? { class_ids: filterIds.join(',') } : {}),
   });
   const events = useQuery({
-    queryKey: [a.school, 'calendar-events', query.toString()],
-    queryFn: ({ signal }) => allCalendarPages<CalendarEvent>('/calendar/events?' + query, signal),
+    queryKey: [a.school, 'calendar-events', basePath, query.toString()],
+    queryFn: ({ signal }) => allCalendarPages<CalendarEvent>(basePath + '/events?' + query, signal),
     enabled: configured && allowed,
   });
   const list = events.data || [],
