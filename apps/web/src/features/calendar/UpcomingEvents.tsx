@@ -8,13 +8,13 @@ import { schoolPath } from '../../lib/portals';
 import { Loading, ErrorState } from '../../components/common';
 import { prettyDate, schoolToday, shiftDate, kindColors } from './calendar-utils';
 
-export default function UpcomingEvents() {
+export default function UpcomingEvents({ basePath = '/calendar' }: { basePath?: string }) {
   const a = useAuth(),
     from = schoolToday(a.me?.school?.timezone),
     to = shiftDate(from, 30);
   const q = useQuery({
-    queryKey: [a.school, 'upcoming-calendar', from],
-    queryFn: () => api<Page<CalendarEvent>>(`/calendar/events?from=${from}&to=${to}&page_size=6`),
+    queryKey: [a.school, 'upcoming-calendar', basePath, from],
+    queryFn: () => api<Page<CalendarEvent>>(`${basePath}/events?from=${from}&to=${to}&page_size=6`),
     enabled: !!a.me?.school?.permissions.includes('calendar.read'),
   });
   return (

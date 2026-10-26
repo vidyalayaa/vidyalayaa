@@ -25,6 +25,12 @@ Subjects and teachers come from existing, non-archived `teacher_class_assignment
 
 Existing `timetable.read` and `timetable.write` permissions, verified authentication/MFA and the timetable plan feature remain in force. Subscription read-only restrictions continue to block writes. Timetable writes and timing changes require School Admin in both the API and database. Current ownership/assignment checks are enforced by restrictive RLS even when selecting timetable rows directly through the runtime database role. A revoked family link or ended enrollment removes access on the next request.
 
+Teachers can switch between **Class Timetable**, which shows every lecture and lecturer in an authorized class/section, and **My Timetable**, which shows only their own lectures across current subject assignments, organized by weekday and actual lecture time. My Timetable includes class, section, subject, time and room when configured. Removing an assignment removes that lecture from the next personal-timetable response. Other teachers' staff records and contact details remain protected.
+
+Every authorized timetable view highlights the current lecture with a lime border, lime background and **In progress** text. Start times are inclusive and end times exclusive. Empty periods, breaks and other weekdays have no active lecture; preserved legacy lectures use their actual stored times. The clock uses the school's IANA timezone, including date changes and daylight-saving transitions. The browser anchors to an uncached API UTC sample and advances using a monotonic timer, checking every 250 ms, resynchronizing every minute and when the tab becomes visible or focused. Browser timezone and manual device-clock changes do not determine the highlight. If the initial school-clock request fails, the UI offers a retry without guessing the current lecture.
+
+Parents use the selected child's existing read-only timetable. Super Admin can use the same highlight in an explicitly authorized school workspace; platform status alone does not grant access to school timetables or student records. Existing role and support-access rules are unchanged.
+
 Lecture and break times must form a valid non-overlapping same-day template, with numbered periods matching the lecture count. New or rescheduled lectures must match a configured school day and exact lecture interval. Existing database exclusion constraints prevent overlapping bookings for either a class or a teacher, including concurrent writes outside Express. Different classes may use the same slot with different assigned teachers. No room-booking constraint is introduced.
 
 ## Storage and API
@@ -38,13 +44,15 @@ All endpoints use `/api/v1`, verified authentication and `X-School-Id`:
 | `GET /timetable/settings`                       | `{configured, version, settings}`; unsaved defaults have version 0                       |
 | `PUT /timetable/settings`                       | `{expected_version, settings}`; School Admin and writable timetable entitlement required |
 | `GET /timetable/classes`                        | Paginated authorized class/section choices                                               |
+| `GET /timetable/clock`                          | `{server_time, timezone}`; uncached server UTC sample and active school timezone         |
+| `GET /timetable/mine`                           | Teacher-only paginated own lectures across live class/subject assignments                |
 | `GET /timetable/classes/{id}/entries`           | Paginated lectures with subject/teacher labels                                           |
 | `GET /timetable/classes/{id}/assignments`       | School Admin-only active subject/teacher choices                                         |
 | `POST /resources/timetable_entries`             | Existing lecture creation contract and idempotency support                               |
 | `PATCH /resources/timetable_entries/{id}`       | Existing lecture update contract                                                         |
 | `POST /resources/timetable_entries/{id}/retire` | Existing `{reason}` archive action; returns 204                                          |
 
-Timing saves use an optimistic version and support `Idempotency-Key`. Stale saves return `TIMETABLE_VERSION_CONFLICT`. Invalid assignments and periods return `TIMETABLE_ASSIGNMENT_INVALID` / `TIMETABLE_PERIOD_INVALID`; existing bookings return `TIMETABLE_CONFLICT` or the database constraint-conflict response. There are no new browser grants, public functions or security-definer functions. Trusted migration/restore owners retain their existing maintenance paths.
+Timing saves use an optimistic version and support `Idempotency-Key`. Stale saves return `TIMETABLE_VERSION_CONFLICT`. Invalid assignments and periods return `TIMETABLE_ASSIGNMENT_INVALID` / `TIMETABLE_PERIOD_INVALID`; existing bookings return `TIMETABLE_CONFLICT` or the database constraint-conflict response. Migration `20261026121649_timetable_labels.sql` adds one private security-definer helper, executable only by `app_api`, to return display labels for an already authorized active lecture. It explicitly checks school, class visibility and selected-child parent context without broadening staff-directory RLS. No browser grants or public functions are added. Trusted migration/restore owners retain their existing maintenance paths.
 
 For compatibility, the generic lecture API accepts custom valid times before a school has saved its first timing template. Exact template matching becomes mandatory for new or rescheduled lectures after that template is saved. The weekly UI always requires saved timings before creating lectures.
 
@@ -57,7 +65,7 @@ npm run db:migrate
 npm run db:verify
 npm run build
 npx vitest run
-npx playwright test tests/e2e/timetable.spec.ts tests/e2e/timetable-roles.spec.ts --workers=1
+npx playwright test tests/e2e/timetable.spec.ts tests/e2e/timetable-roles.spec.ts tests/e2e/timetable-current.spec.ts --workers=1
 ```
 
 The migration preserves existing IDs, lecture times, rooms, archive timestamps, audit history and all school settings. Database verification checks the new guards and restrictive read policy, while the existing forced tenant RLS and teacher/class exclusion constraints remain enabled. Backups and school exports continue to capture the same lecture table and school settings.
@@ -75,3 +83,10 @@ Automated tests use disposable PostgreSQL fixtures and real Express handlers/RLS
 - Production builds passed for shared contracts, API, background worker and frontend, including TypeScript checks. Lint, secret scanning, timetable file formatting and Git whitespace checks passed. Vite reported the existing non-blocking ResourceScreen import/chunk warning.
 
 Browser authentication is simulated in isolated fixtures; these results do not claim a real-user sign-in or production deployment test.
+
+### Verification record — 26 October 2026
+
+- 30 focused API, database-upgrade and unit checks passed: timetable CRUD/permissions, personal lectures, private labels, school clock, parent selected-child restrictions, preserved data and timing calculations (including fractional seconds, weekday rollover and daylight-saving transitions).
+- 14 new desktop/mobile browser checks passed for all six roles and both teacher views, using controlled API clock samples, a different browser timezone and a deliberately incorrect device wall clock. Highlights advanced without refreshing, stopped at lecture ends and remained off during breaks and unrelated weekdays. Super Admin was tested through an explicitly authorized school membership.
+- All 12 existing desktop/mobile timetable checks passed, including School Admin timing/lecture CRUD, overlaps, legacy preservation and read-only roles.
+- The label migration and verification SQL were executed in disposable PostgreSQL fixtures. External authentication was simulated. No hosted database migration, real-user sign-in or deployment was performed for this update. Apply `20261026121649_timetable_labels.sql` through the migration runner before deploying the matching API.

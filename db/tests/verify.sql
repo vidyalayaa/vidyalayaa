@@ -1,4 +1,5 @@
 DO $$ DECLARE n integer; BEGIN
+ IF NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND tgname='auth_verified_email_changed' AND tgenabled='O') OR has_function_privilege('authenticated','app.account_credentials()','EXECUTE') OR has_function_privilege('app_platform','app.account_credentials()','EXECUTE') OR has_table_privilege('app_api','auth.users','SELECT') THEN RAISE EXCEPTION 'Account credentials or verified email synchronization incorrectly configured';END IF;
  SELECT count(*) INTO n FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace WHERE ns.nspname='public' AND c.relkind='r' AND NOT c.relname LIKE 'spatial_%' AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);
  IF n>0 THEN RAISE EXCEPTION '% public tables do not force RLS',n; END IF;
  IF EXISTS(SELECT FROM pg_roles WHERE rolname IN ('app_api','app_device','app_worker','app_platform') AND (rolsuper OR rolbypassrls)) THEN RAISE EXCEPTION 'Application role bypasses RLS'; END IF;
@@ -20,6 +21,15 @@ DO $$ DECLARE n integer; BEGIN
  IF EXISTS(SELECT FROM pg_policy WHERE polrelid=to_regclass('storage.objects') AND polroles && ARRAY[0::oid,(SELECT oid FROM pg_roles WHERE rolname='anon'),(SELECT oid FROM pg_roles WHERE rolname='authenticated')]) THEN RAISE EXCEPTION 'Review direct browser storage policies; Vidyalayaa requires no user listing/read policy'; END IF;
  IF has_table_privilege('app_api','auth.sessions','SELECT') OR has_table_privilege('authenticated','app.login_session_activity','SELECT') OR has_table_privilege('app_platform','app.account_security_events','SELECT') OR has_function_privilege('authenticated','app.end_account_sessions(uuid,uuid,boolean)','EXECUTE') THEN RAISE EXCEPTION 'Private login sessions or controls exposed';END IF;
  IF NOT EXISTS(SELECT FROM pg_class WHERE oid='app.account_security_events'::regclass AND relrowsecurity AND relforcerowsecurity) OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='app.account_security_events'::regclass AND polname='own_security_events') THEN RAISE EXCEPTION 'Account security ownership protection missing';END IF;
+ IF NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='students'::regclass AND polname='parent_read' AND NOT polpermissive)
+ OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='marks'::regclass AND polname='parent_read' AND NOT polpermissive)
+ OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='attendance_corrections'::regclass AND polname='parent_no_decision' AND NOT polpermissive)
+ THEN RAISE EXCEPTION 'Parent ownership policies missing'; END IF;
+ IF has_function_privilege('authenticated','app.parent_student_access(uuid,uuid)','EXECUTE')
+ OR has_function_privilege('anon','app.parent_record_access(uuid,text,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Private parent ownership helper exposed'; END IF;
+ IF to_regprocedure('app.parent_attendance_days(uuid,date,date)') IS NULL THEN RAISE EXCEPTION 'Parent attendance calendar missing'; END IF;
+ IF has_function_privilege('authenticated','app.parent_attendance_days(uuid,date,date)','EXECUTE') OR has_function_privilege('anon','app.parent_attendance_days(uuid,date,date)','EXECUTE') THEN RAISE EXCEPTION 'Private attendance calendar exposed'; END IF;
+ IF to_regprocedure('app.timetable_entry_labels(uuid,uuid)') IS NULL OR has_function_privilege('authenticated','app.timetable_entry_labels(uuid,uuid)','EXECUTE') OR has_function_privilege('anon','app.timetable_entry_labels(uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Timetable label privacy guard missing or exposed';END IF;
 END $$;
 
 DO $$ BEGIN

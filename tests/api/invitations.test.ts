@@ -97,6 +97,20 @@ beforeAll(async () => {
   ]);
   const auth = {
     auth: {
+      signInWithOtp: async (input: {
+        email: string;
+        options: { shouldCreateUser: boolean; emailRedirectTo: string };
+      }) => {
+        expect(input.options.shouldCreateUser).toBe(false);
+        expect(input.options.emailRedirectTo).toBe('http://localhost:5173/auth/verify');
+        if (failMail)
+          return {
+            data: { user: null, session: null },
+            error: { message: 'Fixture delivery unavailable' },
+          };
+        mailed++;
+        return { data: { user: null, session: null }, error: null };
+      },
       getUser: async (value: string) => {
         let id = '';
         try {
@@ -468,7 +482,7 @@ it('invites the first administrator once and requires verified recipient accepta
   ).toBe(404);
 });
 
-it('lets an existing identity accept another school without altering its previous role', async () => {
+it('emails an existing identity before accepting another school without altering its previous role', async () => {
   const uid = await identity('existing-person@example.invalid'),
     before = mailed;
   await db.query(
@@ -482,8 +496,9 @@ it('lets an existing identity accept another school without altering its previou
     record_id: await schoolRecord('existing-person@example.invalid', 'principal'),
   });
   expect(invited.status).toBe(201);
-  expect(invited.body.status).toBe('READY');
-  expect(mailed).toBe(before);
+  expect(invited.body.status).toBe('SENT');
+  expect(invited.body.email_sent).toBe(true);
+  expect(mailed).toBe(before + 1);
   expect((await call('get', '/me', uid, f.schoolB)).body.memberships).toHaveLength(1);
   expect(
     (
@@ -723,7 +738,7 @@ it('never steals a record linked to another identity and rolls back membership a
   expect(
     (await db.query('SELECT status FROM school_invitations WHERE id=$1', [invitation.body.id]))
       .rows[0].status,
-  ).toBe('READY');
+  ).toBe('SENT');
   expect((await call('get', '/me', uid)).body.memberships).toEqual([]);
 });
 

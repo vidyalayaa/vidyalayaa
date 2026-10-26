@@ -631,3 +631,5 @@ export * from './timetable.js';
 export * from './fees.js';
 export * from './sessions.js';
 export * from './notifications.js';
+export * from './account.js';
+export * from './parent-workspace.js';

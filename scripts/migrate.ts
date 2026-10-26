@@ -1,7 +1,11 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { readFile, readdir } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import {
+  canonicalMigration,
+  matchesMigrationDigest,
+  migrationDigest,
+} from './lib/migration-checksums.js';
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url)
   throw new Error('Set MIGRATION_DATABASE_URL to a direct/session migration-owner connection.');
@@ -33,13 +37,14 @@ try {
       'CREATE SCHEMA IF NOT EXISTS app; CREATE TABLE IF NOT EXISTS app.schema_migrations(version text PRIMARY KEY,sha256 text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())',
     );
     for (const file of (await readdir('db/migrations')).filter((x) => x.endsWith('.sql')).sort()) {
-      const sql = await readFile(`db/migrations/${file}`, 'utf8'),
-        sha = createHash('sha256').update(sql).digest('hex'),
+      const source = await readFile(`db/migrations/${file}`, 'utf8'),
+        sql = canonicalMigration(source),
+        sha = migrationDigest(sql),
         old = await client.query('SELECT sha256 FROM app.schema_migrations WHERE version=$1', [
           file,
         ]);
       if (old.rowCount) {
-        if (old.rows[0].sha256 !== sha)
+        if (!matchesMigrationDigest(source, old.rows[0].sha256))
           throw new Error(`Applied migration checksum changed: ${file}`);
         continue;
       }

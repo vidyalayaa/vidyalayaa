@@ -100,6 +100,23 @@ export async function inviteMember(
       }
       identity = response.data.user.id;
     }
+    if (intent.action === 'link') {
+      // An existing account must receive an email too. A provider-issued sign-in
+      // link proves email ownership; accepting the school invitation is separate.
+      const response = await auth.auth.signInWithOtp({
+        email: input.email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: new URL('/auth/verify', redirectTo).toString(),
+        },
+      });
+      if (response.error)
+        throw new ApiError(
+          422,
+          'INVITATION_EMAIL_FAILED',
+          'The invitation sign-in email could not be sent. Check Auth email delivery and retry.',
+        );
+    }
     if (!identity)
       throw new ApiError(
         409,
@@ -115,7 +132,7 @@ export async function inviteMember(
             intent.id,
             intent.attempt_id,
             identity,
-            intent.action === 'send',
+            true,
           ])
         ).rows[0].result,
     );

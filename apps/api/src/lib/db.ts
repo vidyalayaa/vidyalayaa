@@ -6,6 +6,7 @@ export interface TenantContext {
   userId?: string;
   actorType?: 'USER' | 'DEVICE' | 'SYSTEM' | 'SUPPORT';
   requestId?: string;
+  parentChildId?: string;
 }
 const SUPABASE_ROOT_2021_CA = `-----BEGIN CERTIFICATE-----
 MIIDxDCCAqygAwIBAgIUbLxMod62P2ktCiAkxnKJwtE9VPYwDQYJKoZIhvcNAQEL
@@ -38,7 +39,9 @@ export function makePool(
   const rawCa = config.DB_CA_CERT?.trim();
   const ca = rawCa
     ? rawCa.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n')
-    : (url.includes('supabase.co') || url.includes('supabase.com') ? SUPABASE_ROOT_2021_CA : undefined);
+    : url.includes('supabase.co') || url.includes('supabase.com')
+      ? SUPABASE_ROOT_2021_CA
+      : undefined;
 
   return new pg.Pool({
     connectionString: url,
@@ -74,8 +77,14 @@ export async function transaction<T>(
           : 'BEGIN',
     );
     await c.query(
-      "SELECT set_config('app.school_id',$1,true),set_config('app.user_id',$2,true),set_config('app.actor_type',$3,true),set_config('app.request_id',$4,true),set_config('app.notification_protocol','custom-v1',true),set_config('lock_timeout','5s',true),set_config('statement_timeout','30s',true)",
-      [ctx.schoolId, ctx.userId || '', ctx.actorType || 'USER', ctx.requestId || ''],
+      "SELECT set_config('app.school_id',$1,true),set_config('app.user_id',$2,true),set_config('app.actor_type',$3,true),set_config('app.request_id',$4,true),set_config('app.parent_child_id',$5,true),set_config('app.notification_protocol','custom-v1',true),set_config('lock_timeout','5s',true),set_config('statement_timeout','30s',true)",
+      [
+        ctx.schoolId,
+        ctx.userId || '',
+        ctx.actorType || 'USER',
+        ctx.requestId || '',
+        ctx.parentChildId || '',
+      ],
     );
     const result = await fn(c);
     await c.query('COMMIT');

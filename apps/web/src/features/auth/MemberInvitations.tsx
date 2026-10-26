@@ -24,7 +24,9 @@ export default function MemberInvitations() {
           ? 'Invitation cancelled.'
           : value.status === 'READY'
             ? 'This invitation is ready in the existing account. Ask the person to sign in and accept it.'
-            : 'The setup email has been sent.',
+            : value.email_sent === false
+              ? 'This invitation is already pending. No additional email was sent.'
+              : 'The setup email has been sent.',
       );
       qc.invalidateQueries({ queryKey: [a.school] });
     },

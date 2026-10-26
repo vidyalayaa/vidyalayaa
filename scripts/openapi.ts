@@ -267,6 +267,41 @@ for (const name of Object.keys(resourceSchemas)) {
 }
 operation('/me', 'get', 'Verified identity, memberships, permissions and entitlements');
 operation(
+  '/parent/children',
+  'get',
+  'Parent: active linked children and their current class/section',
+);
+for (const section of [
+  'profile',
+  'attendance',
+  'academics',
+  'homework',
+  'results',
+  'results/insights',
+  'fees',
+  'payments',
+  'reports',
+  'announcements',
+  'notifications',
+  'corrections',
+  'calendar/classes',
+  'calendar/events',
+  'timetable/settings',
+  'timetable/clock',
+  'timetable/classes',
+  'timetable/classes/{id}/entries',
+])
+  operation(
+    `/parent/children/{childId}/${section}`,
+    'get',
+    `Parent: selected-child ${section}; live ownership and database RLS required`,
+  );
+operation(
+  '/account/credentials',
+  'get',
+  'Current account email, pending email and password presence only; no user ID accepted and no credentials returned',
+);
+operation(
   '/account/sessions',
   'get',
   'List only the current user’s provider sessions and recent account security alerts; no school selection required',
@@ -313,6 +348,30 @@ operation(
   },
 );
 operation('/timetable/classes', 'get', 'Paginated authorized timetable classes and sections');
+operation(
+  '/timetable/clock',
+  'get',
+  'Uncached API UTC clock and the active school timezone for live lecture highlighting',
+);
+operation(
+  '/timetable/mine',
+  'get',
+  'Teacher-only paginated own lectures across currently assigned classes and subjects; identity comes from the authenticated session',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'X-School-Id',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+    ],
+  },
+);
 for (const child of ['entries', 'assignments'])
   operation(
     `/timetable/classes/{id}/${child}`,

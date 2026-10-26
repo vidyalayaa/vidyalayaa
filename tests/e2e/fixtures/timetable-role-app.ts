@@ -1,5 +1,7 @@
 import { test as base, fixtureToken } from './platform-app';
-export const test = base.extend<{ timetableRole: 'teacher' | 'student' | 'principal' }>({
+export const test = base.extend<{
+  timetableRole: 'teacher' | 'student' | 'principal' | 'parent' | 'school_admin' | 'super_admin';
+}>({
   timetableRole: ['teacher', { option: true }],
   isolateServices: [
     async ({ page, platformApp, timetableRole }, use) => {
@@ -10,7 +12,13 @@ export const test = base.extend<{ timetableRole: 'teacher' | 'student' | 'princi
               ? f.studentUser
               : timetableRole === 'teacher'
                 ? f.teacher
-                : f.principal,
+                : timetableRole === 'parent'
+                  ? f.parent
+                  : timetableRole === 'school_admin'
+                    ? f.admin
+                    : timetableRole === 'super_admin'
+                      ? platformApp.root
+                      : f.principal,
           email: timetableRole + '@example.invalid',
           aud: 'authenticated',
           role: 'authenticated',
@@ -19,6 +27,11 @@ export const test = base.extend<{ timetableRole: 'teacher' | 'student' | 'princi
           user_metadata: {},
           created_at: '2026-01-01T00:00:00Z',
         };
+      if (timetableRole === 'super_admin')
+        await platformApp.db.query(
+          "INSERT INTO school_memberships(school_id,user_id,role_id,status) SELECT $1,$2,id,'ACTIVE' FROM roles WHERE code='school_admin' ON CONFLICT(school_id,user_id) DO NOTHING",
+          [f.schoolA, platformApp.root],
+        );
       await page.addInitScript(
         ({ user, token, school }) => {
           sessionStorage.setItem('vidyalayaa.school', school);

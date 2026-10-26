@@ -30,6 +30,8 @@ const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
 const Fees = lazy(() => import('./features/fees/Fees'));
 const LoginSessions = lazy(() => import('./features/auth/LoginSessions'));
+const AccountSettings = lazy(() => import('./features/auth/AccountSettings'));
+const VerifyEmail = lazy(() => import('./features/auth/VerifyEmail'));
 const Explore = lazy(() => import('./features/explore/Explore'));
 const SchoolWelcome = lazy(() => import('./features/explore/SchoolWelcome'));
 const AttendanceHistory = lazy(() =>
@@ -139,7 +141,8 @@ function Guard() {
     if (a.me.platform_role === 'SUPER_ADMIN') {
       if (!location.pathname.startsWith('/platform') && !location.pathname.startsWith('/settings'))
         return <Navigate to="/platform" replace />;
-    } else if (location.pathname !== '/settings/security') return <SchoolWelcome />;
+    } else if (!['/settings/security', '/settings/account'].includes(location.pathname))
+      return <SchoolWelcome />;
   }
   return <Layout key={`${a.me?.id}:${a.school}:${a.me?.school?.role}`} />;
 }
@@ -365,6 +368,7 @@ function schoolRoutes() {
       />
       <Route path="settings" element={<Settings />} />
       <Route path="settings/security" element={<LoginSessions />} />
+      <Route path="settings/account" element={<AccountSettings />} />
     </>
   );
 }
@@ -374,6 +378,7 @@ const router = createBrowserRouter(
       <Route path="/explore" element={<Explore />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/auth/verify" element={<VerifyEmail />} />
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
       <Route element={<Guard />}>
         {schoolRoutes()}

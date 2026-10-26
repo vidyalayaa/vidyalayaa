@@ -58,9 +58,14 @@ export default function LoginSessions() {
         title="Security & Login Sessions"
         description="See where you’re signed in and manage access to your account."
         actions={
-          <Button asChild variant="outline">
-            <Link to="../settings">Account settings</Link>
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline">
+              <Link to="/settings/account">Email &amp; password</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="../settings">Account settings</Link>
+            </Button>
+          </div>
         }
       />
       <div className="mb-6 flex items-start gap-3 rounded-2xl border border-line bg-lime/10 p-5 text-sm">

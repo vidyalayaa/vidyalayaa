@@ -785,7 +785,9 @@ export function Members() {
             setInvitationMessage(
               result.status === 'READY'
                 ? 'The person can sign in and accept the invitation. Their existing school record will be linked automatically.'
-                : 'The setup email has been sent. Acceptance will link the account to the selected school record.',
+                : result.email_sent === false
+                  ? 'This invitation is already pending. No additional email was sent.'
+                  : 'The setup email has been sent. Acceptance will link the account to the selected school record.',
             )
           }
         />

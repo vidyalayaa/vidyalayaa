@@ -14,7 +14,8 @@ it('preserves every legacy lecture and existing school settings while installing
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
     );
     await db.exec(providerSessionSchema);
-    for (const file of (await readdir('db/migrations')).sort().filter((f) => f !== migration))
+    const migrations = (await readdir('db/migrations')).sort();
+    for (const file of migrations.filter((f) => f < migration))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     const f = await fixture(db);
     await db.query(
@@ -28,6 +29,8 @@ it('preserves every legacy lecture and existing school settings while installing
     const before = (await db.query('SELECT * FROM timetable_entries ORDER BY id')).rows,
       settings = (await db.query('SELECT settings FROM schools ORDER BY id')).rows;
     await db.exec(await readFile('db/migrations/' + migration, 'utf8'));
+    for (const file of migrations.filter((f) => f > migration))
+      await db.exec(await readFile('db/migrations/' + file, 'utf8'));
     expect((await db.query('SELECT * FROM timetable_entries ORDER BY id')).rows).toEqual(before);
     expect((await db.query('SELECT settings FROM schools ORDER BY id')).rows).toEqual(settings);
     expect(

@@ -145,8 +145,15 @@ for (const role of ['parent', 'student'] as const)
         ).toBe(200);
       }
       await page.goto(authAppURL + '/' + role + '/calendar?date=' + start);
-      await expect(page.getByRole('dialog')).toContainText(role + ' school-wide holiday');
-      await expect(page.getByRole('dialog')).not.toContainText(role + ' own class activity');
+      if (role === 'parent') {
+        await expect(
+          page.getByRole('heading', { name: 'No children linked yet', exact: true }),
+        ).toBeVisible();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      } else {
+        await expect(page.getByRole('dialog')).toContainText(role + ' school-wide holiday');
+        await expect(page.getByRole('dialog')).not.toContainText(role + ' own class activity');
+      }
       expect(
         (
           await platformApp.request(

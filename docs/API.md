@@ -1,6 +1,22 @@
 # Vidyalayaa REST API
 
+The [Parent workspace](PARENT_WORKSPACE.md) exposes `/parent/children` and checked,
+child-scoped read projections at `/parent/children/:childId/*`. These reuse the
+existing records, calendar and timetable, with restrictive database family RLS.
+Parents can request corrections and reports through the existing checked workflows;
+they cannot write official records or view other families.
+
+Parent attendance supports `from`, `to`, `status`, `page` and `page_size`, returning
+every date plus full-range school-day/absence totals and recorded attendance
+percentage. `GET /parent/children/:childId/results/insights` accepts `from`, `to`,
+`exam_id` and `subject_id` and returns published marks, weighted summaries and
+subject/examination chart series. Ranges are limited to 366 days and attendance
+never fabricates an absence for a missing record. See the Parent workspace guide
+for calendar classification and percentage definitions.
+
 The [weekly timetable](TIMETABLE.md) reuses `timetable_entries` and stores validated school timings in existing school settings. `/timetable/*` supplies versioned timings and role-scoped class/lecture choices; existing resource CRUD and retirement routes remain the lecture write contracts. Only School Admin can write, with database-enforced assignments, periods, role/ownership rules and overlap constraints.
+
+`GET /timetable/mine` returns only the authenticated teacher's own lectures across live assigned classes and subjects, with class, section, subject and teacher display labels. It does not accept a teacher identity and rejects other school roles. Authorized class timetables still include all lecturers. `GET /timetable/clock` returns `{server_time, timezone}` without caching; the selected-child parent route also supports this clock. The browser uses this sample to highlight actual lecture intervals in school-local time and resynchronizes when the tab becomes active. These read endpoints retain the timetable feature, authentication, school selection and read-permission gates.
 
 School Admin's [class-wise Results](CLASS_WISE_RESULTS.md) select a class/section and its examination before entering or importing marks. `GET /resources/marks?class_id=...&exam_id=...` intersects both scopes; `GET /resources/subjects?class_id=...` returns configured section subjects. Existing examination, student, individual-mark and bulk-mark endpoints remain the source of truth.
 
@@ -177,3 +193,12 @@ The existing fee records now support versioned class/section structures, dated i
 ## Account login sessions
 
 Every role can view and end only its own provider-backed sessions using `/account/sessions`. These account routes do not require school selection. Revoked provider sessions are rejected on every subsequent authenticated API request. See [Security & Login Sessions](LOGIN_SESSIONS.md) for API contracts, privacy, notifications, migration and verification details.
+
+## Account email and credentials
+
+`GET /api/v1/account/credentials` returns only the authenticated user's `email`,
+`pending_email`, `email_confirmed` and `has_password` boolean. It accepts no user ID
+or query parameters. It returns no hashes, passwords or session credentials.
+Email and password writes use Supabase Auth's own SDK and verification APIs,
+not a privileged administrator password endpoint. Setup, templates and provider
+security settings: [AUTH_ACCOUNT_SETTINGS.md](AUTH_ACCOUNT_SETTINGS.md).
