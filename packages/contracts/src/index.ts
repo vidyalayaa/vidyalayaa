@@ -633,3 +633,4 @@ export * from './sessions.js';
 export * from './notifications.js';
 export * from './account.js';
 export * from './parent-workspace.js';
+export * from './student-profile.js';

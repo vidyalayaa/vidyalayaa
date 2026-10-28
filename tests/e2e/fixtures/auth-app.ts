@@ -75,6 +75,7 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
           '/src/features/parents/ParentResults.tsx',
           '/src/features/parents/ParentInsightsControls.tsx',
           '/src/features/parents/ResultCharts.tsx',
+          '/src/features/students/StudentProfile.tsx',
           '/src/features/results/SchoolResults.tsx',
           '/src/features/timetable/Timetable.tsx',
           '/src/features/fees/Fees.tsx',

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   Sparkles,
   BookOpen,
@@ -52,6 +53,9 @@ export default function StudentPortalSection() {
 
   return (
     <div className="mb-8 space-y-6">
+      <Button asChild variant="outline">
+        <Link to="/student/profile">View my profile</Link>
+      </Button>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {/* Homework & Due Today */}
         <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm flex flex-col justify-between">
@@ -75,11 +79,17 @@ export default function StudentPortalSection() {
                         {item.kind}
                       </span>
                       <h4 className="mt-1 font-semibold text-stone-900 text-sm">{item.title}</h4>
-                      {item.body && <p className="text-stone-500 line-clamp-1 mt-0.5">{item.body}</p>}
+                      {item.body && (
+                        <p className="text-stone-500 line-clamp-1 mt-0.5">{item.body}</p>
+                      )}
                     </div>
                     {item.due_at && (
                       <span className="text-right text-xs font-medium text-stone-500 shrink-0">
-                        Due {new Date(item.due_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                        Due{' '}
+                        {new Date(item.due_at).toLocaleDateString('en-IN', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
                       </span>
                     )}
                   </div>

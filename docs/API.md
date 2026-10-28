@@ -1,5 +1,7 @@
 # Vidyalayaa REST API
 
+The [Student profile page](STUDENT_PROFILE.md) uses `GET /student/profile` with the authenticated student session and active school. No student ID, user ID or query parameters are accepted. It returns only personal fields, school identifiers, active linked guardian contacts and the student's enrollment history. Profile writes are rejected. Restrictive database policies also scope the underlying student/family/enrollment records to the authenticated student. The endpoint does not return private account credentials or accept email-based identity matching.
+
 The [Parent workspace](PARENT_WORKSPACE.md) exposes `/parent/children` and checked,
 child-scoped read projections at `/parent/children/:childId/*`. These reuse the
 existing records, calendar and timetable, with restrictive database family RLS.

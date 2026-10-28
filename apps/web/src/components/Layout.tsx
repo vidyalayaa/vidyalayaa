@@ -188,7 +188,22 @@ export default function Layout() {
                 ),
             )
             .map((i) => (i.to === '/r/classes' ? { ...i, to: '/academics' } : i))
-        : items;
+        : role === 'student'
+          ? items
+              .filter(
+                (i) =>
+                  ![
+                    '/r/parents',
+                    '/r/student_parents',
+                    '/r/teachers',
+                    '/r/teacher_class_assignments',
+                    '/r/fee_records',
+                  ].includes(i.to),
+              )
+              .map((i) =>
+                i.to === '/r/students' ? { ...i, to: '/profile', text: 'My profile' } : i,
+              )
+          : items;
 
   const isItemActive = (to: string, isActive: boolean) => {
     if (isActive) return true;

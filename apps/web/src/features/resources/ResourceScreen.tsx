@@ -194,18 +194,22 @@ export function ResourceScreen({
           >
             Subjects
           </Link>
-          <Link
-            className={resource === 'enrollments' ? 'tab-active' : ''}
-            to={schoolPath('/r/enrollments', a.me?.school?.role)}
-          >
-            Enrollments
-          </Link>
-          <Link
-            className={resource === 'teacher_class_assignments' ? 'tab-active' : ''}
-            to={schoolPath('/r/teacher_class_assignments', a.me?.school?.role)}
-          >
-            Teacher Assignments
-          </Link>
+          {a.me?.school?.role !== 'student' && (
+            <>
+              <Link
+                className={resource === 'enrollments' ? 'tab-active' : ''}
+                to={schoolPath('/r/enrollments', a.me?.school?.role)}
+              >
+                Enrollments
+              </Link>
+              <Link
+                className={resource === 'teacher_class_assignments' ? 'tab-active' : ''}
+                to={schoolPath('/r/teacher_class_assignments', a.me?.school?.role)}
+              >
+                Teacher Assignments
+              </Link>
+            </>
+          )}
         </div>
       )}
       {['nfc_cards', 'attendance_rule_versions', 'school_holidays'].includes(resource) && (
