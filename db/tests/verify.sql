@@ -30,6 +30,8 @@ DO $$ DECLARE n integer; BEGIN
  IF to_regprocedure('app.parent_attendance_days(uuid,date,date)') IS NULL THEN RAISE EXCEPTION 'Parent attendance calendar missing'; END IF;
  IF has_function_privilege('authenticated','app.parent_attendance_days(uuid,date,date)','EXECUTE') OR has_function_privilege('anon','app.parent_attendance_days(uuid,date,date)','EXECUTE') THEN RAISE EXCEPTION 'Private attendance calendar exposed'; END IF;
  IF to_regprocedure('app.timetable_entry_labels(uuid,uuid)') IS NULL OR has_function_privilege('authenticated','app.timetable_entry_labels(uuid,uuid)','EXECUTE') OR has_function_privilege('anon','app.timetable_entry_labels(uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Timetable label privacy guard missing or exposed';END IF;
+ IF (SELECT count(*) FROM pg_policy WHERE polname='student_profile_read' AND NOT polpermissive AND polrelid IN ('students'::regclass,'parents'::regclass,'student_parents'::regclass,'enrollments'::regclass,'classes'::regclass,'academic_sessions'::regclass))<>6 THEN RAISE EXCEPTION 'Student profile ownership policies missing'; END IF;
+ IF has_function_privilege('authenticated','app.student_profile_record_access(uuid,text,uuid)','EXECUTE') OR has_function_privilege('anon','app.non_student_context(uuid)','EXECUTE') THEN RAISE EXCEPTION 'Private student ownership helper exposed';END IF;
 END $$;
 
 DO $$ BEGIN

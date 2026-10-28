@@ -1,5 +1,6 @@
 import { notificationsRouter } from './notifications.js';
 import { parentWorkspaceRouter } from './parent-workspace.js';
+import { studentProfileRouter } from './student-profile.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
 import { studentDirectoryRouter } from './student-directory.js';
@@ -178,6 +179,7 @@ export function schoolAccess(pool: pg.Pool) {
 export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Config) {
   const router = Router();
   router.use('/parent', parentWorkspaceRouter(pool));
+  router.use('/student', studentProfileRouter(pool));
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));

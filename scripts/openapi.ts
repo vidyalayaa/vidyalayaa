@@ -325,6 +325,11 @@ operation(
 );
 operation('/dashboard', 'get', 'Role-scoped school dashboard');
 operation(
+  '/student/profile',
+  'get',
+  'Student-only own profile, active guardians and enrollment history; authenticated identity only, no query parameters or record IDs accepted',
+);
+operation(
   '/timetable/settings',
   'get',
   'School timing template; configured=false means unsaved defaults',

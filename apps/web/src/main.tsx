@@ -25,6 +25,7 @@ import { portals, schoolPath, platformSections } from './lib/portals';
 const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
 const Academics = lazy(() => import('./features/academics/Academics'));
 const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
+const StudentProfile = lazy(() => import('./features/students/StudentProfile'));
 const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
 const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
@@ -170,6 +171,16 @@ function ResourcePage() {
   const location = useLocation();
   if (!resourceNames.includes(resource as Resource)) return <Empty title="Page not found" />;
   const name = resource as Resource;
+  if (
+    a.me?.school?.role === 'student' &&
+    ['teacher_class_assignments', 'enrollments', 'fee_records'].includes(name)
+  )
+    return (
+      <Empty
+        title="Access unavailable"
+        description="This section is unavailable in the student workspace."
+      />
+    );
   if (name === 'school_holidays')
     return <Navigate replace to={schoolPath('/calendar', a.me?.school?.role) + location.search} />;
   if (a.me?.school?.role === 'teacher') {
@@ -219,6 +230,8 @@ function ResourcePage() {
     return <Navigate replace to={schoolPath('/academics', 'school_admin')} />;
   if (a.me?.school?.role === 'school_admin' && name === 'enrollments')
     return <Navigate replace to={schoolPath('/r/students', 'school_admin')} />;
+  if (a.me?.school?.role === 'student' && name === 'students')
+    return <Navigate replace to="/student/profile" />;
   return <ResourceScreen key={name} resource={name} />;
 }
 function Permission({ code, children }: { code: string; children: React.ReactNode }) {
@@ -245,6 +258,7 @@ function schoolRoutes() {
   return (
     <>
       <Route index element={<Dashboard />} />
+      <Route path="profile" element={<StudentProfile />} />
       <Route
         path="calendar"
         element={

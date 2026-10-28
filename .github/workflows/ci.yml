@@ -48,6 +48,7 @@ jobs:
       - run: npx playwright test tests/e2e/timetable.spec.ts tests/e2e/timetable-roles.spec.ts tests/e2e/timetable-current.spec.ts --workers=1
       - run: npx playwright test tests/e2e/login-sessions.spec.ts --workers=1
       - run: npx playwright test tests/e2e/student-csv.spec.ts --workers=1
+      - run: npx playwright test tests/e2e/student-profile.spec.ts --workers=1
       - run: npx playwright test tests/e2e/explore.spec.ts --workers=1
       - run: npx playwright test tests/e2e/account-settings.spec.ts --workers=1
       - run: npx playwright test tests/e2e/parent-workspace.spec.ts tests/e2e/family-calendar.spec.ts tests/e2e/parent-insights.spec.ts --workers=1
