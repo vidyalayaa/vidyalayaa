@@ -770,7 +770,7 @@ operation(
       'Supply exactly one of subject_id or subject {code,name}. teacher_id and starts_on are required. Both records commit together; invalid teachers roll back new subjects. Other sections are unchanged.',
   },
 );
-for (const child of ['subjects', 'enrollments', 'unconfigured-assignments'])
+for (const child of ['subjects', 'subject-choices', 'enrollments', 'unconfigured-assignments'])
   operation(
     `/academics/classes/{id}/${child}`,
     'get',

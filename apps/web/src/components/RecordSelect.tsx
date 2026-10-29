@@ -48,6 +48,7 @@ export default function RecordSelect({
         `${endpoint}${endpoint.includes('?') ? '&' : '?'}page_size=100&search=${encodeURIComponent(debounced)}`,
       ),
     enabled:
+      !disabled &&
       configured &&
       (!!a.me?.school ||
         (['/platform/schools', '/platform/organizations'].includes(endpoint) &&

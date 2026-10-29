@@ -13,6 +13,10 @@ import { resourceSelect, validateBusiness } from './resources.js';
 const currentEnrollment = `e.status='ACTIVE' AND s.status='ACTIVE'
  AND e.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=e.school_id))::date
  AND (e.ends_on IS NULL OR e.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=e.school_id))::date)`;
+// Existing subjects are selectable only within their configured section. Legacy
+// catalogue records with no teaching relationship can be assigned for the first time.
+const subjectChoice = `(EXISTS(SELECT FROM teacher_class_assignments ta WHERE ta.school_id=sub.school_id AND ta.subject_id=sub.id AND ta.class_id=$2)
+ OR NOT EXISTS(SELECT FROM teacher_class_assignments ta WHERE ta.school_id=sub.school_id AND ta.subject_id=sub.id))`;
 
 async function section(tx: Tx, a: Actor, id: string) {
   if (
@@ -104,11 +108,18 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
             } else {
               subject = (
                 await tx.query(
-                  'SELECT * FROM subjects WHERE school_id=$1 AND id=$2 AND retired_at IS NULL FOR SHARE',
-                  [a.context.schoolId, b.subject_id],
+                  `SELECT sub.*,${subjectChoice} AS class_scoped FROM subjects sub WHERE sub.school_id=$1 AND sub.id=$3 AND sub.retired_at IS NULL FOR SHARE`,
+                  [a.context.schoolId, id, b.subject_id],
                 )
               ).rows[0];
               if (!subject) throw notFound();
+              if (!subject.class_scoped)
+                throw new ApiError(
+                  422,
+                  'CLASS_SUBJECT_REQUIRED',
+                  'Choose a subject created or configured for this class and section, or add a new class subject.',
+                );
+              delete subject.class_scoped;
             }
             const assignment = {
               class_id: id,
@@ -203,6 +214,31 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
               )
             ).rows,
           }),
+          true,
+        ),
+      );
+    }),
+  );
+  r.get(
+    '/classes/:id/subject-choices',
+    asyncRoute(async (req, res) => {
+      const a: Actor = res.locals.actor,
+        id = uuid.parse(req.params.id);
+      const search = z.string().max(120).default('').parse(req.query.search);
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => {
+            await section(tx, a, id);
+            return paged(
+              tx,
+              `SELECT sub.* FROM subjects sub WHERE sub.school_id=$1 AND sub.retired_at IS NULL AND ${subjectChoice}
+       AND concat_ws(' ',sub.name,sub.code) ILIKE $3 ORDER BY sub.name,sub.id`,
+              [a.context.schoolId, id, `%${search.replace(/[\\%_]/g, '\\$&')}%`],
+              req.query,
+            );
+          },
           true,
         ),
       );

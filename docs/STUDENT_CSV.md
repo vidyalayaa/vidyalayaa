@@ -10,6 +10,10 @@ Open **School Admin → Students**. **Import CSV** now imports the same student,
 4. Correct all reported rows, validate again, then choose **Import validated records**. If any row fails at save time, the entire file rolls back. Retrying an unchanged submission uses the same retry key. Existing students are not overwritten or silently merged.
 5. Invite the imported student and parent accounts afterward through **Members & invitations**. The import creates profiles and family links, not accounts, passwords, memberships or emails. Invitation acceptance still performs the existing verified account linking.
 
+The shared CSV dialog shows two stages: **Validate file** and **Import records**. Its lime progress bar pulses while the server processes a request, shows one completed stage after successful validation, and completes only when the server confirms the imported count. The endpoints save the file atomically and do not stream row-level progress, so the dialog does not invent a percentage or a processed-row count. Keep it open while processing; editing, duplicate submissions and dialog dismissal are blocked until the request finishes. If a save response is lost, the dialog reports that the import is unconfirmed and preserves the existing safe retry key. Changing the CSV clears validation and progress. This also applies to teacher, parent, family-link and subject-teacher assignment imports.
+
+Progress verification: ten desktop/mobile browser checks passed across `student-csv.spec.ts` and `import-progress.spec.ts`, covering validation, atomic saves, exports, failures, blocked dismissal and safe retries. The four dedicated progress cases passed again after the final status-message adjustment. Website production build, type checking and source lint passed; desktop/mobile progress layouts and serious/critical accessibility checks were reviewed. These use disposable school data and simulated provider authentication, with the existing API/database workflows executing normally.
+
 ### Student and enrollment fields
 
 | Columns | Values |

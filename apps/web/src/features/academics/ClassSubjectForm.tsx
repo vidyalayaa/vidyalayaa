@@ -18,7 +18,7 @@ export default function ClassSubjectForm({ c, close }: { c: AcademicClass; close
     const saved = readDraft(key);
     return Object.fromEntries(
       Object.entries({
-        mode: 'existing',
+        mode: 'new',
         subject_id: '',
         code: '',
         name: '',
@@ -107,8 +107,8 @@ export default function ClassSubjectForm({ c, close }: { c: AcademicClass; close
               value={values.mode}
               onChange={(e) => change('mode', e.target.value)}
             >
-              <option value="existing">Use an existing subject</option>
-              <option value="new">Add a new subject</option>
+              <option value="existing">Use this class's existing subject</option>
+              <option value="new">Add a new subject to this class</option>
             </select>
           </label>
           {values.mode === 'new' ? (
@@ -144,7 +144,7 @@ export default function ClassSubjectForm({ c, close }: { c: AcademicClass; close
               <RecordSelect
                 id="subject_id"
                 name="subject_id"
-                endpoint="/resources/subjects"
+                endpoint={`/academics/classes/${c.id}/subject-choices`}
                 label="subject"
                 value={values.subject_id}
                 onChange={(v) => change('subject_id', v)}

@@ -32,6 +32,8 @@ DO $$ DECLARE n integer; BEGIN
  IF to_regprocedure('app.timetable_entry_labels(uuid,uuid)') IS NULL OR has_function_privilege('authenticated','app.timetable_entry_labels(uuid,uuid)','EXECUTE') OR has_function_privilege('anon','app.timetable_entry_labels(uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Timetable label privacy guard missing or exposed';END IF;
  IF (SELECT count(*) FROM pg_policy WHERE polname='student_profile_read' AND NOT polpermissive AND polrelid IN ('students'::regclass,'parents'::regclass,'student_parents'::regclass,'enrollments'::regclass,'classes'::regclass,'academic_sessions'::regclass))<>6 THEN RAISE EXCEPTION 'Student profile ownership policies missing'; END IF;
  IF has_function_privilege('authenticated','app.student_profile_record_access(uuid,text,uuid)','EXECUTE') OR has_function_privilege('anon','app.non_student_context(uuid)','EXECUTE') THEN RAISE EXCEPTION 'Private student ownership helper exposed';END IF;
+ IF NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='subjects'::regclass AND polname='student_class_subjects' AND NOT polpermissive) OR NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='assignments'::regclass AND tgname='homework_class_subject_guard' AND tgenabled='O') OR (SELECT count(*) FROM pg_trigger WHERE tgname='assessment_class_subject_guard' AND tgenabled='O' AND tgrelid IN ('marks'::regclass,'exams'::regclass))<>2 THEN RAISE EXCEPTION 'Class subject visibility or assessment/homework scope guard missing';END IF;
+ IF has_function_privilege('authenticated','app.class_subject_configured(uuid,uuid,uuid)','EXECUTE') OR has_function_privilege('anon','app.class_subject_configured(uuid,uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Class subject helper exposed'; END IF;
 END $$;
 
 DO $$ BEGIN

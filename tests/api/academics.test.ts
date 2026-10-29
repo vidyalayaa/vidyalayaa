@@ -450,8 +450,8 @@ it('saves a section subject and required teacher atomically, with safe retries a
     teacher_id: teacher2,
     starts_on: '2026-01-01',
   });
-  expect(sibling.status, JSON.stringify(sibling.body)).toBe(201);
-  expect(sibling.body.assignment.class_id).toBe(b);
+  expect(sibling.status, JSON.stringify(sibling.body)).toBe(422);
+  expect(sibling.body.error.code).toBe('CLASS_SUBJECT_REQUIRED');
   const own = (await call('get', path)).body.data.find((s: any) => s.id === first.body.subject.id);
   expect(own.teachers.map((t: any) => t.teacher_id)).toEqual([f.teacherId]);
   expect(

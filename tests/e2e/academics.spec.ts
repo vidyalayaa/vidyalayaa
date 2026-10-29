@@ -31,6 +31,62 @@ async function expand(page: Page, grade: string, section: string) {
   return group.getByRole('region', { name: `Class ${grade} · Section ${section}`, exact: true });
 }
 
+test('subjects created in one class never appear in another class subject choices or School Admin homework', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  const f = platformApp.records,
+    admin = (path: string, method = 'GET', body?: unknown) =>
+      platformApp.request(path, method, body, f.admin, f.schoolA);
+  const other = await admin('/resources/classes', 'POST', {
+    academic_session_id: f.session,
+    grade: '3',
+    section: 'SUBJECT_SCOPE',
+    class_teacher_id: f.teacherId,
+  });
+  expect(other.status).toBe(201);
+  const created = await admin(`/academics/classes/${other.body.id}/subjects`, 'POST', {
+    subject: { code: 'SUBJECT_SCOPE_C3', name: 'Class 3 English only' },
+    teacher_id: f.teacherId,
+    starts_on: '2026-01-01',
+  });
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  await page.goto(authAppURL + '/admin/academics');
+  const own = await expand(page, '8', 'A');
+  await own.getByRole('button', { name: 'Add subject & teacher', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('#subject-source')).toHaveValue('new');
+  await dialog.locator('#subject-source').selectOption('existing');
+  await expect(dialog.locator('#subject_id option')).not.toContainText(['Class 3 English only']);
+  await expect(dialog.locator('#subject_id option')).toContainText(['Mathematics']);
+  page.once('dialog', (d) => d.accept());
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.goto(authAppURL + '/admin/r/assignments');
+  await page.getByRole('button', { name: 'Add record', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('#subject_id')).toBeDisabled();
+  await page.getByRole('dialog').locator('#class_id').selectOption(f.classId);
+  await expect(page.getByRole('dialog').locator('#subject_id option')).toContainText([
+    'Mathematics',
+  ]);
+  await expect(page.getByRole('dialog').locator('#subject_id option')).not.toContainText([
+    'Class 3 English only',
+  ]);
+  await page.getByRole('dialog').locator('#subject_id').selectOption(f.subject);
+  await page.getByRole('dialog').locator('#class_id').selectOption(other.body.id);
+  await expect(page.getByRole('dialog').locator('#subject_id')).toHaveValue('');
+  await expect(page.getByRole('dialog').locator('#subject_id option')).toContainText([
+    'Class 3 English only',
+  ]);
+  await expect(page.getByRole('dialog').locator('#subject_id option')).not.toContainText([
+    'Mathematics',
+  ]);
+  await page.getByRole('dialog').locator('#subject_id').selectOption(created.body.subject.id);
+  await page.getByRole('dialog').locator('#title').fill('Class-specific homework');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save record', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
 test('Academics groups sections with subjects, Class Teacher and counts without fetching student rosters', async ({
   page,
   authAppURL,
@@ -313,7 +369,7 @@ test('School Admin manages catalogue subjects and subject teachers inside the se
   );
 });
 
-test('School Admin can cancel a new section subject or reuse an existing subject with its required teacher', async ({
+test('School Admin can cancel a new section subject or configure an unassigned catalogue subject without seeing another class subjects', async ({
   page,
   authAppURL,
   platformApp,
@@ -328,6 +384,11 @@ test('School Admin can cancel a new section subject or reuse an existing subject
     class_teacher_id: f.teacherId,
   });
   expect(c.status).toBe(201);
+  const legacy = await admin('/resources/subjects', 'POST', {
+    code: 'UNASSIGNED_SUB',
+    name: 'Unassigned legacy subject',
+  });
+  expect(legacy.status).toBe(201);
   await page.goto(authAppURL + '/admin/academics');
   const region = await expand(page, '4', 'EXISTING_SUB');
   await region.getByRole('button', { name: 'Add subject & teacher', exact: true }).click();
@@ -340,7 +401,14 @@ test('School Admin can cancel a new section subject or reuse an existing subject
   await region.getByRole('button', { name: 'Add subject & teacher', exact: true }).click();
   await expect(page.getByRole('dialog').locator('#name')).toHaveValue('Cancelled section subject');
   await page.getByRole('dialog').locator('#subject-source').selectOption('existing');
-  await fill(page, { subject_id: f.subject, teacher_id: f.teacherId, starts_on: '2026-01-01' });
+  await expect(page.getByRole('dialog').locator('#subject_id option')).not.toContainText([
+    'Mathematics',
+  ]);
+  await fill(page, {
+    subject_id: legacy.body.id,
+    teacher_id: f.teacherId,
+    starts_on: '2026-01-01',
+  });
   const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
   expect(
     accessibility.violations.filter((v) => ['serious', 'critical'].includes(v.impact || '')),
@@ -351,7 +419,7 @@ test('School Admin can cancel a new section subject or reuse an existing subject
     .click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(
-    region.getByRole('article', { name: 'Subject Mathematics', exact: true }),
+    region.getByRole('article', { name: 'Subject Unassigned legacy subject', exact: true }),
   ).toContainText('Teacher Test');
   const assigned = (await admin(`/academics/classes/${c.body.id}/subjects`)).body;
   expect(assigned.total).toBe(1);

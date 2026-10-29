@@ -295,6 +295,23 @@ export async function validateBusiness(
         'Choose one active teacher as Class Teacher for this class and section.',
       );
   }
+  if (
+    name === 'assignments' &&
+    !isUpdate &&
+    values.subject_id &&
+    values.class_id &&
+    !(
+      await tx.query(
+        'SELECT 1 FROM teacher_class_assignments WHERE school_id=$1 AND class_id=$2 AND subject_id=$3 AND retired_at IS NULL',
+        [a.context.schoolId, values.class_id, values.subject_id],
+      )
+    ).rowCount
+  )
+    throw new ApiError(
+      422,
+      'CLASS_SUBJECT_REQUIRED',
+      'Choose a subject configured for the selected class and section.',
+    );
   if (a.active!.role === 'teacher' && name === 'assignments' && !values.subject_id)
     throw new ApiError(422, 'SUBJECT_REQUIRED', 'Select one of your assigned subjects.');
   if (name === 'exams') {

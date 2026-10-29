@@ -711,7 +711,12 @@ export function ResourceForm({
             ) : f.ref ? (
               <RefField
                 field={f}
-                disabled={resource === 'exams' && f.ref === 'subjects' && !form.watch('class_id')}
+                disabled={
+                  f.ref === 'subjects' &&
+                  fields[resource].some((field) => field.key === 'class_id') &&
+                  !form.watch('class_id') &&
+                  !preset?.class_id
+                }
                 value={String(form.watch(f.key) || '')}
                 endpoint={
                   f.key === 'class_teacher_id'
@@ -720,13 +725,18 @@ export function ResourceForm({
                       ? '/resources/teachers?assignable=1'
                       : f.ref === 'students' && preset?.class_id && resource !== 'enrollments'
                         ? `/resources/students?class_id=${preset.class_id}`
-                        : ['school_admin', 'teacher'].includes(a.me?.school?.role || '') &&
+                        : resource === 'teacher_class_assignments' &&
                             f.ref === 'subjects' &&
-                            (resource === 'exams' ||
-                              resource === 'marks' ||
-                              a.me?.school?.role === 'teacher')
-                          ? `/resources/subjects?class_id=${form.watch('class_id') || preset?.class_id || '00000000-0000-4000-8000-000000000000'}${preset?.assessment_kind === 'OFFICIAL' ? '&assessment_kind=OFFICIAL' : ''}`
-                          : undefined
+                            a.me?.school?.role === 'school_admin'
+                          ? `/academics/classes/${form.watch('class_id') || preset?.class_id || '00000000-0000-4000-8000-000000000000'}/subject-choices`
+                          : ['school_admin', 'teacher'].includes(a.me?.school?.role || '') &&
+                              f.ref === 'subjects' &&
+                              (resource === 'exams' ||
+                                resource === 'marks' ||
+                                resource === 'assignments' ||
+                                a.me?.school?.role === 'teacher')
+                            ? `/resources/subjects?class_id=${form.watch('class_id') || preset?.class_id || '00000000-0000-4000-8000-000000000000'}${preset?.assessment_kind === 'OFFICIAL' ? '&assessment_kind=OFFICIAL' : ''}`
+                            : undefined
                 }
                 onChange={(v) => {
                   form.setValue(f.key, v || null, { shouldValidate: true, shouldDirty: true });
