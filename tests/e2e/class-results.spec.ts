@@ -193,6 +193,8 @@ test('Creating a class subject test filters subjects and clears the subject when
   await page.goto(authAppURL + '/admin/r/exams');
   await page.getByRole('button', { name: 'Add record', exact: true }).click();
   const dialog = page.getByRole('dialog');
+  // The preceding pagination test creates over 100 classes; use the real lookup search.
+  await dialog.getByRole('textbox', { name: 'Find Class Id', exact: true }).fill('8');
   await dialog.locator('#class_id').selectOption(s.f.classId);
   await dialog.locator('#assessment_kind').selectOption('SUBJECT_TEST');
   await dialog.locator('#subject_id').selectOption(s.f.subject);

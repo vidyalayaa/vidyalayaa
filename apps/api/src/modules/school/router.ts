@@ -769,7 +769,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             params.push(q.class_id);
             where +=
               q.assessment_kind === 'OFFICIAL'
-                ? ` AND app.is_class_teacher(t.school_id,$${params.length})`
+                ? ` AND app.is_class_teacher(t.school_id,$${params.length}) AND EXISTS(SELECT FROM teacher_class_assignments ta WHERE ta.school_id=t.school_id AND ta.subject_id=t.id AND ta.class_id=$${params.length} AND ta.retired_at IS NULL)`
                 : ` AND app.teacher_assigned(t.school_id,$${params.length},t.id)`;
           }
           const total = Number(

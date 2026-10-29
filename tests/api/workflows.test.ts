@@ -192,6 +192,10 @@ describe('atomic writes and school workflows', () => {
       "INSERT INTO subjects(id,school_id,code,name) VALUES($1,$2,'BULK','Bulk subject')",
       [subject, f.schoolA],
     );
+    await db.query(
+      "INSERT INTO teacher_class_assignments(school_id,class_id,subject_id,teacher_id,starts_on) VALUES($1,$2,$3,$4,'2026-01-01')",
+      [f.schoolA, f.classId, subject, f.teacherId],
+    );
     const response = await call('post', '/marks/bulk').send({
       exam_id: exam,
       entries: [

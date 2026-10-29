@@ -537,6 +537,23 @@ it('supports a Class Teacher without subject assignments but grants no homework 
   });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const cid = created.body.id;
+  // The class has a configured Maths subject taught by somebody else; the
+  // designated Class Teacher still has no personal teaching assignment here.
+  const subjectTeacher = await call('post', '/resources/teachers', 'admin').send({
+    staff_code: 'CT_SUBJECT_TEACHER',
+    full_name: 'Class subject teacher',
+  });
+  expect(subjectTeacher.status).toBe(201);
+  expect(
+    (
+      await call('post', '/resources/teacher_class_assignments', 'admin').send({
+        teacher_id: subjectTeacher.body.id,
+        class_id: cid,
+        subject_id: f.subject,
+        starts_on: '2026-01-01',
+      })
+    ).status,
+  ).toBe(201);
   const student = (
     await db.query<{ id: string }>(
       "INSERT INTO students(school_id,student_code,first_name) VALUES($1,'CT_ONLY','Class Teacher only learner') RETURNING id",
