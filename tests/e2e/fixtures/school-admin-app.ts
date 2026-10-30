@@ -2,12 +2,31 @@ import { test as base, fixtureToken } from './platform-app';
 
 // Reuses the disposable SQL/API service, but the browser has only a School Admin
 // membership. No platform token, configured provider or real project is used.
-export const test = base.extend({
+export const test = base.extend<{ implicitSchool: boolean }>({
+  implicitSchool: [false, { option: true }],
   isolateServices: [
-    async ({ page, platformApp }, use) => {
+    async ({ page, platformApp, implicitSchool }, use) => {
+      // The shared administrator also owns a closure-test school. Use a separate
+      // identity to exercise the real server's single-membership default.
+      const browserAdmin = implicitSchool ? crypto.randomUUID() : platformApp.records.admin;
+      if (implicitSchool) {
+        await platformApp.db.query(
+          'INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES($1,$2,$3)',
+          [
+            browserAdmin,
+            `${browserAdmin}@example.invalid`,
+            { full_name: 'Single school administrator' },
+          ],
+        );
+        await platformApp.db.query(
+          "INSERT INTO school_memberships(school_id,user_id,role_id,status) SELECT $1,$2,id,'ACTIVE' FROM roles WHERE code='school_admin'",
+          [platformApp.records.schoolA, browserAdmin],
+        );
+        platformApp.registerIdentity(browserAdmin);
+      }
       const user = {
-        id: platformApp.records.admin,
-        email: `${platformApp.records.admin}@example.invalid`,
+        id: browserAdmin,
+        email: `${browserAdmin}@example.invalid`,
         aud: 'authenticated',
         role: 'authenticated',
         factors: [],
@@ -31,7 +50,11 @@ export const test = base.extend({
             }),
           );
         },
-        { user, token: fixtureToken(user.id), school: platformApp.records.schoolA },
+        {
+          user,
+          token: fixtureToken(user.id),
+          school: implicitSchool ? '' : platformApp.records.schoolA,
+        },
       );
       await page.route('https://mfa-qr.test/auth/v1/user', (route) =>
         route.fulfill({ json: user }),

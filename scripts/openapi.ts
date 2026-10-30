@@ -28,6 +28,7 @@ import {
   reportSchema,
   inviteSchema,
   bulkMarksSchema,
+  singleMarkSchema,
   firstAdminSchema,
   deviceTuningSchema,
   retentionPolicySchema,
@@ -106,6 +107,7 @@ function json(schema: z.ZodTypeAny): Record<string, unknown> {
         type: 'array',
         items: json(d.type),
         ...(d.minLength ? { minItems: d.minLength.value } : {}),
+        ...(d.exactLength ? { minItems: d.exactLength.value, maxItems: d.exactLength.value } : {}),
         ...(d.maxLength ? { maxItems: d.maxLength.value } : {}),
       };
     case 'ZodRecord':
@@ -158,6 +160,7 @@ const schemas = {
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
+  SingleMark: singleMarkSchema,
   FirstSchoolAdministrator: firstAdminSchema,
   DeviceTuning: deviceTuningSchema,
   RetentionPolicy: retentionPolicySchema,
@@ -325,9 +328,139 @@ operation(
 );
 operation('/dashboard', 'get', 'Role-scoped school dashboard');
 operation(
+  '/materials/upload',
+  'post',
+  'Issue a private upload ticket for an authorized class and optional exact subject',
+  undefined,
+  'UserJWT',
+  {
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['class_id', 'filename'],
+            properties: {
+              class_id: { type: 'string', format: 'uuid' },
+              subject_id: { type: 'string', format: 'uuid' },
+              filename: { type: 'string', pattern: '^[a-zA-Z0-9._-]{1,100}\\.(pdf|png|jpg|jpeg)$' },
+            },
+          },
+        },
+      },
+    },
+  },
+);
+operation(
+  '/materials/{id}/download',
+  'get',
+  'Issue an authenticated user- and school-bound short-lived material file address',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+  },
+);
+operation(
+  '/materials/{id}/file',
+  'get',
+  'Reauthorize and fetch the private material bytes',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      { name: 'expires', in: 'query', required: true, schema: { type: 'integer' } },
+      {
+        name: 'signature',
+        in: 'query',
+        required: true,
+        schema: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+      },
+    ],
+  },
+);
+operation(
+  '/materials',
+  'get',
+  'Read existing MATERIAL assignments for an authorized class and exact configured subject',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'class_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+      {
+        name: 'subject_id',
+        in: 'query',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+      {
+        name: 'page_size',
+        in: 'query',
+        schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+      },
+    ],
+  },
+);
+operation(
+  '/parent/children/{childId}/materials',
+  'get',
+  'Subject materials scoped to the checked linked child and exact class/subject',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'childId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      { name: 'class_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+      {
+        name: 'subject_id',
+        in: 'query',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+      {
+        name: 'page_size',
+        in: 'query',
+        schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+      },
+    ],
+  },
+);
+operation(
   '/student/profile',
   'get',
   'Student-only own profile, active guardians and enrollment history; authenticated identity only, no query parameters or record IDs accepted',
+);
+operation(
+  '/student/academics',
+  'get',
+  'Student-only current class, section, session, class teacher and class subjects; authenticated identity only, no query parameters accepted',
+);
+operation(
+  '/student/results',
+  'get',
+  'Student-only published marks, historical exam/class labels and performance charts; own account only',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'exam_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+      { name: 'subject_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+      {
+        name: 'page_size',
+        in: 'query',
+        schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+      },
+    ],
+  },
 );
 operation(
   '/timetable/settings',
@@ -457,6 +590,24 @@ operation(
 operation('/corrections', 'post', 'Request a correction', 'Correction');
 operation('/corrections/{id}/decision', 'post', 'Approve/reject; self-approval prohibited');
 operation('/marks/bulk', 'post', 'Atomic, idempotent upload of up to 500 mark rows', 'BulkMarks');
+operation(
+  '/marks/entry',
+  'post',
+  'Save exactly one student/subject mark with normal per-user rate limits',
+  'SingleMark',
+);
+operation(
+  '/marks/entry-sheet',
+  'get',
+  'Authorized open-exam roster, configured subjects and existing marks in numeric roll order',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'exam_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+  },
+);
 operation(
   '/invitations',
   'post',

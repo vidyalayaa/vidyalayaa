@@ -18,7 +18,7 @@ test('student navigation excludes assignment management, enrollment management a
   authAppURL,
 }) => {
   await page.goto(authAppURL + '/student/r/classes');
-  await expect(page.getByRole('link', { name: 'Subjects', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Subjects', exact: true })).toBeVisible();
   for (const resource of ['teacher_class_assignments', 'enrollments', 'fee_records'])
     await expect(page.locator(`a[href="/student/r/${resource}"]`)).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Teacher Assignments', exact: true })).toHaveCount(0);

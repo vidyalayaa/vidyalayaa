@@ -1,6 +1,7 @@
 import { notificationsRouter } from './notifications.js';
 import { parentWorkspaceRouter } from './parent-workspace.js';
 import { studentProfileRouter } from './student-profile.js';
+import { subjectMaterialsRouter } from './materials.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
 import { studentDirectoryRouter } from './student-directory.js';
@@ -180,6 +181,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   const router = Router();
   router.use('/parent', parentWorkspaceRouter(pool));
   router.use('/student', studentProfileRouter(pool));
+  router.use('/materials', subjectMaterialsRouter(pool));
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
@@ -1651,13 +1653,24 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         b = z
           .object({
             class_id: uuid,
+            subject_id: uuid.optional(),
             filename: z.string().regex(/^[a-zA-Z0-9._-]{1,100}\.(pdf|png|jpg|jpeg)$/),
           })
           .strict()
           .parse(req.body);
       await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a, 'assignments');
-        await assertClass(tx, a, b.class_id);
+        await assertClass(tx, a, b.class_id, b.subject_id);
+        if (
+          b.subject_id &&
+          !(
+            await tx.query(
+              'SELECT id FROM subjects WHERE school_id=$1 AND id=$2 AND retired_at IS NULL AND EXISTS(SELECT FROM teacher_class_assignments ta WHERE ta.school_id=$1 AND ta.class_id=$3 AND ta.subject_id=$2 AND ta.retired_at IS NULL)',
+              [a.context.schoolId, b.subject_id, b.class_id],
+            )
+          ).rowCount
+        )
+          throw notFound();
       });
       const path = `${a.context.schoolId}/materials/${b.class_id}/${crypto.randomUUID()}-${b.filename}`;
       const signed = await storage.storage.from('school-documents').createSignedUploadUrl(path);

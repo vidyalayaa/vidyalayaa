@@ -27,7 +27,7 @@ test('parents switch children across every section and cannot open another famil
     page.getByRole('button', { name: /Add record|Import|Manage examinations|Enter marks/i }),
   ).toHaveCount(0);
   await page.goto(authAppURL + '/parent/r/classes');
-  await expect(page.getByRole('cell', { name: 'Mathematics', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mathematics', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Add class|Assign teacher|Edit/i })).toHaveCount(0);
   await page.goto(authAppURL + '/parent/r/fee_records');
   await expect(page.getByRole('cell', { name: 'Sibling tuition', exact: true })).toBeVisible();
@@ -100,9 +100,14 @@ test('parents switch children across every section and cannot open another famil
   await expect(selector).toHaveValue(f.student);
   // A platform operator may also be a parent; the parent layout must not replace
   // their separately authorized platform console.
-  await platformApp.db.query("INSERT INTO platform_staff(user_id,platform_role) VALUES($1,'SUPER_ADMIN')",[f.parent]);
-  await page.goto(authAppURL+'/platform/schools');
-  await expect(page.getByRole('heading',{name:'Every school. One clear view.',exact:true})).toBeVisible();
-  await expect(page.getByRole('region',{name:'Selected child',exact:true})).toHaveCount(0);
-  await platformApp.db.query('DELETE FROM platform_staff WHERE user_id=$1',[f.parent]);
+  await platformApp.db.query(
+    "INSERT INTO platform_staff(user_id,platform_role) VALUES($1,'SUPER_ADMIN')",
+    [f.parent],
+  );
+  await page.goto(authAppURL + '/platform/schools');
+  await expect(
+    page.getByRole('heading', { name: 'Every school. One clear view.', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Selected child', exact: true })).toHaveCount(0);
+  await platformApp.db.query('DELETE FROM platform_staff WHERE user_id=$1', [f.parent]);
 });

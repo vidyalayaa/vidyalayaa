@@ -16,6 +16,7 @@ import { schoolToday } from '../calendar/calendar-utils';
 import { Dialog } from '../../components/ui/dialog';
 import ParentAttendance from './ParentAttendance';
 import ParentResults from './ParentResults';
+import SubjectMaterials, { type MaterialSubject } from '../materials/SubjectMaterials';
 
 const paths: Record<string, ParentSection | 'home'> = {
   '': 'home',
@@ -308,6 +309,7 @@ function ParentRecords({
 }) {
   const a = useAuth(),
     [page, setPage] = useState(1),
+    [material, setMaterial] = useState<MaterialSubject>(),
     [tab, setTab] = useState('fees'),
     [action, setAction] = useState<Row | null>(null),
     [report, setReport] = useState(false),
@@ -416,6 +418,34 @@ function ParentRecords({
           title="No records yet"
           description="Records shared by the school for this child will appear here."
         />
+      ) : section === 'academics' ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((row) => (
+            <button
+              type="button"
+              key={String(row.id)}
+              className="rounded-2xl border border-line bg-white p-5 text-left hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600"
+              onClick={() =>
+                setMaterial({
+                  classId: String(row.class_id),
+                  subjectId: String(row.subject_id),
+                  name: String(row.subject),
+                  classLabel: `Class ${row.grade} · Section ${row.section}`,
+                })
+              }
+            >
+              <h2 className="font-semibold">{row.subject}</h2>
+              <p className="mt-2 text-xs text-stone-500">
+                {row.subject_code} · Class {row.grade} · Section {row.section}
+              </p>
+              <p className="mt-3 text-sm">Teacher · {row.teacher}</p>
+              <p className="mt-1 text-sm">
+                Class Teacher · {row.class_teacher || 'Not designated'}
+              </p>
+              <p className="mt-4 text-xs font-semibold">View study materials →</p>
+            </button>
+          ))}
+        </div>
       ) : ['homework', 'announcements', 'notifications'].includes(section) ? (
         <div className="space-y-4">
           {rows.map((row) => (
@@ -560,6 +590,14 @@ function ParentRecords({
             </Button>
           </div>
         </div>
+      )}
+      {material && (
+        <SubjectMaterials
+          key={child.id + material.classId + material.subjectId}
+          subject={material}
+          basePath={`${base}/materials`}
+          close={() => setMaterial(undefined)}
+        />
       )}
       {action && section === 'attendance' && (
         <ActionDialog

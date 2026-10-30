@@ -5,6 +5,7 @@ import type { StudentProfile } from '@vidyalayaa/contracts';
 import { transaction } from '../../lib/db.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import type { Actor } from '../../middleware/auth.js';
+import { studentLearningRouter } from './student-learning.js';
 
 export function studentProfileRouter(pool: pg.Pool) {
   const r = Router();
@@ -14,6 +15,7 @@ export function studentProfileRouter(pool: pg.Pool) {
       return next(new ApiError(403, 'FORBIDDEN', 'Student profile access required.'));
     next();
   });
+  r.use(studentLearningRouter(pool));
   r.get(
     '/profile',
     asyncRoute(async (req, res) => {

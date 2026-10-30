@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { bulkMarksSchema, type Page } from '@vidyalayaa/contracts';
-import { parseCsv } from '../../lib/csv';
+import { type Page } from '@vidyalayaa/contracts';
+import { saveCsv } from '../../lib/csv';
+import { marksTemplate, parseMarksSheet } from '../../lib/marks-entry';
+import { useMarksEntrySheet } from '../../lib/use-marks-entry-sheet';
 import { api, useAuth, HttpError } from '../../lib/auth';
 import { readDraft, saveDraft, deleteDraft } from '../../lib/drafts';
 import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
@@ -31,13 +33,19 @@ export default function BulkMarksDialog({
   const draftKey = `${a.me?.id}:${a.school}:marks-import${examId ? ':' + examId : ''}`,
     draft = readDraft(draftKey);
   const [csv, setCsv] = useState(String(draft.csv || '')),
-    [exam, setExam] = useState(examId || String(draft.exam || ''));
+    [exam, setExam] = useState(examId || String(draft.exam || '')),
+    [subject, setSubject] = useState(''),
+    [batch, setBatch] = useState(0);
+  const sheet = useMarksEntrySheet(exam),
+    selectedSubject =
+      sheet.data?.subjects.find((s) => s.id === subject)?.id || sheet.data?.subjects[0]?.id || '';
   const dirty = !!csv;
   useUnsavedChanges(open && dirty);
   useEffect(() => {
     saveDraft(draftKey, { csv, exam });
   }, [draftKey, csv, exam]);
   const requestClose = () => {
+    if (pending) return;
     if (!dirty || window.confirm('Close with unsaved marks? The draft stays only in this tab.'))
       close();
   };
@@ -70,35 +78,14 @@ export default function BulkMarksDialog({
           if (!csv) return;
           const exam_id = examId || String(new FormData(e.currentTarget).get('exam_id'));
           setPending(true);
+          let sourceRows: number[] = [];
           try {
             if (new Blob([csv]).size > 512000) throw new Error('Choose a CSV smaller than 500 KB.');
-            const rows = parseCsv(csv),
-              header = rows.shift()?.map((x) => x.trim().toLowerCase());
-            if (!header || header.join(',') !== 'student_code,subject_code,score,remarks')
-              throw new Error('Use columns: student_code,subject_code,score,remarks');
-            if (rows.length > 500 || !rows.length)
-              throw new Error('Include between 1 and 500 mark rows.');
-            const selected = exams.data?.find((e) => e.id === exam_id);
-            if (!selected) throw new Error('Choose an available examination.');
-            const [students, subjects] = await Promise.all([
-              all(`students?class_id=${selected.class_id}`),
-              all(
-                `subjects?class_id=${selected.class_id}${selected.assessment_kind === 'OFFICIAL' ? '&assessment_kind=OFFICIAL' : ''}`,
-              ),
-            ]);
-            const entries = rows.map((r, i) => {
-              const student = students.find((s) => s.student_code === r[0]?.trim()),
-                subject = subjects.find((s) => s.code === r[1]?.trim());
-              if (!student || !subject || !r[2]?.trim())
-                throw new Error(`Check student code, subject code and score at row ${i + 2}.`);
-              return {
-                student_id: student.id,
-                subject_id: subject.id,
-                score: Number(r[2]),
-                remarks: r[3] || null,
-              };
-            });
-            const body = bulkMarksSchema.parse({ exam_id, entries });
+            if (!sheet.data || sheet.data.exam.id !== exam_id)
+              throw new Error('Wait for the selected examination roster to load.');
+            const parsed = parseMarksSheet(csv, sheet.data),
+              body = parsed.body;
+            sourceRows = parsed.sourceRows;
             await api('/marks/bulk', {
               method: 'POST',
               headers: { 'Idempotency-Key': idempotency.current },
@@ -119,7 +106,7 @@ export default function BulkMarksDialog({
             setRowErrors(
               issues.map((issue: { path: (string | number)[]; message: string }) => {
                 const index = issue.path.indexOf('entries'),
-                  row = index >= 0 ? Number(issue.path[index + 1]) + 2 : undefined;
+                  row = index >= 0 ? sourceRows[Number(issue.path[index + 1])] : undefined;
                 return `${row ? `CSV row ${row}: ` : ''}${issue.message} (${issue.path.filter((x) => typeof x === 'string' && x !== 'entries').join(' / ')})`;
               }),
             );
@@ -143,10 +130,14 @@ export default function BulkMarksDialog({
             name="exam_id"
             className="input"
             required
-            disabled={!!examId}
+            disabled={!!examId || pending}
             value={exam}
             onChange={(e) => {
               setExam(e.target.value);
+              setCsv('');
+              setError('');
+              setSubject('');
+              setBatch(0);
               idempotency.current = crypto.randomUUID();
             }}
           >
@@ -160,6 +151,77 @@ export default function BulkMarksDialog({
               ))}
           </select>
         </div>
+        {sheet.error && (
+          <p className="field-error" role="alert">
+            {sheet.error.message}
+          </p>
+        )}
+        {sheet.data && (
+          <section
+            className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-3"
+            aria-label="Download class marks sheet"
+          >
+            <p className="text-sm">
+              Class {sheet.data.classroom.grade} · Section {sheet.data.classroom.section} ·{' '}
+              {sheet.data.students.length} students · Maximum {sheet.data.exam.max_score}
+            </p>
+            <label className="field-label block">
+              Template subject
+              <select
+                className="input mt-2"
+                value={selectedSubject}
+                disabled={pending}
+                onChange={(e) => setSubject(e.target.value)}
+              >
+                {sheet.data.subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} · {s.code}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {sheet.data.students.length > 500 && (
+              <label className="field-label block">
+                CSV batch
+                <select
+                  className="input mt-2"
+                  value={batch}
+                  disabled={pending}
+                  onChange={(e) => setBatch(Number(e.target.value))}
+                >
+                  {Array.from({ length: Math.ceil(sheet.data.students.length / 500) }, (_, i) => (
+                    <option key={i} value={i}>
+                      Students {i * 500 + 1}–{Math.min((i + 1) * 500, sheet.data!.students.length)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending || !selectedSubject || !sheet.data.students.length}
+              onClick={() => {
+                const data = sheet.data!;
+                saveCsv(
+                  new Blob([marksTemplate(data, selectedSubject, batch)], {
+                    type: 'text/csv;charset=utf-8',
+                  }),
+                  `vidyalayaa-marks-${data.exam.id}-${selectedSubject}-batch-${batch + 1}.csv`,
+                );
+              }}
+            >
+              Download filled CSV template
+            </Button>
+            <p className="text-xs text-stone-600">
+              Student details, roll numbers and subjects are filled in. Enter scores, keep the other
+              details unchanged, then upload. Existing marks are included. Blank scores are skipped;
+              enter 0 only for an actual zero score. Keep code and roll-number columns as Text in
+              spreadsheet apps. Numeric codes with dropped leading zeros are accepted only when they
+              match one authorized record.
+            </p>
+          </section>
+        )}
         <div>
           <label className="field-label" htmlFor="marks-file">
             Marks CSV
@@ -169,15 +231,23 @@ export default function BulkMarksDialog({
             type="file"
             accept=".csv,text/csv"
             className="input"
+            disabled={pending || sheet.isLoading || !!sheet.error}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
               if (file.size > 512000) {
+                setCsv('');
                 setError('Choose a CSV smaller than 500 KB.');
                 return;
               }
-              setCsv(await file.text());
-              idempotency.current = crypto.randomUUID();
+              try {
+                setCsv(await file.text());
+                setError('');
+                setRowErrors([]);
+                idempotency.current = crypto.randomUUID();
+              } catch {
+                setError('The file could not be read. Choose the CSV again.');
+              }
             }}
           />
           {csv && (
@@ -203,10 +273,10 @@ export default function BulkMarksDialog({
           </ul>
         )}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={requestClose}>
-            Cancel
+          <Button type="button" variant="outline" disabled={pending} onClick={requestClose}>
+            {pending ? 'Saving…' : 'Cancel'}
           </Button>
-          <Button variant="lime" disabled={pending}>
+          <Button variant="lime" disabled={pending || !csv || !sheet.data || !!sheet.error}>
             {pending ? 'Validating & saving…' : 'Import marks'}
           </Button>
         </div>

@@ -11,7 +11,11 @@ import {
 } from 'recharts';
 import type { ParentResultsResponse } from '@vidyalayaa/contracts';
 const axis = { axisLine: false, tickLine: false, tick: { fontSize: 11, fill: '#57534e' } };
-export default function ResultCharts({ data }: { data: ParentResultsResponse }) {
+export default function ResultCharts({
+  data,
+}: {
+  data: Pick<ParentResultsResponse, 'subject_chart' | 'exam_chart'>;
+}) {
   return (
     <div className="grid min-w-0 gap-5 lg:grid-cols-2">
       <section className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5">

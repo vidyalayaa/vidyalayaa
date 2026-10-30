@@ -1,5 +1,20 @@
 // School records never persist in local/session storage as form drafts.
 const drafts = new Map<string, { at: number; values: Record<string, unknown> }>();
+let generation = 0;
+// Async saves must not recreate private drafts after an account/school reset.
+export function scopedDraft(key: string) {
+  const captured = generation;
+  return {
+    isCurrent: () => generation === captured,
+    read: () => (generation === captured ? readDraft(key) : {}),
+    save: (values: Record<string, unknown>) => {
+      if (generation === captured) saveDraft(key, values);
+    },
+    clear: () => {
+      if (generation === captured) deleteDraft(key);
+    },
+  };
+}
 let suspended: { owner: string; values: typeof drafts } | undefined;
 export function readDraft(key: string) {
   const item = drafts.get(key);
@@ -35,6 +50,7 @@ export function discardDraftCheckpoint() {
   suspended = undefined;
 }
 export function clearDrafts(preserveCheckpoint = false) {
+  generation++;
   drafts.clear();
   if (!preserveCheckpoint) suspended = undefined;
 }

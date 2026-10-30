@@ -16,6 +16,7 @@ import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
 import { ResourceForm } from '../resources/ResourceScreen';
 import BulkMarksDialog from '../resources/BulkMarksDialog';
+import RollMarksDialog from '../resources/RollMarksDialog';
 import StudentProfileDialog from '../resources/StudentProfileDialog';
 
 function ClassChoice({
@@ -146,7 +147,8 @@ export function TeacherAssessments({ kind }: { kind: 'SUBJECT_TEST' | 'OFFICIAL'
     [create, setCreate] = useState(false),
     [edit, setEdit] = useState<Record<string, unknown>>(),
     [enter, setEnter] = useState<Record<string, unknown>>(),
-    [bulk, setBulk] = useState<string>();
+    [bulk, setBulk] = useState<string>(),
+    [rollEntry, setRollEntry] = useState<string>();
   const options =
     classes.data?.data.filter((c) => kind === 'SUBJECT_TEST' || c.is_class_teacher) || [];
   const selected = options.find((c) => c.id === classId);
@@ -263,6 +265,11 @@ export function TeacherAssessments({ kind }: { kind: 'SUBJECT_TEST' | 'OFFICIAL'
                   >
                     Upload marks CSV
                   </Button>
+                  {r.status === 'OPEN' && (
+                    <Button size="sm" variant="outline" onClick={() => setRollEntry(String(r.id))}>
+                      Enter by roll number
+                    </Button>
+                  )}
                 </div>
               )}
             />
@@ -304,6 +311,9 @@ export function TeacherAssessments({ kind }: { kind: 'SUBJECT_TEST' | 'OFFICIAL'
       )}
       {enter && <EnterAssessmentMarks exam={enter} kind={kind} close={() => setEnter(undefined)} />}
       {bulk && <BulkMarksDialog open examId={bulk} close={() => setBulk(undefined)} />}
+      {rollEntry && (
+        <RollMarksDialog key={rollEntry} examId={rollEntry} close={() => setRollEntry(undefined)} />
+      )}
     </>
   );
 }

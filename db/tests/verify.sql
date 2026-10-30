@@ -1,4 +1,12 @@
 DO $$ DECLARE n integer; BEGIN
+ IF (SELECT count(*) FROM pg_policy WHERE polrelid='assignments'::regclass
+   AND polname IN ('student_learning_read','student_learning_no_insert','student_learning_no_update','student_learning_no_delete') AND NOT polpermissive)<>4
+ THEN RAISE EXCEPTION 'Student material read-only isolation policies missing'; END IF;
+ IF (SELECT count(*) FROM pg_policy p WHERE p.polrelid IN ('marks'::regclass,'exams'::regclass)
+   AND p.polname IN ('student_learning_read','student_learning_no_insert','student_learning_no_update','student_learning_no_delete')
+   AND NOT p.polpermissive)<>8
+ OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='subjects'::regclass AND polname='student_class_subjects' AND NOT polpermissive)
+ THEN RAISE EXCEPTION 'Student learning read-only isolation policies missing'; END IF;
  IF NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND tgname='auth_verified_email_changed' AND tgenabled='O') OR has_function_privilege('authenticated','app.account_credentials()','EXECUTE') OR has_function_privilege('app_platform','app.account_credentials()','EXECUTE') OR has_table_privilege('app_api','auth.users','SELECT') THEN RAISE EXCEPTION 'Account credentials or verified email synchronization incorrectly configured';END IF;
  SELECT count(*) INTO n FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace WHERE ns.nspname='public' AND c.relkind='r' AND NOT c.relname LIKE 'spatial_%' AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);
  IF n>0 THEN RAISE EXCEPTION '% public tables do not force RLS',n; END IF;

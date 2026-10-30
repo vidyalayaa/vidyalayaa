@@ -15,6 +15,7 @@ import { Badge, DataTable, Empty, ErrorState, Loading, PageHeading } from '../..
 import { ActionDialog } from '../../components/ActionDialog';
 import { ResourceForm } from '../resources/ResourceScreen';
 import ClassSubjectForm from './ClassSubjectForm';
+import SubjectMaterials, { type MaterialSubject } from '../materials/SubjectMaterials';
 
 interface ClassPage extends Page<AcademicClass> {
   sessions: AcademicSession[];
@@ -484,6 +485,7 @@ function ClassSection({
 }) {
   const a = useAuth(),
     [expanded, setExpanded] = useState(false),
+    [material, setMaterial] = useState<MaterialSubject>(),
     [subjectPage, setSubjectPage] = useState(1);
   const subjects = useQuery({
     queryKey: [a.school, 'academic-subjects', c.id, subjectPage],
@@ -708,6 +710,21 @@ function ClassSection({
                           </li>
                         ))}
                       </ul>
+                      <Button
+                        className="mt-3"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setMaterial({
+                            classId: c.id,
+                            subjectId: sub.id,
+                            name: sub.name,
+                            classLabel: classroom,
+                          })
+                        }
+                      >
+                        Study materials
+                      </Button>
                       {can('teachers.write') && (
                         <Button
                           className="mt-3"
@@ -752,6 +769,13 @@ function ClassSection({
             </dl>
           </section>
         </div>
+      )}
+      {material && (
+        <SubjectMaterials
+          key={material.classId + material.subjectId}
+          subject={material}
+          close={() => setMaterial(undefined)}
+        />
       )}
     </details>
   );

@@ -173,6 +173,12 @@ export default function Layout() {
             permission: 'classrooms.read',
           },
           {
+            to: '/materials',
+            text: 'Study materials',
+            icon: BookOpen,
+            permission: 'assignments.read',
+          },
+          {
             to: '/official-results',
             text: 'Official exam results',
             icon: GraduationCap,
