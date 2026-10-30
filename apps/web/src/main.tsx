@@ -26,6 +26,13 @@ const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
 const Academics = lazy(() => import('./features/academics/Academics'));
 const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
 const StudentProfile = lazy(() => import('./features/students/StudentProfile'));
+const TeacherMaterials = lazy(() => import('./features/materials/TeacherMaterials'));
+const StudentAcademics = lazy(() =>
+  import('./features/students/StudentLearning').then((m) => ({ default: m.StudentAcademics })),
+);
+const StudentResults = lazy(() =>
+  import('./features/students/StudentLearning').then((m) => ({ default: m.StudentResults })),
+);
 const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
 const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
@@ -201,6 +208,11 @@ function ResourcePage() {
         description="Your school administrator can help with access."
       />
     );
+  if (a.me?.school?.role === 'student') {
+    if (['classes', 'academic_sessions', 'subjects'].includes(name))
+      return <StudentAcademics key={a.school} />;
+    if (['marks', 'exams'].includes(name)) return <StudentResults key={a.school} />;
+  }
   if (a.me?.school?.role === 'school_admin' && name === 'marks')
     return <SchoolResults key={a.school} />;
   if (name === 'timetable_entries') return <Timetable key={a.school} />;
@@ -242,6 +254,16 @@ function Permission({ code, children }: { code: string; children: React.ReactNod
     <Empty title="Access unavailable" description="Your current role cannot view this area." />
   );
 }
+function AcademicPage() {
+  const a = useAuth();
+  return a.me?.school?.role === 'student' ? (
+    <StudentAcademics key={a.school} />
+  ) : (
+    <Permission code="academics.write">
+      <Academics />
+    </Permission>
+  );
+}
 class Boundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) {
@@ -260,6 +282,14 @@ function schoolRoutes() {
       <Route index element={<Dashboard />} />
       <Route path="profile" element={<StudentProfile />} />
       <Route
+        path="materials"
+        element={
+          <Permission code="assignments.read">
+            <TeacherMaterials />
+          </Permission>
+        }
+      />
+      <Route
         path="calendar"
         element={
           <Permission code="calendar.read">
@@ -267,14 +297,7 @@ function schoolRoutes() {
           </Permission>
         }
       />
-      <Route
-        path="academics"
-        element={
-          <Permission code="academics.write">
-            <Academics />
-          </Permission>
-        }
-      />
+      <Route path="academics" element={<AcademicPage />} />
       <Route
         path="classroom"
         element={

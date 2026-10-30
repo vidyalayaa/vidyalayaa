@@ -17,6 +17,7 @@ import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import { calendarRouter } from './calendar.js';
 import { timetableRouter } from './timetable.js';
 import type { Actor } from '../../middleware/auth.js';
+import { subjectMaterialsRouter } from './materials.js';
 
 const childSelect = `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_of_birth::text,s.gender,s.email,s.status,
  (SELECT jsonb_build_object('class_id',c.id,'grade',c.grade,'section',c.section,'session_name',ac.name,
@@ -96,6 +97,7 @@ export function parentWorkspaceRouter(pool: pg.Pool) {
   };
   child.use('/calendar', calendarRouter(pool, controls));
   child.use('/timetable', timetableRouter(pool, controls));
+  child.use('/materials', subjectMaterialsRouter(pool));
   function range(a: Actor, filters: { from?: string; to?: string }, year = false) {
     const today = localParts(new Date(), a.active!.timezone).date;
     const from =
@@ -239,7 +241,7 @@ export function parentWorkspaceRouter(pool: pg.Pool) {
   const queries: Record<string, { permission: string; feature?: string; sql: string }> = {
     academics: {
       permission: 'academics.read',
-      sql: `SELECT ta.id,s.name AS subject,s.code AS subject_code,te.full_name AS teacher,c.grade,c.section,
+      sql: `SELECT ta.id,ta.subject_id,ta.class_id,s.name AS subject,s.code AS subject_code,te.full_name AS teacher,c.grade,c.section,
       ct.full_name AS class_teacher FROM teacher_class_assignments ta JOIN subjects s ON s.school_id=ta.school_id AND s.id=ta.subject_id
       JOIN teachers te ON te.school_id=ta.school_id AND te.id=ta.teacher_id JOIN classes c ON c.school_id=ta.school_id AND c.id=ta.class_id
       LEFT JOIN teachers ct ON ct.school_id=c.school_id AND ct.id=c.class_teacher_id JOIN schools sc ON sc.id=ta.school_id

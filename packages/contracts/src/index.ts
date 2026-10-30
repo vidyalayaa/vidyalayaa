@@ -615,7 +615,7 @@ export const manualSchema = z
   })
   .strict();
 
-export { bulkMarksSchema } from './bulk.js';
+export { bulkMarksSchema, singleMarkSchema } from './bulk.js';
 export * from './operations.js';
 export * from './academics.js';
 export * from './calendar.js';
@@ -634,3 +634,6 @@ export * from './notifications.js';
 export * from './account.js';
 export * from './parent-workspace.js';
 export * from './student-profile.js';
+export * from './student-learning.js';
+export * from './materials.js';
+export * from './marks-entry.js';

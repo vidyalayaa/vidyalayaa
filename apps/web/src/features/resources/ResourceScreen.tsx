@@ -3,6 +3,7 @@ import { schoolPath } from '../../lib/portals';
 import RecordImportDialog, { type ImportResource } from './RecordImportDialog';
 import { ActionDialog } from '../../components/ActionDialog';
 import BulkMarksDialog from './BulkMarksDialog';
+import RollMarksDialog from './RollMarksDialog';
 import RecordSelect from '../../components/RecordSelect';
 import ResourceDetails from './ResourceDetails';
 import StudentProfileDialog from './StudentProfileDialog';
@@ -49,6 +50,7 @@ export function ResourceScreen({
   const a = useAuth(),
     qc = useQueryClient(),
     [bulk, setBulk] = useState(false),
+    [rollEntry, setRollEntry] = useState(false),
     [importing, setImporting] = useState(false),
     [retiring, setRetiring] = useState<Record<string, unknown> | null>(null),
     [dirty, setDirty] = useState(false),
@@ -122,6 +124,11 @@ export function ResourceScreen({
             {resource === 'marks' && canWrite && (
               <Button variant="outline" onClick={() => setBulk(true)}>
                 Import CSV
+              </Button>
+            )}
+            {resource === 'marks' && assessment && canWrite && !locked && (
+              <Button variant="lime" onClick={() => setRollEntry(true)}>
+                Enter by roll number
               </Button>
             )}
             {resource === 'nfc_cards' && canWrite && (
@@ -421,6 +428,13 @@ export function ResourceScreen({
           open={bulk}
           examId={assessment ? String(assessment.exam.id) : undefined}
           close={() => setBulk(false)}
+        />
+      )}
+      {rollEntry && assessment && (
+        <RollMarksDialog
+          key={String(assessment.exam.id)}
+          examId={String(assessment.exam.id)}
+          close={() => setRollEntry(false)}
         />
       )}
       {actionNotice && (
