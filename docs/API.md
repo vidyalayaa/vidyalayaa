@@ -212,3 +212,11 @@ or query parameters. It returns no hashes, passwords or session credentials.
 Email and password writes use Supabase Auth's own SDK and verification APIs,
 not a privileged administrator password endpoint. Setup, templates and provider
 security settings: [AUTH_ACCOUNT_SETTINGS.md](AUTH_ACCOUNT_SETTINGS.md).
+
+## Academic-year promotion
+
+The School Admin preparation, preview, activation and historical-record endpoints are documented in [Academic-year promotion](ACADEMIC_YEAR_PROMOTION.md#api-contracts) and the generated OpenAPI specification. All endpoints remain relative to `/api/v1` and require the existing user authentication and school context.
+
+## School Profile Management
+
+School and platform profile endpoints, administrative privacy, image/policy uploads, Principal delegation and deployment instructions are documented in [School Profile Management](SCHOOL_PROFILE_MANAGEMENT.md). School name, school timings, announcements and existing account permissions retain their established sources of truth.

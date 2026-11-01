@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import FirmwarePanel from './FirmwarePanel';
 import { platformSections } from '../../lib/portals';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ShieldCheck, Layers3 } from 'lucide-react';
 import type { Page, AdminOnboarding } from '@vidyalayaa/contracts';
@@ -27,6 +27,13 @@ const actions: Record<string, { endpoint: string; fields: ActionField[] }> = {
       { key: 'school_code' },
       { key: 'name' },
       { key: 'timezone', default: 'Asia/Kolkata' },
+      { key: 'email', type: 'email', optional: true },
+      { key: 'phone', type: 'tel', optional: true },
+      { key: 'address_line1', optional: true },
+      { key: 'city', optional: true },
+      { key: 'state', optional: true },
+      { key: 'postal_code', optional: true },
+      { key: 'country', optional: true },
       { key: 'plan_code', options: ['BASIC', 'PROFESSIONAL', 'ENTERPRISE'] },
       { key: 'trial_ends_at', type: 'datetime-local' },
     ],
@@ -196,6 +203,9 @@ export default function Platform() {
                   : tab === 'schools'
                     ? (row) => (
                         <>
+                          <Button asChild size="sm" variant="outline">
+                            <Link to={`/platform/schools/${row.id}/profile`}>School profile</Link>
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"

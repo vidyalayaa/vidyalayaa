@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { homeworkRouter } from './homework.js';
 import type pg from 'pg';
 import {
   uuid,
@@ -98,6 +99,7 @@ export function parentWorkspaceRouter(pool: pg.Pool) {
   child.use('/calendar', calendarRouter(pool, controls));
   child.use('/timetable', timetableRouter(pool, controls));
   child.use('/materials', subjectMaterialsRouter(pool));
+  child.use('/homework', homeworkRouter(pool));
   function range(a: Actor, filters: { from?: string; to?: string }, year = false) {
     const today = localParts(new Date(), a.active!.timezone).date;
     const from =

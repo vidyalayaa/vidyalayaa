@@ -17,6 +17,16 @@ afterAll(async () => {
   await db.close();
 });
 it('exports a complete private school snapshot without foreign students or credentials', async () => {
+  await db.query('UPDATE schools SET profile=$2 WHERE id=$1', [
+    f.schoolA,
+    { city: 'Own school city' },
+  ]);
+  await db.query('INSERT INTO school_profile_private(school_id,details) VALUES($1,$2),($3,$4)', [
+    f.schoolA,
+    { management_name: 'Own education trust' },
+    f.schoolB,
+    { management_name: 'Foreign private management' },
+  ]);
   const files = new Map<string, Buffer>();
   const storage = {
     storage: {
@@ -62,4 +72,7 @@ it('exports a complete private school snapshot without foreign students or crede
   expect(whole).not.toContain(f.foreignStudent);
   expect(whole).not.toContain('token_encrypted');
   expect(whole).not.toContain('secret_hash');
+  expect(whole).toContain('Own school city');
+  expect(whole).toContain('Own education trust');
+  expect(whole).not.toContain('Foreign private management');
 });

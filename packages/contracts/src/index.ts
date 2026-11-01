@@ -338,6 +338,15 @@ export const resourceSchemas = {
       title: text,
       body: nullableText,
       due_at: z.string().datetime().nullable().optional(),
+      assigned_on: date.optional(),
+      instructions: nullableText,
+      reference_url: z
+        .string()
+        .url()
+        .max(2000)
+        .regex(/^https:\/\/[^\s]+$/)
+        .nullable()
+        .optional(),
       storage_path: nullableText,
     })
     .strict(),
@@ -637,3 +646,6 @@ export * from './student-profile.js';
 export * from './student-learning.js';
 export * from './materials.js';
 export * from './marks-entry.js';
+export * from './homework.js';
+export * from './promotion.js';
+export * from './school-profile.js';

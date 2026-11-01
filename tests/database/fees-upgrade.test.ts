@@ -14,9 +14,8 @@ it('preserves old assessments and actual receipt numbers while labeling unreconc
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
     );
     await db.exec(providerSessionSchema);
-    for (const file of readdirSync('db/migrations')
-      .sort()
-      .filter((x) => x !== migration))
+    const migrations = readdirSync('db/migrations').sort();
+    for (const file of migrations.filter((x) => x < migration))
       await db.exec(readFileSync('db/migrations/' + file, 'utf8'));
     const f = await fixture(db),
       id = crypto.randomUUID();
@@ -56,6 +55,8 @@ it('preserves old assessments and actual receipt numbers while labeling unreconc
       )
     ).rows;
     await db.exec(readFileSync('db/migrations/' + migration, 'utf8'));
+    for (const file of migrations.filter((x) => x > migration))
+      await db.exec(readFileSync('db/migrations/' + file, 'utf8'));
     expect(
       (
         await db.query(

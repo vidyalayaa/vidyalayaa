@@ -46,6 +46,7 @@ const navigationFeatures: Record<string, string> = {
 const items = [
   { to: '/exports', text: 'School exports', icon: Layers3, permission: 'school.manage' },
   { to: '/', text: 'Overview', icon: LayoutDashboard },
+  { to: '/school-information', text: 'School information', icon: Building2 },
   { to: '/r/students', text: 'Students', icon: Users, permission: 'students.read' },
   { to: '/r/parents', text: 'Parents', icon: Users, permission: 'parents.read' },
   {
@@ -449,7 +450,9 @@ export default function Layout() {
             </div>
           )}
           <PushUpdates />
-          {role === 'parent' && family && !/\/settings(?:\/|$)/.test(location.pathname) ? (
+          {role === 'parent' &&
+          family &&
+          !/\/(?:settings|school-information)(?:\/|$)/.test(location.pathname) ? (
             <Suspense fallback={<Loading />}>
               <ParentWorkspace />
             </Suspense>

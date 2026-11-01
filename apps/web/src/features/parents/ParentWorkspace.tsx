@@ -10,6 +10,7 @@ import { PageHeading, Panel, Loading, ErrorState, Empty, Badge } from '../../com
 import { ActionDialog } from '../../components/ActionDialog';
 import { enablePush, disablePush } from '../../lib/push';
 import SchoolCalendar from '../calendar/SchoolCalendar';
+import HomeworkDiary from '../homework/HomeworkDiary';
 import Timetable from '../timetable/Timetable';
 import UpcomingEvents from '../calendar/UpcomingEvents';
 import { schoolToday } from '../calendar/calendar-utils';
@@ -175,6 +176,7 @@ function ParentSectionView({
     base = `/parent/children/${child.id}`;
   if (section === 'calendar') return <SchoolCalendar basePath={base + '/calendar'} />;
   if (section === 'timetable') return <Timetable basePath={base + '/timetable'} />;
+  if (section === 'homework') return <HomeworkDiary basePath={base + '/homework'} />;
   return (
     <>
       <PageHeading

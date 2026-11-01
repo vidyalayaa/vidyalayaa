@@ -488,7 +488,7 @@ export async function validateBusiness(
         );
     }
     const conflict = await tx.query(
-      'SELECT id FROM timetable_entries WHERE school_id=$1 AND retired_at IS NULL AND weekday=$2 AND (teacher_id=$3 OR class_id=$4) AND starts_at<$6::time AND ends_at>$5::time AND id<>coalesce($7::uuid,gen_random_uuid()) FOR UPDATE',
+      'SELECT id FROM timetable_entries WHERE school_id=$1 AND academic_session_id=(SELECT academic_session_id FROM classes WHERE school_id=$1 AND id=$4) AND retired_at IS NULL AND weekday=$2 AND (teacher_id=$3 OR class_id=$4) AND starts_at<$6::time AND ends_at>$5::time AND id<>coalesce($7::uuid,gen_random_uuid()) FOR UPDATE',
       [
         a.context.schoolId,
         values.weekday,

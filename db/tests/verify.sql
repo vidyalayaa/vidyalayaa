@@ -45,6 +45,26 @@ DO $$ DECLARE n integer; BEGIN
 END $$;
 
 DO $$ BEGIN
+ IF NOT EXISTS(SELECT FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='profile' AND is_nullable='NO') OR NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='schools'::regclass AND tgname='school_profile_guard' AND tgenabled='O') THEN RAISE EXCEPTION 'Central school profile or version guard missing';END IF;
+ IF (SELECT count(*) FROM pg_class WHERE oid IN('school_profile_private'::regclass,'school_profile_assets'::regclass) AND relrowsecurity AND relforcerowsecurity)<>2 THEN RAISE EXCEPTION 'School profile tables require forced RLS';END IF;
+ IF has_table_privilege('anon','school_profile_private','SELECT') OR has_table_privilege('authenticated','school_profile_private','SELECT') OR has_table_privilege('authenticated','school_profile_assets','SELECT') OR has_table_privilege('app_api','school_profile_private','DELETE') OR has_table_privilege('app_platform','school_profile_assets','DELETE') OR has_function_privilege('authenticated','app.school_profile_editor(uuid)','EXECUTE') OR has_function_privilege('anon','app.school_profile_editor(uuid)','EXECUTE') THEN RAISE EXCEPTION 'School profile private data or controls exposed';END IF;
+ IF EXISTS(SELECT FROM pg_proc WHERE oid IN('app.school_profile_editor(uuid)'::regprocedure,'app.guard_school_profile()'::regprocedure,'app.guard_school_profile_private()'::regprocedure,'app.guard_school_profile_asset()'::regprocedure) AND prosecdef) THEN RAISE EXCEPTION 'School profile helpers must enforce invoker permissions';END IF;
+ IF NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='school_profile_private'::regclass AND polname='profile_admin_read') OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='school_profile_assets'::regclass AND polname='profile_assets_insert') OR NOT EXISTS(SELECT FROM pg_indexes WHERE indexname='one_school_profile_logo') THEN RAISE EXCEPTION 'School profile ownership or logo uniqueness missing';END IF;
+ IF EXISTS(SELECT FROM storage.buckets WHERE id='school-documents' AND public) THEN RAISE EXCEPTION 'School profile documents must remain private';END IF;
+END $$;
+
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT FROM pg_class WHERE oid='academic_promotions'::regclass AND relrowsecurity AND relforcerowsecurity)
+ OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='academic_promotions'::regclass AND polname='school_admin_only')
+ OR NOT EXISTS(SELECT FROM pg_indexes WHERE indexname='promotion_source_once') THEN RAISE EXCEPTION 'Academic promotion isolation or duplicate guard missing';END IF;
+ IF has_table_privilege('authenticated','academic_promotions','SELECT') OR has_table_privilege('anon','academic_promotions','SELECT') OR has_table_privilege('app_platform','academic_promotions','SELECT') OR has_table_privilege('app_api','academic_promotions','DELETE') THEN RAISE EXCEPTION 'Academic promotion private ledger exposed or deletable';END IF;
+ IF NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='academic_promotions'::regclass AND tgname='promotion_guard' AND tgenabled='O')
+ OR (SELECT count(*) FROM pg_trigger WHERE tgname='academic_year_lock' AND tgenabled='O' AND tgrelid IN('academic_sessions'::regclass,'classes'::regclass,'enrollments'::regclass,'teacher_class_assignments'::regclass,'exams'::regclass,'marks'::regclass,'assignments'::regclass,'timetable_entries'::regclass,'daily_attendance'::regclass,'fee_structures'::regclass))<>10 THEN RAISE EXCEPTION 'Academic year closure or immutability guard missing';END IF;
+ IF NOT EXISTS(SELECT FROM pg_constraint WHERE conrelid='timetable_entries'::regclass AND conname='teacher_no_overlap' AND pg_get_constraintdef(oid) LIKE '%academic_session_id%') THEN RAISE EXCEPTION 'Year-scoped timetable teacher conflict guard missing';END IF;
+ IF NOT EXISTS(SELECT FROM pg_proc WHERE oid='app.lock_academic_year(uuid,uuid)'::regprocedure AND prosecdef AND proconfig @> ARRAY['search_path=pg_catalog, public']) OR has_function_privilege('anon','app.lock_academic_year(uuid,uuid)','EXECUTE') OR has_function_privilege('authenticated','app.lock_academic_year(uuid,uuid)','EXECUTE') OR has_function_privilege('app_platform','app.lock_academic_year(uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Academic year lock helper privileges incorrect';END IF;
+END $$;
+
+DO $$ BEGIN
  IF NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='notification_outbox'::regclass AND polname='notification_read' AND NOT polpermissive) OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='notification_outbox'::regclass AND polname='custom_worker_protocol') THEN RAISE EXCEPTION 'Notification ownership or deployment guard missing';END IF;
  IF has_table_privilege('authenticated','notification_recipient_targets','SELECT') OR has_table_privilege('anon','school_notification_settings','SELECT') OR has_table_privilege('app_api','notification_recipient_targets','INSERT') OR has_function_privilege('authenticated','app.queue_custom_notification(text,text,uuid[],text,text)','EXECUTE') THEN RAISE EXCEPTION 'Notification privileged surface exposed';END IF;
 END $$;

@@ -618,7 +618,13 @@ export function ResourceForm({
           preset?.[f.key] ??
           saved[f.key] ??
           initial?.[f.key] ??
-          (f.type === 'checkbox' ? false : (f.options?.[0] ?? (f.optional ? null : '')));
+          (f.key === 'assigned_on'
+            ? new Intl.DateTimeFormat('en-CA', {
+                timeZone: a.me?.school?.timezone || 'Asia/Kolkata',
+              }).format(new Date())
+            : f.type === 'checkbox'
+              ? false
+              : (f.options?.[0] ?? (f.optional ? null : '')));
         if (f.key === 'rules' && typeof value === 'object') value = JSON.stringify(value, null, 2);
         if (f.type === 'date' && value) value = String(value).slice(0, 10);
         if (['starts_at', 'ends_at'].includes(f.key) && value) value = String(value).slice(0, 5);

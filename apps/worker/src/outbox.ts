@@ -36,6 +36,8 @@ export function messageFor(
   locale = 'en-IN',
 ) {
   if (kind === 'CUSTOM') return String(payload.body || 'A school update is available.');
+  if (kind === 'HOMEWORK')
+    return `Homework diary updated: ${String(payload.title || 'Open Vidyalayaa to see your assignment.')}`;
   const when = payload.event_time
     ? new Intl.DateTimeFormat(locale, {
         timeZone: timezone,
@@ -116,6 +118,14 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             )
           ).rows[0];
           let publication: Record<string, any> | undefined;
+          if (job.kind === 'HOMEWORK') {
+            publication = (
+              await tx.query(
+                "SELECT * FROM assignments WHERE school_id=$1 AND id=$2 AND kind='HOMEWORK' AND retired_at IS NULL AND diary_version=$3::integer",
+                [schoolId, job.payload.homework_id, job.payload.revision],
+              )
+            ).rows[0];
+          }
           if (job.kind === 'ANNOUNCEMENT') {
             publication = (
               await tx.query(
@@ -126,8 +136,8 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
           }
           const recipients = (
             await tx.query<Recipient>(
-              `SELECT DISTINCT p.id,p.user_id,p.email,p.phone,p.no_names_on_lock_screen FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id AND sp.status='ACTIVE' AND sp.can_receive_alerts JOIN students s ON s.school_id=sp.school_id AND s.id=sp.student_id WHERE p.school_id=$1 AND p.status='ACTIVE' AND ($2::uuid IS NULL OR sp.student_id=$2) AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=s.school_id AND en.student_id=s.id AND en.class_id=$3 AND en.status='ACTIVE'))`,
-              [schoolId, job.student_id, job.payload.class_id || null],
+              `SELECT DISTINCT p.id,p.user_id,p.email,p.phone,p.no_names_on_lock_screen FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id AND sp.status='ACTIVE' AND sp.can_receive_alerts JOIN students s ON s.school_id=sp.school_id AND s.id=sp.student_id WHERE p.school_id=$1 AND p.status='ACTIVE' AND ($2::uuid IS NULL OR sp.student_id=$2) AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=s.school_id AND en.student_id=s.id AND en.class_id=$3 AND en.status='ACTIVE' AND ($4::boolean=false OR (s.status='ACTIVE' AND en.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date AND (en.ends_on IS NULL OR en.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date)))))`,
+              [schoolId, job.student_id, job.payload.class_id || null, job.kind === 'HOMEWORK'],
             )
           ).rows;
           return {
@@ -135,32 +145,44 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             locale: school.settings.locale === 'hi-IN' ? 'hi-IN' : 'en-IN',
             sub,
             recipients:
-              job.kind === 'CUSTOM'
-                ? (
-                    await tx.query<Recipient>(
-                      `SELECT NULL::uuid AS id,t.user_id,u.email,NULL::text AS phone,p.id AS preference_parent_id,p.no_names_on_lock_screen,EXISTS(SELECT FROM school_memberships m WHERE m.school_id=t.school_id AND m.user_id=t.user_id AND m.status='ACTIVE' AND u.status='ACTIVE') AS account_active FROM notification_recipient_targets t LEFT JOIN users u ON u.id=t.user_id LEFT JOIN parents p ON p.school_id=t.school_id AND p.user_id=t.user_id AND p.status='ACTIVE' WHERE t.school_id=$1 AND t.outbox_id=$2`,
-                      [schoolId, job.id],
-                    )
-                  ).rows
-                : job.kind === 'ANNOUNCEMENT' && !publication
+              job.kind === 'HOMEWORK'
+                ? !publication
                   ? []
-                  : job.kind === 'ANNOUNCEMENT' && publication?.audience === 'STAFF'
-                    ? (
+                  : [
+                      ...recipients,
+                      ...(
                         await tx.query<Recipient>(
-                          "SELECT NULL::uuid AS id,u.id AS user_id,u.email,NULL::text AS phone FROM school_memberships m JOIN roles r ON r.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=$1 AND m.status='ACTIVE' AND u.status='ACTIVE' AND r.code IN ('school_admin','principal','teacher')",
-                          [schoolId],
+                          `SELECT DISTINCT NULL::uuid AS id,s.user_id,u.email,NULL::text AS phone FROM students s JOIN enrollments e ON e.school_id=s.school_id AND e.student_id=s.id JOIN users u ON u.id=s.user_id JOIN school_memberships m ON m.school_id=s.school_id AND m.user_id=s.user_id JOIN roles r ON r.id=m.role_id WHERE s.school_id=$1 AND e.class_id=$2 AND e.status='ACTIVE' AND e.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date AND (e.ends_on IS NULL OR e.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date) AND s.status='ACTIVE' AND u.status='ACTIVE' AND m.status='ACTIVE' AND r.code='student'`,
+                          [schoolId, publication.class_id],
                         )
-                      ).rows
-                    : ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
-                      ? [
-                          {
-                            id: null,
-                            user_id: String(job.payload.recipient_user_id),
-                            email: String(job.payload.recipient_email),
-                            phone: null,
-                          },
-                        ]
-                      : recipients,
+                      ).rows,
+                    ]
+                : job.kind === 'CUSTOM'
+                  ? (
+                      await tx.query<Recipient>(
+                        `SELECT NULL::uuid AS id,t.user_id,u.email,NULL::text AS phone,p.id AS preference_parent_id,p.no_names_on_lock_screen,EXISTS(SELECT FROM school_memberships m WHERE m.school_id=t.school_id AND m.user_id=t.user_id AND m.status='ACTIVE' AND u.status='ACTIVE') AS account_active FROM notification_recipient_targets t LEFT JOIN users u ON u.id=t.user_id LEFT JOIN parents p ON p.school_id=t.school_id AND p.user_id=t.user_id AND p.status='ACTIVE' WHERE t.school_id=$1 AND t.outbox_id=$2`,
+                        [schoolId, job.id],
+                      )
+                    ).rows
+                  : job.kind === 'ANNOUNCEMENT' && !publication
+                    ? []
+                    : job.kind === 'ANNOUNCEMENT' && publication?.audience === 'STAFF'
+                      ? (
+                          await tx.query<Recipient>(
+                            "SELECT NULL::uuid AS id,u.id AS user_id,u.email,NULL::text AS phone FROM school_memberships m JOIN roles r ON r.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=$1 AND m.status='ACTIVE' AND u.status='ACTIVE' AND r.code IN ('school_admin','principal','teacher')",
+                            [schoolId],
+                          )
+                        ).rows
+                      : ['DEVICE_ALERT', 'SUBSCRIPTION_UPDATE'].includes(job.kind)
+                        ? [
+                            {
+                              id: null,
+                              user_id: String(job.payload.recipient_user_id),
+                              email: String(job.payload.recipient_email),
+                              phone: null,
+                            },
+                          ]
+                        : recipients,
           };
         },
         true,
@@ -177,7 +199,12 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             const preference = (
               await tx.query(
                 'SELECT * FROM notification_preferences WHERE school_id=$1 AND parent_id=$2 AND kind=$3 AND channel=$4',
-                [schoolId, parent.preference_parent_id || parent.id, job.kind, channel],
+                [
+                  schoolId,
+                  parent.preference_parent_id || parent.id,
+                  job.kind === 'HOMEWORK' ? 'ANNOUNCEMENT' : job.kind,
+                  channel,
+                ],
               )
             ).rows[0];
             const pushTargets =
@@ -206,7 +233,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
             const enabled = (
               await tx.query('SELECT app.notification_enabled($1,$2,$3) AS enabled', [
                 schoolId,
-                job.kind,
+                job.kind === 'HOMEWORK' ? 'ANNOUNCEMENT' : job.kind,
                 channel,
               ])
             ).rows[0].enabled;
@@ -304,7 +331,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               !(
                 await tx.query('SELECT app.notification_enabled($1,$2,$3) AS enabled', [
                   schoolId,
-                  job.kind,
+                  job.kind === 'HOMEWORK' ? 'ANNOUNCEMENT' : job.kind,
                   channel,
                 ])
               ).rows[0].enabled
@@ -336,6 +363,20 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               ).rowCount
             )
               return false;
+            if (job.kind === 'HOMEWORK') {
+              const valid = await tx.query(
+                'SELECT id FROM assignments WHERE school_id=$1 AND id=$2 AND retired_at IS NULL AND diary_version=$3::integer',
+                [schoolId, job.payload.homework_id, job.payload.revision],
+              );
+              if (!valid.rowCount) return false;
+              if (!parent.id)
+                return !!(
+                  await tx.query(
+                    `SELECT s.id FROM students s JOIN enrollments e ON e.school_id=s.school_id AND e.student_id=s.id JOIN school_memberships m ON m.school_id=s.school_id AND m.user_id=s.user_id JOIN roles r ON r.id=m.role_id JOIN users u ON u.id=s.user_id WHERE s.school_id=$1 AND s.user_id=$2 AND e.class_id=$3 AND e.status='ACTIVE' AND s.status='ACTIVE' AND m.status='ACTIVE' AND u.status='ACTIVE' AND r.code='student' AND e.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date AND (e.ends_on IS NULL OR e.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date)`,
+                    [schoolId, parent.user_id, job.payload.class_id],
+                  )
+                ).rowCount;
+            }
             if (!parent.id)
               return !!(
                 await tx.query(
@@ -351,8 +392,14 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               ).rowCount;
             return !!(
               await tx.query(
-                "SELECT p.id FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id JOIN students st ON st.school_id=sp.school_id AND st.id=sp.student_id WHERE p.school_id=$1 AND p.id=$2 AND p.status='ACTIVE' AND sp.status='ACTIVE' AND sp.can_receive_alerts AND st.status='ACTIVE' AND (p.user_id IS NULL OR EXISTS(SELECT 1 FROM school_memberships m JOIN roles ro ON ro.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=p.school_id AND m.user_id=p.user_id AND m.status='ACTIVE' AND ro.code='parent' AND u.status='ACTIVE')) AND ($3::uuid IS NULL OR sp.student_id=$3) AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=sp.school_id AND en.student_id=sp.student_id AND en.class_id=$4 AND en.status='ACTIVE'))",
-                [schoolId, parent.id, job.student_id, job.payload.class_id || null],
+                "SELECT p.id FROM parents p JOIN student_parents sp ON sp.school_id=p.school_id AND sp.parent_id=p.id JOIN students st ON st.school_id=sp.school_id AND st.id=sp.student_id WHERE p.school_id=$1 AND p.id=$2 AND p.status='ACTIVE' AND sp.status='ACTIVE' AND sp.can_receive_alerts AND st.status='ACTIVE' AND (p.user_id IS NULL OR EXISTS(SELECT 1 FROM school_memberships m JOIN roles ro ON ro.id=m.role_id JOIN users u ON u.id=m.user_id WHERE m.school_id=p.school_id AND m.user_id=p.user_id AND m.status='ACTIVE' AND ro.code='parent' AND u.status='ACTIVE')) AND ($3::uuid IS NULL OR sp.student_id=$3) AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM enrollments en WHERE en.school_id=sp.school_id AND en.student_id=sp.student_id AND en.class_id=$4 AND en.status='ACTIVE' AND ($5::boolean=false OR (en.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date AND (en.ends_on IS NULL OR en.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=$1))::date)))))",
+                [
+                  schoolId,
+                  parent.id,
+                  job.student_id,
+                  job.payload.class_id || null,
+                  job.kind === 'HOMEWORK',
+                ],
               )
             ).rowCount;
           });
@@ -361,7 +408,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               const enabled = (
                 await tx.query('SELECT app.notification_enabled($1,$2,$3) AS enabled', [
                   schoolId,
-                  job.kind,
+                  job.kind === 'HOMEWORK' ? 'ANNOUNCEMENT' : job.kind,
                   channel,
                 ])
               ).rows[0].enabled;

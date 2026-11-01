@@ -1,8 +1,15 @@
 import { Router } from 'express';
 import { platformAuditSnapshot } from './audit.js';
+import { schoolProfileRouter } from '../school-profile/router.js';
 import type pg from 'pg';
 import { z } from 'zod';
-import { uuid, firstAdminSchema, supportResponseSchema } from '@vidyalayaa/contracts';
+import {
+  uuid,
+  firstAdminSchema,
+  supportResponseSchema,
+  schoolCreateSchema,
+  schoolProfileDetailsSchema,
+} from '@vidyalayaa/contracts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Config } from '../../lib/config.js';
 import { inviteMember, invitationError } from '../identity/invitations.js';
@@ -19,6 +26,7 @@ export function platformRouter(
 ) {
   const r = Router();
   r.use(platformOnly);
+  r.use('/schools/:schoolId/profile', schoolProfileRouter(platform, auth));
   r.get(
     '/audit',
     asyncRoute(async (req, res) => {
@@ -340,16 +348,7 @@ export function platformRouter(
     '/schools',
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
-        b = z
-          .object({
-            school_code: z.string().regex(/^[A-Z0-9_-]{3,32}$/),
-            name: z.string().min(2).max(200),
-            timezone: z.string().max(100),
-            plan_code: z.enum(['BASIC', 'PROFESSIONAL', 'ENTERPRISE']),
-            trial_ends_at: z.string().datetime(),
-          })
-          .strict()
-          .parse(req.body);
+        b = schoolCreateSchema.parse(req.body);
       try {
         new Intl.DateTimeFormat('en', { timeZone: b.timezone }).format();
       } catch {
@@ -367,8 +366,21 @@ export function platformRouter(
             throw new ApiError(422, 'PLAN_UNAVAILABLE', 'Choose an available subscription plan.');
           const school = (
             await tx.query(
-              "INSERT INTO schools(school_code,name,timezone,status) VALUES($1,$2,$3,'ACTIVE') RETURNING *",
-              [b.school_code, b.name, b.timezone],
+              "INSERT INTO schools(school_code,name,timezone,status,profile) VALUES($1,$2,$3,'ACTIVE',$4) RETURNING *",
+              [
+                b.school_code,
+                b.name,
+                b.timezone,
+                schoolProfileDetailsSchema.parse({
+                  email: b.email,
+                  phone: b.phone,
+                  address_line1: b.address_line1,
+                  city: b.city,
+                  state: b.state,
+                  postal_code: b.postal_code,
+                  country: b.country,
+                }),
+              ],
             )
           ).rows[0];
           await tx.query(

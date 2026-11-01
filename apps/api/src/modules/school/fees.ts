@@ -673,64 +673,12 @@ export function feesRouter(pool: pg.Pool, controls: Controls) {
       );
     }),
   );
-  async function assess(
-    tx: Tx,
-    a: Actor,
-    b: z.infer<typeof feeAssessmentSchema>,
-    preview: boolean,
-  ) {
-    const sid = a.context.schoolId,
-      st = (
-        await tx.query(
-          'SELECT st.*,ac.ends_on::text AS ends_on FROM fee_structures st JOIN academic_sessions ac ON ac.school_id=st.school_id AND ac.id=st.academic_session_id JOIN fee_structure_sections sec ON sec.school_id=st.school_id AND sec.structure_id=st.id AND sec.class_id=$3 WHERE st.school_id=$1 AND st.id=$2',
-          [sid, b.structure_id, b.class_id],
-        )
-      ).rows[0];
-    if (!st) throw notFound();
-    const items = (
-      await tx.query(
-        'SELECT *,first_due_on::text AS first_due_on FROM fee_structure_items WHERE school_id=$1 AND structure_id=$2 AND (class_id IS NULL OR class_id=$3)',
-        [sid, b.structure_id, b.class_id],
-      )
-    ).rows;
-    const dates = items.flatMap((i) =>
-      installmentDates(iso(i.first_due_on), iso(st.ends_on), i.frequency).map((due, index) => ({
-        item_id: i.id,
-        fee_type: i.label,
-        amount: i.amount,
-        category: i.category,
-        due_on: due,
-        installment_label: `${i.label} · ${index + 1} · ${due}`,
-        key: hash(JSON.stringify([st.academic_session_id, i.category, i.label.toLowerCase(), due])),
-      })),
-    );
-    const base = `SELECT DISTINCT $1::uuid AS school_id,e.student_id,$3::uuid AS academic_session_id,$2::uuid AS class_id,x.item_id,x.fee_type,x.amount,x.category,x.due_on,x.installment_label,'ACADEMIC:'||e.student_id||':'||x.key AS assessment_key FROM enrollments e CROSS JOIN jsonb_to_recordset($4::jsonb) AS x(item_id uuid,fee_type text,amount numeric,category text,due_on date,installment_label text,key text) WHERE e.school_id=$1 AND e.class_id=$2 AND e.academic_session_id=$3 AND e.status='ACTIVE' AND ($5::uuid IS NULL OR e.student_id=$5) AND x.due_on>=e.starts_on AND (e.ends_on IS NULL OR x.due_on<=e.ends_on)`;
-    const v = [
-      sid,
-      b.class_id,
-      st.academic_session_id,
-      JSON.stringify(dates),
-      b.student_id || null,
-    ];
-    if (preview)
-      return (
-        await tx.query(
-          `WITH desired AS(${base}) SELECT count(*)::int AS installments,coalesce(sum(amount),0)::text AS amount FROM desired d WHERE NOT EXISTS(SELECT FROM fee_records f WHERE f.school_id=d.school_id AND f.assessment_key=d.assessment_key AND f.voided_at IS NULL)`,
-          v,
-        )
-      ).rows[0];
-    const result = await tx.query(
-      `WITH desired AS(${base}) INSERT INTO fee_records(school_id,student_id,academic_session_id,class_id,structure_item_id,fee_type,amount_due,category,due_on,installment_label,assessment_key,status) SELECT school_id,student_id,academic_session_id,class_id,item_id,fee_type,amount,category,due_on,installment_label,assessment_key,'UNPAID' FROM desired ORDER BY student_id,due_on,item_id ON CONFLICT(school_id,assessment_key) WHERE voided_at IS NULL DO NOTHING RETURNING id`,
-      v,
-    );
-    return { created: result.rowCount };
-  }
   r.post(
     '/assessments/preview',
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
         b = feeAssessmentSchema.parse(req.body);
-      res.json(await transaction(pool, a.context, (tx) => assess(tx, a, b, true), true));
+      res.json(await transaction(pool, a.context, (tx) => assessClassFees(tx, a, b, true), true));
     }),
   );
   r.post(
@@ -746,7 +694,7 @@ export function feesRouter(pool: pg.Pool, controls: Controls) {
             a,
             req.header('Idempotency-Key'),
             { op: 'fee.assess', ...b },
-            () => assess(tx, a, b, false),
+            () => assessClassFees(tx, a, b, false),
           );
         }),
       );
@@ -1042,4 +990,62 @@ export function feesRouter(pool: pg.Pool, controls: Controls) {
     }),
   );
   return r;
+}
+
+export async function assessClassFees(
+  tx: Tx,
+  a: Actor,
+  b: z.infer<typeof feeAssessmentSchema>,
+  preview: boolean,
+  roster?: { student_id: string; starts_on: string; ends_on: string | null }[],
+  studentIds?: string[],
+) {
+  const sid = a.context.schoolId,
+    st = (
+      await tx.query(
+        'SELECT st.*,ac.ends_on::text AS ends_on FROM fee_structures st JOIN academic_sessions ac ON ac.school_id=st.school_id AND ac.id=st.academic_session_id JOIN fee_structure_sections sec ON sec.school_id=st.school_id AND sec.structure_id=st.id AND sec.class_id=$3 WHERE st.school_id=$1 AND st.id=$2',
+        [sid, b.structure_id, b.class_id],
+      )
+    ).rows[0];
+  if (!st) throw notFound();
+  const items = (
+    await tx.query(
+      'SELECT *,first_due_on::text AS first_due_on FROM fee_structure_items WHERE school_id=$1 AND structure_id=$2 AND (class_id IS NULL OR class_id=$3)',
+      [sid, b.structure_id, b.class_id],
+    )
+  ).rows;
+  const dates = items.flatMap((i) =>
+    installmentDates(iso(i.first_due_on), iso(st.ends_on), i.frequency).map((due, index) => ({
+      item_id: i.id,
+      fee_type: i.label,
+      amount: i.amount,
+      category: i.category,
+      due_on: due,
+      installment_label: `${i.label} · ${index + 1} · ${due}`,
+      key: hash(JSON.stringify([st.academic_session_id, i.category, i.label.toLowerCase(), due])),
+    })),
+  );
+  const base = `SELECT DISTINCT $1::uuid AS school_id,e.student_id,$3::uuid AS academic_session_id,$2::uuid AS class_id,x.item_id,x.fee_type,x.amount,x.category,x.due_on,x.installment_label,'ACADEMIC:'||e.student_id||':'||x.key AS assessment_key FROM ${roster ? 'jsonb_to_recordset($6::jsonb) AS e(student_id uuid,starts_on date,ends_on date)' : 'enrollments e'} CROSS JOIN jsonb_to_recordset($4::jsonb) AS x(item_id uuid,fee_type text,amount numeric,category text,due_on date,installment_label text,key text) WHERE ${roster ? '$1::uuid IS NOT NULL AND $2::uuid IS NOT NULL AND $3::uuid IS NOT NULL' : "e.school_id=$1 AND e.class_id=$2 AND e.academic_session_id=$3 AND e.status='ACTIVE'"} AND ($5::uuid IS NULL OR e.student_id=$5) AND x.due_on>=e.starts_on AND (e.ends_on IS NULL OR x.due_on<=e.ends_on)`;
+  const scopedBase = studentIds ? `${base} AND e.student_id=ANY($${roster ? 7 : 6}::uuid[])` : base;
+  const v = [
+    sid,
+    b.class_id,
+    st.academic_session_id,
+    JSON.stringify(dates),
+    b.student_id || null,
+    ...(roster ? [JSON.stringify(roster)] : []),
+    ...(studentIds ? [studentIds] : []),
+  ];
+  if (preview)
+    return (
+      await tx.query(
+        `WITH desired AS(${scopedBase}) SELECT count(*)::int AS installments,coalesce(sum(amount),0)::text AS amount FROM desired d WHERE NOT EXISTS(SELECT FROM fee_records f WHERE f.school_id=d.school_id AND f.assessment_key=d.assessment_key AND f.voided_at IS NULL)`,
+        v,
+      )
+    ).rows[0];
+  const result = await tx.query(
+    `WITH desired AS(${scopedBase}) INSERT INTO fee_records(school_id,student_id,academic_session_id,class_id,structure_item_id,fee_type,amount_due,category,due_on,installment_label,assessment_key,status) SELECT school_id,student_id,academic_session_id,class_id,item_id,fee_type,amount,category,due_on,installment_label,assessment_key,'UNPAID' FROM desired ORDER BY student_id,due_on,item_id ON CONFLICT(school_id,assessment_key) WHERE voided_at IS NULL DO NOTHING RETURNING id`,
+    v,
+  );
+  return { created: result.rowCount };
 }

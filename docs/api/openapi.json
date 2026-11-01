@@ -24,6 +24,621 @@
       }
     },
     "schemas": {
+      "SchoolProfileUpdate": {
+        "type": "object",
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483646
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "en-IN",
+              "hi-IN"
+            ]
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "tagline": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "motto": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "about": {
+                "type": "string",
+                "maxLength": 5000,
+                "default": ""
+              },
+              "established_year": {
+                "type": "string",
+                "pattern": "^(|\\d{4})$",
+                "default": ""
+              },
+              "school_type": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "address_line1": {
+                "type": "string",
+                "maxLength": 300,
+                "default": ""
+              },
+              "address_line2": {
+                "type": "string",
+                "maxLength": 300,
+                "default": ""
+              },
+              "locality": {
+                "type": "string",
+                "maxLength": 150,
+                "default": ""
+              },
+              "city": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "district": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "state": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "postal_code": {
+                "type": "string",
+                "maxLength": 20,
+                "default": ""
+              },
+              "country": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "email": {
+                "default": ""
+              },
+              "phone": {
+                "type": "string",
+                "maxLength": 40,
+                "default": ""
+              },
+              "alternate_phone": {
+                "type": "string",
+                "maxLength": 40,
+                "default": ""
+              },
+              "website": {
+                "type": "string",
+                "maxLength": 500,
+                "default": ""
+              },
+              "principal_name": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "principal_email": {
+                "default": ""
+              },
+              "principal_phone": {
+                "type": "string",
+                "maxLength": 40,
+                "default": ""
+              },
+              "principal_qualification": {
+                "type": "string",
+                "maxLength": 300,
+                "default": ""
+              },
+              "board": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "affiliation_number": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "recognition_number": {
+                "type": "string",
+                "maxLength": 100,
+                "default": ""
+              },
+              "recognized_by": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "recognition_valid_until": {
+                "type": "string",
+                "default": ""
+              },
+              "udise_code": {
+                "type": "string",
+                "maxLength": 40,
+                "default": ""
+              },
+              "grades_offered": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "medium": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "academic_pattern": {
+                "type": "string",
+                "maxLength": 300,
+                "default": ""
+              },
+              "office_hours": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "visiting_hours": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "facilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "maxItems": 40,
+                "default": []
+              },
+              "infrastructure": {
+                "type": "string",
+                "maxLength": 5000,
+                "default": ""
+              },
+              "accessibility": {
+                "type": "string",
+                "maxLength": 3000,
+                "default": ""
+              },
+              "transport_information": {
+                "type": "string",
+                "maxLength": 3000,
+                "default": ""
+              },
+              "emergency_phone": {
+                "type": "string",
+                "maxLength": 40,
+                "default": ""
+              },
+              "emergency_instructions": {
+                "type": "string",
+                "maxLength": 3000,
+                "default": ""
+              },
+              "policies": {
+                "type": "string",
+                "maxLength": 12000,
+                "default": ""
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "administration": {
+            "type": "object",
+            "properties": {
+              "management_name": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "management_contact_name": {
+                "type": "string",
+                "maxLength": 200,
+                "default": ""
+              },
+              "management_email": {
+                "default": ""
+              },
+              "management_phone": {
+                "type": "string",
+                "maxLength": 40,
+                "default": ""
+              },
+              "management_address": {
+                "type": "string",
+                "maxLength": 1000,
+                "default": ""
+              },
+              "internal_emergency_contacts": {
+                "type": "string",
+                "maxLength": 4000,
+                "default": ""
+              },
+              "internal_policies": {
+                "type": "string",
+                "maxLength": 10000,
+                "default": ""
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "principal_edit_authorized": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected_version",
+          "name",
+          "timezone",
+          "locale",
+          "details"
+        ],
+        "additionalProperties": false
+      },
+      "SchoolPublicProfile": {
+        "type": "object",
+        "properties": {
+          "tagline": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "motto": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "about": {
+            "type": "string",
+            "maxLength": 5000,
+            "default": ""
+          },
+          "established_year": {
+            "type": "string",
+            "pattern": "^(|\\d{4})$",
+            "default": ""
+          },
+          "school_type": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "address_line1": {
+            "type": "string",
+            "maxLength": 300,
+            "default": ""
+          },
+          "address_line2": {
+            "type": "string",
+            "maxLength": 300,
+            "default": ""
+          },
+          "locality": {
+            "type": "string",
+            "maxLength": 150,
+            "default": ""
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "district": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "default": ""
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "email": {
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "alternate_phone": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "website": {
+            "type": "string",
+            "maxLength": 500,
+            "default": ""
+          },
+          "principal_name": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "principal_email": {
+            "default": ""
+          },
+          "principal_phone": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "principal_qualification": {
+            "type": "string",
+            "maxLength": 300,
+            "default": ""
+          },
+          "board": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "affiliation_number": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "recognition_number": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "recognized_by": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "recognition_valid_until": {
+            "type": "string",
+            "default": ""
+          },
+          "udise_code": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "grades_offered": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "medium": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "academic_pattern": {
+            "type": "string",
+            "maxLength": 300,
+            "default": ""
+          },
+          "office_hours": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "visiting_hours": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "facilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 40,
+            "default": []
+          },
+          "infrastructure": {
+            "type": "string",
+            "maxLength": 5000,
+            "default": ""
+          },
+          "accessibility": {
+            "type": "string",
+            "maxLength": 3000,
+            "default": ""
+          },
+          "transport_information": {
+            "type": "string",
+            "maxLength": 3000,
+            "default": ""
+          },
+          "emergency_phone": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "emergency_instructions": {
+            "type": "string",
+            "maxLength": 3000,
+            "default": ""
+          },
+          "policies": {
+            "type": "string",
+            "maxLength": 12000,
+            "default": ""
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "SchoolProfileAdministration": {
+        "type": "object",
+        "properties": {
+          "management_name": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "management_contact_name": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "management_email": {
+            "default": ""
+          },
+          "management_phone": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "management_address": {
+            "type": "string",
+            "maxLength": 1000,
+            "default": ""
+          },
+          "internal_emergency_contacts": {
+            "type": "string",
+            "maxLength": 4000,
+            "default": ""
+          },
+          "internal_policies": {
+            "type": "string",
+            "maxLength": 10000,
+            "default": ""
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "SchoolRegistration": {
+        "type": "object",
+        "properties": {
+          "school_code": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_-]{3,32}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "plan_code": {
+            "type": "string",
+            "enum": [
+              "BASIC",
+              "PROFESSIONAL",
+              "ENTERPRISE"
+            ]
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "default": ""
+          },
+          "address_line1": {
+            "type": "string",
+            "maxLength": 300,
+            "default": ""
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "default": ""
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "default": ""
+          }
+        },
+        "required": [
+          "school_code",
+          "name",
+          "timezone",
+          "plan_code",
+          "trial_ends_at"
+        ],
+        "additionalProperties": false
+      },
+      "SchoolProfileAsset": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "LOGO",
+              "IMAGE",
+              "POLICY"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150
+          }
+        },
+        "required": [
+          "kind",
+          "title"
+        ],
+        "additionalProperties": false
+      },
       "FirmwareManifest": {
         "type": "object",
         "properties": {
@@ -2264,6 +2879,361 @@
         ],
         "additionalProperties": false
       },
+      "AcademicYearPreparation": {
+        "type": "object",
+        "properties": {
+          "source_session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "new_year": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "starts_on": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "ends_on": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            "required": [
+              "name",
+              "starts_on",
+              "ends_on"
+            ],
+            "additionalProperties": false
+          },
+          "target_session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "copy_teaching": {
+            "type": "boolean"
+          },
+          "copy_timetable": {
+            "type": "boolean"
+          },
+          "copy_fees": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_session_id",
+          "copy_teaching",
+          "copy_timetable",
+          "copy_fees"
+        ],
+        "additionalProperties": false
+      },
+      "AcademicPromotionPlan": {
+        "type": "object",
+        "properties": {
+          "promotion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "activation_on": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "generate_fees": {
+            "type": "boolean"
+          },
+          "roll_numbers": {
+            "type": "string",
+            "enum": [
+              "KEEP",
+              "RENUMBER"
+            ],
+            "default": "KEEP"
+          },
+          "mappings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_class_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "PROMOTE",
+                    "REPEAT",
+                    "GRADUATED",
+                    "TRANSFERRED",
+                    "WITHDRAWN"
+                  ],
+                  "default": "PROMOTE"
+                },
+                "target_class_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fee_structure_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "source_class_id",
+                "target_class_id",
+                "fee_structure_id"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 2000
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "enrollment_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "PROMOTE",
+                    "REPEAT",
+                    "GRADUATED",
+                    "TRANSFERRED",
+                    "WITHDRAWN"
+                  ]
+                },
+                "target_class_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "roll_number": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "enrollment_id",
+                "outcome",
+                "target_class_id",
+                "roll_number",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20000
+          }
+        },
+        "required": [
+          "promotion_id",
+          "activation_on",
+          "generate_fees",
+          "mappings",
+          "exceptions"
+        ],
+        "additionalProperties": false
+      },
+      "AcademicPromotionActivation": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "promotion_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "activation_on": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "generate_fees": {
+                "type": "boolean"
+              },
+              "roll_numbers": {
+                "type": "string",
+                "enum": [
+                  "KEEP",
+                  "RENUMBER"
+                ],
+                "default": "KEEP"
+              },
+              "mappings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source_class_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "PROMOTE",
+                        "REPEAT",
+                        "GRADUATED",
+                        "TRANSFERRED",
+                        "WITHDRAWN"
+                      ],
+                      "default": "PROMOTE"
+                    },
+                    "target_class_id": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fee_structure_id": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "source_class_id",
+                    "target_class_id",
+                    "fee_structure_id"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 2000
+              },
+              "exceptions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "enrollment_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "PROMOTE",
+                        "REPEAT",
+                        "GRADUATED",
+                        "TRANSFERRED",
+                        "WITHDRAWN"
+                      ]
+                    },
+                    "target_class_id": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "roll_number": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 2,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "enrollment_id",
+                    "outcome",
+                    "target_class_id",
+                    "roll_number",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 20000
+              }
+            },
+            "required": [
+              "promotion_id",
+              "activation_on",
+              "generate_fees",
+              "mappings",
+              "exceptions"
+            ],
+            "additionalProperties": false
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "confirmation": {
+            "const": "ACTIVATE"
+          }
+        },
+        "required": [
+          "plan",
+          "token",
+          "confirmation"
+        ],
+        "additionalProperties": false
+      },
       "ReportRequest": {
         "type": "object",
         "properties": {
@@ -3150,6 +4120,33 @@
               }
             ]
           },
+          "assigned_on": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "pattern": "^https:\\/\\/[^\\s]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "storage_path": {
             "anyOf": [
               {
@@ -3736,6 +4733,1121 @@
     }
   },
   "paths": {
+    "/promotion/workspace": {
+      "get": {
+        "summary": "School Admin only: academic years, configurations and promotion runs",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/promotion/{id}/students": {
+      "get": {
+        "summary": "School Admin only: source-year active promotion roster",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/promotion/prepare": {
+      "post": {
+        "summary": "Prepare an inactive year without enrolling students or assessing fees; Idempotency-Key required",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicYearPreparation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Prepared year and immutable class-copy mapping"
+          },
+          "403": {
+            "description": "School Admin or required management permission unavailable"
+          },
+          "409": {
+            "description": "Existing target records or idempotency conflict"
+          },
+          "422": {
+            "description": "Invalid year configuration"
+          }
+        }
+      }
+    },
+    "/promotion/preview": {
+      "post": {
+        "summary": "Read-only review: pupil outcomes, new fees, retained debts, blockers and 15-minute confirmation",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicPromotionPlan"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/promotion/activate": {
+      "post": {
+        "summary": "School Admin only: atomically end source enrollments, activate destination and assess reviewed pupils once",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicPromotionActivation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/promotion/history/{sessionId}": {
+      "get": {
+        "summary": "Read-only historical records; selecting a year never activates or promotes",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "students",
+                "attendance",
+                "results",
+                "homework",
+                "subjects",
+                "timetable",
+                "fees",
+                "payments"
+              ],
+              "default": "students"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/school-profile": {
+      "get": {
+        "summary": "Read school information with restricted administration fields for school leadership",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "put": {
+        "summary": "Save an incomplete or complete school profile; version checked, School Admin/Super Admin or explicitly delegated Principal",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/school-profile/timings": {
+      "put": {
+        "summary": "Update the existing school timings; School Admin or Super Admin only",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolTimingsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/school-profile/assets": {
+      "post": {
+        "summary": "Upload a private school logo/image (5 MB) or official policy PDF (10 MB)",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "title",
+                  "file"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "LOGO",
+                      "IMAGE",
+                      "POLICY"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 150
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/school-profile/assets/{id}": {
+      "get": {
+        "summary": "Download a currently published school profile image or policy; authorized school membership required",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a profile asset from visibility while retaining its historical metadata and storage object",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/schools/{schoolId}/profile": {
+      "get": {
+        "summary": "Read school information with restricted administration fields for school leadership",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "schoolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "put": {
+        "summary": "Save an incomplete or complete school profile; version checked, School Admin/Super Admin or explicitly delegated Principal",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "schoolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/schools/{schoolId}/profile/timings": {
+      "put": {
+        "summary": "Update the existing school timings; School Admin or Super Admin only",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "schoolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolTimingsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/schools/{schoolId}/profile/assets": {
+      "post": {
+        "summary": "Upload a private school logo/image (5 MB) or official policy PDF (10 MB)",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "schoolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "title",
+                  "file"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "LOGO",
+                      "IMAGE",
+                      "POLICY"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 150
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/platform/schools/{schoolId}/profile/assets/{id}": {
+      "get": {
+        "summary": "Download a currently published school profile image or policy; authorized school membership required",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "schoolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a profile asset from visibility while retaining its historical metadata and storage object",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "schoolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
     "/resources/students": {
       "get": {
         "summary": "List scoped students",
@@ -14622,7 +16734,7 @@
         }
       },
       "post": {
-        "summary": "Platform operation /schools",
+        "summary": "Register a school with required identity, plan and optional basic contact details; full profile remains resumable",
         "security": [
           {
             "UserJWT": []
@@ -14639,6 +16751,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolRegistration"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
