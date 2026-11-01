@@ -6,7 +6,6 @@ import { configured, useAuth } from '../../lib/auth';
 import { resourceInfo } from '../resources/metadata';
 import { Button } from '../../components/ui/button';
 import { PageHeading, Panel, Badge } from '../../components/common';
-import { ActionDialog } from '../../components/ActionDialog';
 import AuthenticatorSetup from '../auth/AuthenticatorSetup';
 import PendingInvitations from '../auth/PendingInvitations';
 import { FamilyProfile } from './SchoolTools';
@@ -16,12 +15,12 @@ import RetentionPanel from './RetentionPanel';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/auth';
 import { label, display } from '../../lib/utils';
+import { schoolPath } from '../../lib/portals';
 import { Loading, ErrorState } from '../../components/common';
 export default function Settings() {
   const a = useAuth(),
     [error, setError] = useState(''),
     [success, setSuccess] = useState(''),
-    [profile, setProfile] = useState(false),
     plan = useQuery({
       queryKey: [a.school, 'subscription'],
       queryFn: () =>
@@ -93,9 +92,11 @@ export default function Settings() {
                   Enable browser notifications
                 </Button>
               )}
-              {a.me?.school?.permissions.includes('school.manage') && (
-                <Button variant="outline" size="sm" onClick={() => setProfile(true)}>
-                  School profile
+              {a.me?.school && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to={schoolPath('/school-information', a.me.school.role)}>
+                    School profile
+                  </Link>
                 </Button>
               )}
               {a.me?.school?.permissions.includes('users.manage') && (
@@ -223,19 +224,6 @@ export default function Settings() {
             ))}
         </div>
       </Panel>
-      <ActionDialog
-        open={profile}
-        close={() => setProfile(false)}
-        title="School profile"
-        endpoint="/school"
-        method="PATCH"
-        onResult={() => a.refetch()}
-        fields={[
-          { key: 'name', default: a.me?.school?.school_name },
-          { key: 'timezone', default: a.me?.school?.timezone },
-          { key: 'locale', options: ['en-IN', 'hi-IN'], default: a.me?.locale || 'en-IN' },
-        ]}
-      />
     </>
   );
 }

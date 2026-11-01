@@ -31,7 +31,13 @@ it('preserves every legacy lecture and existing school settings while installing
     await db.exec(await readFile('db/migrations/' + migration, 'utf8'));
     for (const file of migrations.filter((f) => f > migration))
       await db.exec(await readFile('db/migrations/' + file, 'utf8'));
-    expect((await db.query('SELECT * FROM timetable_entries ORDER BY id')).rows).toEqual(before);
+    const after = (await db.query('SELECT * FROM timetable_entries ORDER BY id')).rows;
+    // The year-link backfill changes the technical update timestamp. Every
+    // original lecture field, its identity and creation date must be retained.
+    expect(after.map(({ academic_session_id, updated_at, ...original }) => original)).toEqual(
+      before.map(({ updated_at, ...original }) => original),
+    );
+    expect(after.every((row) => row.academic_session_id === f.session)).toBe(true);
     expect((await db.query('SELECT settings FROM schools ORDER BY id')).rows).toEqual(settings);
     expect(
       (

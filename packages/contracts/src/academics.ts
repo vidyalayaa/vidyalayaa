@@ -4,6 +4,7 @@ export interface AcademicSession extends Record<string, unknown> {
   is_current: boolean;
   starts_on: string;
   ends_on: string;
+  closed_at?: string | null;
 }
 export interface AcademicClass extends Record<string, unknown> {
   id: string;

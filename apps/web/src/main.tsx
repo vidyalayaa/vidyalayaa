@@ -23,6 +23,7 @@ import { TeacherRoster, TeacherAssessments } from './features/operations/Teachin
 import './styles.css';
 import { portals, schoolPath, platformSections } from './lib/portals';
 const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
+const SchoolProfile = lazy(() => import('./features/school-profile/SchoolProfile'));
 const Academics = lazy(() => import('./features/academics/Academics'));
 const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
 const StudentProfile = lazy(() => import('./features/students/StudentProfile'));
@@ -35,6 +36,8 @@ const StudentResults = lazy(() =>
 );
 const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
 const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
+const HomeworkDiary = lazy(() => import('./features/homework/HomeworkDiary'));
+const AcademicYears = lazy(() => import('./features/academics/AcademicYears'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
 const Fees = lazy(() => import('./features/fees/Fees'));
 const LoginSessions = lazy(() => import('./features/auth/LoginSessions'));
@@ -216,6 +219,7 @@ function ResourcePage() {
   if (a.me?.school?.role === 'school_admin' && name === 'marks')
     return <SchoolResults key={a.school} />;
   if (name === 'timetable_entries') return <Timetable key={a.school} />;
+  if (name === 'assignments') return <HomeworkDiary key={a.school} />;
   if (name === 'fee_records') return <Fees key={a.school} />;
   if (
     a.me?.school?.role === 'school_admin' &&
@@ -298,6 +302,14 @@ function schoolRoutes() {
         }
       />
       <Route path="academics" element={<AcademicPage />} />
+      <Route
+        path="academic-years"
+        element={
+          <Permission code="academics.read">
+            <AcademicYears />
+          </Permission>
+        }
+      />
       <Route
         path="classroom"
         element={
@@ -404,6 +416,7 @@ function schoolRoutes() {
         }
       />
       <Route path="settings" element={<Settings />} />
+      <Route path="school-information" element={<SchoolProfile />} />
       <Route path="settings/security" element={<LoginSessions />} />
       <Route path="settings/account" element={<AccountSettings />} />
     </>
@@ -422,6 +435,7 @@ const router = createBrowserRouter(
         <Route path=":portal" element={<PortalGate />}>
           {schoolRoutes()}
         </Route>
+        <Route path="platform/schools/:schoolId/profile" element={<SchoolProfile />} />
         {platformSections.map((section) => (
           <Route key={section} path={`platform/${section}`} element={<Platform />} />
         ))}

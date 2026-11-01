@@ -10,9 +10,13 @@ import { generatePeriods, weekdays } from './timetable-utils';
 export default function TimingForm({
   initial,
   close,
+  endpoint = '/timetable/settings',
+  onSaved,
 }: {
   initial: TimetableSettings;
   close: () => void;
+  endpoint?: string;
+  onSaved?: () => Promise<unknown>;
 }) {
   const a = useAuth(),
     qc = useQueryClient(),
@@ -27,15 +31,22 @@ export default function TimingForm({
       const value = schoolTimingsSchema.parse(settings),
         body = JSON.stringify({ expected_version: expectedVersion, settings: value });
       if (retry.current.body !== body) retry.current = { body, key: crypto.randomUUID() };
-      return api('/timetable/settings', {
-        method: 'PUT',
-        headers: { 'Idempotency-Key': retry.current.key },
-        body,
-      });
+      return api(
+        endpoint,
+        {
+          method: 'PUT',
+          headers: { 'Idempotency-Key': retry.current.key },
+          body,
+        },
+        true,
+        'json',
+        a.me ? { userId: a.me.id, schoolId: a.requestSchool } : undefined,
+      );
     },
     onSuccess: async () => {
       setDirty(false);
       await qc.invalidateQueries({ queryKey: [a.school] });
+      await onSaved?.();
       close();
     },
     onError: (e: Error & { issues?: { message: string }[] }) =>

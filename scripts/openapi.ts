@@ -50,6 +50,13 @@ import {
   calendarDeleteSchema,
   schoolTimingsSchema,
   schoolTimingsUpdateSchema,
+  prepareYearSchema,
+  promotionPlanSchema,
+  schoolProfileUpdateSchema,
+  schoolProfileDetailsSchema,
+  schoolProfileAdminSchema,
+  schoolCreateSchema,
+  schoolAssetSchema,
 } from '@vidyalayaa/contracts';
 // Generate from the same schemas used by Express and the browser. Do not edit JSON by hand.
 function json(schema: z.ZodTypeAny): Record<string, unknown> {
@@ -117,6 +124,11 @@ function json(schema: z.ZodTypeAny): Record<string, unknown> {
   }
 }
 const schemas = {
+  SchoolProfileUpdate: schoolProfileUpdateSchema,
+  SchoolPublicProfile: schoolProfileDetailsSchema,
+  SchoolProfileAdministration: schoolProfileAdminSchema,
+  SchoolRegistration: schoolCreateSchema,
+  SchoolProfileAsset: schoolAssetSchema,
   FirmwareManifest: firmwareManifestSchema,
   FirmwareApproval: firmwareApprovalSchema,
   HardwareVerification: hardwareVerificationSchema,
@@ -157,6 +169,15 @@ const schemas = {
   CalendarEventDelete: calendarDeleteSchema,
   SchoolTimings: schoolTimingsSchema,
   SchoolTimingsUpdate: schoolTimingsUpdateSchema,
+  AcademicYearPreparation: prepareYearSchema,
+  AcademicPromotionPlan: promotionPlanSchema,
+  AcademicPromotionActivation: z
+    .object({
+      plan: promotionPlanSchema,
+      token: z.string().max(300),
+      confirmation: z.literal('ACTIVATE'),
+    })
+    .strict(),
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
@@ -223,6 +244,136 @@ function operation(
     const merged = [...op.parameters, ...extra.parameters] as { name: string; in: string }[];
     op.parameters = [...new Map(merged.map((p) => [`${p.in}:${p.name}`, p])).values()];
   }
+}
+operation(
+  '/promotion/workspace',
+  'get',
+  'School Admin only: academic years, configurations and promotion runs',
+);
+operation(
+  '/promotion/{id}/students',
+  'get',
+  'School Admin only: source-year active promotion roster',
+);
+operation(
+  '/promotion/prepare',
+  'post',
+  'Prepare an inactive year without enrolling students or assessing fees; Idempotency-Key required',
+  'AcademicYearPreparation',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', maxLength: 128 },
+      },
+    ],
+    responses: {
+      '201': { description: 'Prepared year and immutable class-copy mapping' },
+      '403': { description: 'School Admin or required management permission unavailable' },
+      '409': { description: 'Existing target records or idempotency conflict' },
+      '422': { description: 'Invalid year configuration' },
+    },
+  },
+);
+operation(
+  '/promotion/preview',
+  'post',
+  'Read-only review: pupil outcomes, new fees, retained debts, blockers and 15-minute confirmation',
+  'AcademicPromotionPlan',
+);
+operation(
+  '/promotion/activate',
+  'post',
+  'School Admin only: atomically end source enrollments, activate destination and assess reviewed pupils once',
+  'AcademicPromotionActivation',
+);
+operation(
+  '/promotion/history/{sessionId}',
+  'get',
+  'Read-only historical records; selecting a year never activates or promotes',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'section',
+        in: 'query',
+        schema: {
+          type: 'string',
+          enum: [
+            'students',
+            'attendance',
+            'results',
+            'homework',
+            'subjects',
+            'timetable',
+            'fees',
+            'payments',
+          ],
+          default: 'students',
+        },
+      },
+      { name: 'class_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+    ],
+  },
+);
+for (const base of ['/school-profile', '/platform/schools/{schoolId}/profile']) {
+  operation(
+    base,
+    'get',
+    'Read school information with restricted administration fields for school leadership',
+  );
+  operation(
+    base,
+    'put',
+    'Save an incomplete or complete school profile; version checked, School Admin/Super Admin or explicitly delegated Principal',
+    'SchoolProfileUpdate',
+  );
+  operation(
+    base + '/timings',
+    'put',
+    'Update the existing school timings; School Admin or Super Admin only',
+    'SchoolTimingsUpdate',
+  );
+  operation(
+    base + '/assets',
+    'post',
+    'Upload a private school logo/image (5 MB) or official policy PDF (10 MB)',
+    undefined,
+    'UserJWT',
+    {
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              required: ['kind', 'title', 'file'],
+              properties: {
+                kind: { type: 'string', enum: ['LOGO', 'IMAGE', 'POLICY'] },
+                title: { type: 'string', minLength: 1, maxLength: 150 },
+                file: { type: 'string', format: 'binary' },
+              },
+            },
+          },
+        },
+      },
+    },
+  );
+  operation(
+    base + '/assets/{id}',
+    'get',
+    'Download a currently published school profile image or policy; authorized school membership required',
+  );
+  operation(
+    base + '/assets/{id}',
+    'delete',
+    'Remove a profile asset from visibility while retaining its historical metadata and storage object',
+  );
 }
 for (const name of Object.keys(resourceSchemas)) {
   operation(
@@ -1065,6 +1216,12 @@ for (const p of ['/schools', '/devices', '/plans', '/support-grants']) {
   operation('/platform' + p, 'get', `Platform metadata ${p}`);
   if (p !== '/plans') operation('/platform' + p, 'post', `Platform operation ${p}`);
 }
+operation(
+  '/platform/schools',
+  'post',
+  'Register a school with required identity, plan and optional basic contact details; full profile remains resumable',
+  'SchoolRegistration',
+);
 operation(
   '/platform/operations',
   'get',

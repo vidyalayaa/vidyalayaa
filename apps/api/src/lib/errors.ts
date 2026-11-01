@@ -87,6 +87,8 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         TIMETABLE_ASSIGNMENT_INVALID:
           'Choose an active subject teacher assigned to this class and section.',
         TIMETABLE_PERIOD_INVALID: 'Choose a configured school day and lecture period.',
+        ACADEMIC_YEAR_CLOSED:
+          'This academic year is closed. Its academic records are read-only; outstanding fees can still be collected.',
         TIMETABLE_TIMINGS_INVALID:
           'School timings contain invalid or overlapping lectures or breaks.',
         TIMETABLE_VERSION_CONFLICT: 'School timings changed. Refresh before saving again.',

@@ -8,6 +8,7 @@ import { captureFailure } from '../../api/src/lib/monitoring.js';
 import { transaction } from '../../api/src/lib/db.js';
 
 const tables = [
+  'school_profile_assets',
   'support_requests',
   'school_memberships',
   'academic_sessions',
@@ -144,7 +145,7 @@ export async function generateSchoolExport(
         const snapshot = (await tx.query('SELECT transaction_timestamp() AS ts')).rows[0].ts;
         const school = (
           await tx.query(
-            'SELECT school_code,name,timezone,status,settings FROM schools WHERE id=$1',
+            'SELECT school_code,name,timezone,status,settings,profile,profile_version FROM schools WHERE id=$1',
             [schoolId],
           )
         ).rows[0];
@@ -152,6 +153,18 @@ export async function generateSchoolExport(
           'school.json',
           Buffer.from(json({ snapshot_at: snapshot, school })),
           'application/json',
+        );
+        const administration = (
+          await tx.query(
+            'SELECT school_id,details,principal_edit_authorized,updated_at FROM school_profile_private WHERE school_id=$1',
+            [schoolId],
+          )
+        ).rows;
+        await stage(
+          'school-profile-private.json',
+          Buffer.from(json(administration)),
+          'application/json',
+          administration.length,
         );
         const users = (await tx.query('SELECT * FROM app.export_school_users()')).rows;
         await stage('users.json', Buffer.from(json(users)), 'application/json', users.length);

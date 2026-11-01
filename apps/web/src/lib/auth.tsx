@@ -347,7 +347,7 @@ export async function api<T = Record<string, unknown>>(
     throw new HttpError(
       'CONTEXT_CHANGED',
       409,
-      'Your account or school changed. Return to the original account and school before retrying these marks.',
+      'Your account or school changed. Return to the original account and school before retrying this change.',
     );
   const headers = new Headers(options.headers);
   if (session) headers.set('Authorization', `Bearer ${session.access_token}`);
@@ -445,6 +445,8 @@ interface Auth {
   error: Error | null;
   refetch: () => void;
   school: string;
+  // The actual API selector can be empty when the server resolves one membership.
+  requestSchool: string;
   setSchool: (school: string) => void;
   logout: () => Promise<void>;
 }
@@ -454,6 +456,7 @@ const Context = createContext<Auth>({
   error: null,
   refetch: () => {},
   school: '',
+  requestSchool: '',
   setSchool: () => {},
   logout: async () => {},
 });
@@ -583,6 +586,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           me.refetch();
         },
         school: me.data?.school?.school_id || school,
+        requestSchool: school,
         setSchool,
         logout,
       }}

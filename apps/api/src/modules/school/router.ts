@@ -1,4 +1,7 @@
 import { notificationsRouter } from './notifications.js';
+import { homeworkRouter, scheduleHomework } from './homework.js';
+import { promotionRouter } from './promotion.js';
+import { schoolProfileRouter } from '../school-profile/router.js';
 import { parentWorkspaceRouter } from './parent-workspace.js';
 import { studentProfileRouter } from './student-profile.js';
 import { subjectMaterialsRouter } from './materials.js';
@@ -179,6 +182,7 @@ export function schoolAccess(pool: pg.Pool) {
 }
 export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Config) {
   const router = Router();
+  router.use('/school-profile', schoolProfileRouter(pool, storage, { requireWrite }));
   router.use('/parent', parentWorkspaceRouter(pool));
   router.use('/student', studentProfileRouter(pool));
   router.use('/materials', subjectMaterialsRouter(pool));
@@ -188,6 +192,11 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/timetable', timetableRouter(pool, { requireWrite, withIdempotency }));
   router.use('/fees', feesRouter(pool, { requireWrite, withIdempotency }));
   router.use('/notifications', notificationsRouter(pool, { requireWrite }));
+  router.use('/homework', homeworkRouter(pool, requireWrite));
+  router.use(
+    '/promotion',
+    promotionRouter(pool, { requireWrite, withIdempotency }, config.TOKEN_ENCRYPTION_KEY),
+  );
   router.get(
     '/school/retention',
     permission('school.manage'),
@@ -869,6 +878,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
             )
           ).rows[0];
           if (name === 'announcements') await scheduleAnnouncement(tx, a.context.schoolId, row);
+          if (name === 'assignments') await scheduleHomework(tx, a.context.schoolId, row);
           await audit(tx, a.context.schoolId, a.id, `${name}.create`, name, row.id);
           return row;
         });
@@ -950,6 +960,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           )
         ).rows[0];
         if (name === 'announcements') await scheduleAnnouncement(tx, a.context.schoolId, updated);
+        if (name === 'assignments') await scheduleHomework(tx, a.context.schoolId, updated);
         await audit(tx, a.context.schoolId, a.id, `${name}.update`, name, id);
         return updated;
       });

@@ -209,7 +209,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
             )),
             sessions: (
               await tx.query(
-                'SELECT id,name,is_current,starts_on,ends_on FROM academic_sessions WHERE school_id=$1 AND retired_at IS NULL ORDER BY starts_on DESC,id',
+                'SELECT id,name,is_current,starts_on,ends_on,closed_at FROM academic_sessions WHERE school_id=$1 AND retired_at IS NULL ORDER BY starts_on DESC,id',
                 [a.context.schoolId],
               )
             ).rows,

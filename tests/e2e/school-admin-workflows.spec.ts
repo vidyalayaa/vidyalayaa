@@ -564,9 +564,10 @@ test('School Admin imports students and archives a subject without removing hist
 
 test('School Admin profile settings refresh the workspace name', async ({ page, authAppURL }) => {
   await page.goto(authAppURL + '/admin/settings');
-  await page.getByRole('button', { name: 'School profile', exact: true }).click();
-  await fill(page, { 'action-name': 'Renamed website school' });
-  await save(page, 'Save');
+  await page.getByRole('link', { name: 'School profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit school profile', exact: true }).click();
+  await page.getByLabel('School name', { exact: true }).fill('Renamed website school');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
   await expect(page.locator('.school-selector strong')).toHaveText('Renamed website school');
 });
 

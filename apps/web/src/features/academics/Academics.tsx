@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, ChevronDown, GraduationCap, Plus, Search, Users } from 'lucide-react';
 import type {
@@ -142,6 +143,9 @@ export default function Academics() {
         description="Classes, sections, subjects, student counts and teachers, in one place."
         actions={
           <>
+            <Button asChild variant="outline">
+              <Link to="/admin/academic-years">Academic-year promotion</Link>
+            </Button>
             <Button
               variant="outline"
               onClick={() => setSessionsOpen((v) => !v)}
@@ -199,12 +203,13 @@ export default function Academics() {
                     <h3 className="font-medium">
                       {s.name}
                       {s.is_current ? ' · Current' : ''}
+                      {s.closed_at ? ' · Closed · Read-only' : ''}
                     </h3>
                     <p className="text-sm text-stone-500">
                       {s.starts_on.slice(0, 10)} – {s.ends_on.slice(0, 10)}
                     </p>
                   </div>
-                  {can('academics.write') && (
+                  {can('academics.write') && !s.closed_at && (
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -314,27 +319,29 @@ export default function Academics() {
                       </p>
                     </div>
                   </div>
-                  {can('academics.write') && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label={`Add section to Class ${first.grade} · ${first.academic_session_label}`}
-                      onClick={() =>
-                        open({
-                          resource: 'classes',
-                          title: `Add section to Class ${first.grade}`,
-                          preset: {
-                            grade: first.grade,
-                            academic_session_id: first.academic_session_id,
-                          },
-                          hidden: ['grade', 'academic_session_id'],
-                          scope: `new-section:${first.academic_session_id}:${first.grade}`,
-                        })
-                      }
-                    >
-                      <Plus size={15} /> Add section
-                    </Button>
-                  )}
+                  {can('academics.write') &&
+                    !q.data?.sessions.find((s) => s.id === first.academic_session_id)
+                      ?.closed_at && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label={`Add section to Class ${first.grade} · ${first.academic_session_label}`}
+                        onClick={() =>
+                          open({
+                            resource: 'classes',
+                            title: `Add section to Class ${first.grade}`,
+                            preset: {
+                              grade: first.grade,
+                              academic_session_id: first.academic_session_id,
+                            },
+                            hidden: ['grade', 'academic_session_id'],
+                            scope: `new-section:${first.academic_session_id}:${first.grade}`,
+                          })
+                        }
+                      >
+                        <Plus size={15} /> Add section
+                      </Button>
+                    )}
                 </div>
                 <div className="divide-y divide-stone-100">
                   {[...sections]
@@ -343,7 +350,13 @@ export default function Academics() {
                       <ClassSection
                         key={c.id}
                         c={c}
-                        can={can}
+                        can={(permission) =>
+                          can(permission) &&
+                          !(
+                            permission.endsWith('.write') &&
+                            q.data?.sessions.find((s) => s.id === c.academic_session_id)?.closed_at
+                          )
+                        }
                         open={open}
                         archive={setArchive}
                         addSubject={setSubjectClass}

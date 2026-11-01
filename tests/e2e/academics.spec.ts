@@ -63,7 +63,7 @@ test('subjects created in one class never appear in another class subject choice
   page.once('dialog', (d) => d.accept());
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.goto(authAppURL + '/admin/r/assignments');
-  await page.getByRole('button', { name: 'Add record', exact: true }).click();
+  await page.getByRole('button', { name: 'Add homework', exact: true }).click();
   await expect(page.getByRole('dialog').locator('#subject_id')).toBeDisabled();
   await page.getByRole('dialog').locator('#class_id').selectOption(f.classId);
   await expect(page.getByRole('dialog').locator('#subject_id option')).toContainText([
