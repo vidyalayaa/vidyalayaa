@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { rootCertificates } from 'node:tls';
+import { X509Certificate } from 'node:crypto';
 import type { Config } from './config.js';
 export type Tx = Pick<pg.PoolClient, 'query'>;
 export interface TenantContext {
@@ -73,11 +74,26 @@ export function databaseConnectionOptions(url: string, config: DatabaseTlsConfig
     connection.searchParams.delete(key);
 
   const rawCa = config.DB_CA_CERT?.trim();
-  const ca = rawCa
+  const customCa = rawCa
     ? rawCa.replace(/^["']|["']$/g, '').replace(/\\r\\n|\\n/g, '\n')
-    : /\.(supabase\.co|supabase\.com)$/.test(host)
-      ? [...rootCertificates, SUPABASE_ROOT_2021_CA]
-      : undefined;
+    : undefined;
+  if (customCa) {
+    const pem = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g;
+    const certificates = customCa.match(pem);
+    try {
+      if (!certificates?.length || customCa.replace(pem, '').trim()) throw new Error();
+      for (const certificate of certificates) new X509Certificate(certificate);
+    } catch {
+      throw new Error(
+        'DB_CA_CERT must contain complete PEM certificates. Replace it with the database CA certificate, or remove it to use the built-in Supabase trust roots.',
+      );
+    }
+  }
+  // A custom certificate must not remove Supabase's trusted roots. A copied or
+  // stale provider certificate otherwise causes SELF_SIGNED_CERT_IN_CHAIN.
+  const ca = /\.(supabase\.co|supabase\.com)$/.test(host)
+    ? [...rootCertificates, SUPABASE_ROOT_2021_CA, ...(customCa ? [customCa] : [])]
+    : customCa;
   return {
     connectionString: connection.toString(),
     ssl:

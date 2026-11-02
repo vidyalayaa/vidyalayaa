@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import pg from 'pg';
-import type { ConnectionOptions } from 'node:tls';
+import { rootCertificates, type ConnectionOptions } from 'node:tls';
 import { X509Certificate } from 'node:crypto';
 import { databaseConnectionOptions, makePool } from '../../apps/api/src/lib/db';
 
@@ -40,9 +40,49 @@ it('accepts real multiline or escaped CA PEM without losing it to URL parameters
   const ca = (effectiveTls(connection).ca as string[]).at(-1)!;
   for (const configured of [ca, `"${ca.replaceAll('\n', '\\n')}"`, ca.replaceAll('\n', '\\r\\n')]) {
     const tls = effectiveTls(`${connection}?sslmode=require`, configured);
-    expect(tls.ca).toBe(ca);
+    expect(tls.ca).toContain(ca);
     expect(tls.rejectUnauthorized).toBe(true);
   }
+});
+
+it('retains the trusted Supabase root when a different valid CA is configured', () => {
+  const extra = rootCertificates[0];
+  const tls = effectiveTls(`${connection}?sslmode=require`, extra);
+  expect(tls.rejectUnauthorized).toBe(true);
+  const ca = tls.ca as string[];
+  expect(ca).toContain(extra);
+  expect(
+    ca.some((certificate) =>
+      new X509Certificate(certificate).subject.includes('Supabase Root 2021 CA'),
+    ),
+  ).toBe(true);
+});
+
+it('preserves an explicitly configured CA for a non-Supabase database', () => {
+  const extra = rootCertificates[0];
+  const tls = effectiveTls('postgresql://fixture:fixture@other-provider.example/postgres', extra);
+  expect(tls.ca).toBe(extra);
+  expect(tls.rejectUnauthorized).toBe(true);
+});
+
+it.each([
+  'YOUR_DATABASE_CA',
+  '-----BEGIN CERTIFICATE-----\nbroken\n-----END CERTIFICATE-----',
+  'private-certificate-value',
+])('rejects malformed CA configuration without exposing its contents', (configured) => {
+  expect(() => effectiveTls(connection, configured)).toThrow(
+    'DB_CA_CERT must contain complete PEM certificates',
+  );
+  try {
+    effectiveTls(connection, configured);
+  } catch (error) {
+    expect(String(error)).not.toContain(configured);
+  }
+});
+
+it('accepts a bundle of multiple valid extra CA certificates', () => {
+  const bundle = rootCertificates.slice(0, 2).join('\n');
+  expect(effectiveTls(connection, bundle).ca).toContain(bundle);
 });
 
 it('uses standard trusted roots for other providers and never selects a CA from credentials', () => {
