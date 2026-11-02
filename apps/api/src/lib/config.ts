@@ -11,6 +11,7 @@ export const configSchema = z.object({
   WEB_ORIGINS: z.string().min(1),
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/),
   DB_SSL: z.enum(['true', 'false']).default('true'),
+  DB_SSL_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).optional(),
   DB_CA_CERT: z.string().optional(),
   DB_POOL_SIZE: z.coerce.number().int().min(1).max(50).default(10),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),

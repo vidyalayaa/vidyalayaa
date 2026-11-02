@@ -34,7 +34,9 @@ o/bKiIz+Fq8=
 
 export function makePool(
   url: string,
-  config: Pick<Config, 'DB_SSL' | 'DB_CA_CERT' | 'DB_POOL_SIZE'>,
+  config: Pick<Config, 'DB_SSL' | 'DB_CA_CERT' | 'DB_POOL_SIZE'> & {
+    DB_SSL_REJECT_UNAUTHORIZED?: 'true' | 'false';
+  },
 ) {
   const rawCa = config.DB_CA_CERT?.trim();
   const ca = rawCa
@@ -43,13 +45,20 @@ export function makePool(
       ? SUPABASE_ROOT_2021_CA
       : undefined;
 
+  const rejectUnauthorized =
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0'
+      ? false
+      : config.DB_SSL_REJECT_UNAUTHORIZED !== undefined
+        ? config.DB_SSL_REJECT_UNAUTHORIZED === 'true'
+        : Boolean(config.DB_CA_CERT);
+
   return new pg.Pool({
     connectionString: url,
     max: config.DB_POOL_SIZE,
     ssl:
       config.DB_SSL === 'true'
         ? {
-            rejectUnauthorized: true,
+            rejectUnauthorized,
             ...(ca ? { ca } : {}),
           }
         : false,

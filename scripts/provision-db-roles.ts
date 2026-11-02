@@ -12,7 +12,12 @@ const db = new pg.Client({
     process.env.DB_SSL === 'false'
       ? false
       : {
-          rejectUnauthorized: true,
+          rejectUnauthorized:
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0'
+            ? false
+            : process.env.DB_SSL_REJECT_UNAUTHORIZED !== undefined
+              ? process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true'
+              : Boolean(process.env.DB_CA_CERT),
           ...(process.env.DB_CA_CERT ? { ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n') } : {}),
         },
 });
