@@ -83,7 +83,7 @@ export function databaseConnectionOptions(url: string, config: DatabaseTlsConfig
     ssl:
       config.DB_SSL === 'true'
         ? {
-            rejectUnauthorized: true,
+            rejectUnauthorized,
             ...(ca ? { ca } : {}),
           }
         : false,

@@ -3,6 +3,7 @@ import { assertRuntimeRole } from '../../api/src/lib/runtime-role.js';
 const pool = makePool(process.env.WORKER_DATABASE_URL || '', {
   DB_SSL: process.env.DB_SSL === 'false' ? 'false' : 'true',
   DB_CA_CERT: process.env.DB_CA_CERT,
+  DB_SSL_REJECT_UNAUTHORIZED: process.env.DB_SSL_REJECT_UNAUTHORIZED === "true" ? "true" : process.env.DB_SSL_REJECT_UNAUTHORIZED === "false" ? "false" : undefined,
   DB_POOL_SIZE: 1,
 });
 try {
