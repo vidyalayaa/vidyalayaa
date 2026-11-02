@@ -20,6 +20,7 @@ const env = z
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     TOKEN_ENCRYPTION_KEY: z.string().regex(/^[a-fA-F0-9]{64}$/),
     DB_SSL: z.enum(['true', 'false']).default('true'),
+    DB_SSL_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).optional(),
     DB_CA_CERT: z.string().optional(),
     DB_POOL_SIZE: z.coerce.number().default(5),
   })
