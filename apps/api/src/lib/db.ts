@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { rootCertificates } from 'node:tls';
 import type { Config } from './config.js';
 export type Tx = Pick<pg.PoolClient, 'query'>;
 export interface TenantContext {
@@ -32,20 +33,53 @@ CMTyZKG3XEu5Ghl1LEnI3QmEKsqaCLv12BnVjbkSeZsMnevJPs1Ye6TjjJwdik5P
 o/bKiIz+Fq8=
 -----END CERTIFICATE-----`;
 
-export function makePool(
-  url: string,
-  config: Pick<Config, 'DB_SSL' | 'DB_CA_CERT' | 'DB_POOL_SIZE'>,
-) {
+type DatabaseTlsConfig = Pick<Config, 'DB_SSL' | 'DB_CA_CERT'> & {
+  DB_SSL_REJECT_UNAUTHORIZED?: 'true' | 'false';
+};
+
+/** Keep URL SSL parameters from replacing the verified TLS options in node-postgres. */
+export function databaseConnectionOptions(url: string, config: DatabaseTlsConfig): pg.ClientConfig {
+  if (
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ||
+    process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ||
+    config.DB_SSL_REJECT_UNAUTHORIZED === 'false'
+  )
+    throw new Error(
+      'Database certificate verification must stay enabled. Remove NODE_TLS_REJECT_UNAUTHORIZED=0 and DB_SSL_REJECT_UNAUTHORIZED=false; configure DB_CA_CERT instead.',
+    );
+  if (process.env.NODE_ENV === 'production' && config.DB_SSL !== 'true')
+    throw new Error('Verified database TLS is mandatory in production.');
+
+  let connection: URL;
+  try {
+    connection = new URL(url);
+    if (!['postgres:', 'postgresql:'].includes(connection.protocol)) throw new Error();
+  } catch {
+    // URL parser errors can include the password-bearing input.
+    throw new Error('Invalid database connection URL. Use a PostgreSQL connection URL.');
+  }
+  const host = (connection.searchParams.get('host') || connection.hostname)
+    .toLowerCase()
+    .replace(/\.$/, '');
+  for (const key of [
+    'ssl',
+    'sslmode',
+    'sslcert',
+    'sslkey',
+    'sslrootcert',
+    'sslnegotiation',
+    'uselibpqcompat',
+  ])
+    connection.searchParams.delete(key);
+
   const rawCa = config.DB_CA_CERT?.trim();
   const ca = rawCa
-    ? rawCa.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n')
-    : url.includes('supabase.co') || url.includes('supabase.com')
-      ? SUPABASE_ROOT_2021_CA
+    ? rawCa.replace(/^["']|["']$/g, '').replace(/\\r\\n|\\n/g, '\n')
+    : /\.(supabase\.co|supabase\.com)$/.test(host)
+      ? [...rootCertificates, SUPABASE_ROOT_2021_CA]
       : undefined;
-
-  return new pg.Pool({
-    connectionString: url,
-    max: config.DB_POOL_SIZE,
+  return {
+    connectionString: connection.toString(),
     ssl:
       config.DB_SSL === 'true'
         ? {
@@ -54,8 +88,15 @@ export function makePool(
           }
         : false,
     connectionTimeoutMillis: 5000,
-    idleTimeoutMillis: 30000,
     application_name: 'vidyalayaa',
+  };
+}
+
+export function makePool(url: string, config: DatabaseTlsConfig & Pick<Config, 'DB_POOL_SIZE'>) {
+  return new pg.Pool({
+    ...databaseConnectionOptions(url, config),
+    max: config.DB_POOL_SIZE,
+    idleTimeoutMillis: 30000,
   });
 }
 export async function transaction<T>(

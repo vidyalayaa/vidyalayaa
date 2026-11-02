@@ -18,8 +18,8 @@ try {
   );
   process.exit(1);
 }
-const server = app.listen(config.PORT, () =>
-  console.info(`Vidyalayaa API listening on ${config.PORT}`),
+const server = app.listen(config.PORT, '0.0.0.0', () =>
+  console.info(`Vidyalayaa API listening on 0.0.0.0:${config.PORT}`),
 );
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => {

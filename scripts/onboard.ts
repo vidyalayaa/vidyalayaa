@@ -1,19 +1,16 @@
 import 'dotenv/config';
 import pg from 'pg';
+import { databaseConnectionOptions } from '../apps/api/src/lib/db.js';
 import { z } from 'zod';
 // Link an already verified Supabase identity. Never chooses an identity by untrusted email.
 const [command, user, school, role] = process.argv.slice(2),
   uid = z.string().uuid().parse(user);
-const db = new pg.Client({
-  connectionString: process.env.MIGRATION_DATABASE_URL,
-  ssl:
-    process.env.DB_SSL === 'false'
-      ? false
-      : {
-          rejectUnauthorized: true,
-          ...(process.env.DB_CA_CERT ? { ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n') } : {}),
-        },
-});
+const db = new pg.Client(
+  databaseConnectionOptions(process.env.MIGRATION_DATABASE_URL || '', {
+    DB_SSL: process.env.DB_SSL === 'false' ? 'false' : 'true',
+    DB_CA_CERT: process.env.DB_CA_CERT,
+  }),
+);
 await db.connect();
 try {
   await db.query('BEGIN');

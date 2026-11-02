@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import pg from 'pg';
+import { databaseConnectionOptions } from '../apps/api/src/lib/db.js';
 import { readFile, readdir } from 'node:fs/promises';
 import {
   canonicalMigration,
@@ -9,16 +10,12 @@ import {
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url)
   throw new Error('Set MIGRATION_DATABASE_URL to a direct/session migration-owner connection.');
-const client = new pg.Client({
-  connectionString: url,
-  ssl:
-    process.env.DB_SSL === 'false'
-      ? false
-      : {
-          rejectUnauthorized: true,
-          ...(process.env.DB_CA_CERT ? { ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n') } : {}),
-        },
-});
+const client = new pg.Client(
+  databaseConnectionOptions(url, {
+    DB_SSL: process.env.DB_SSL === 'false' ? 'false' : 'true',
+    DB_CA_CERT: process.env.DB_CA_CERT,
+  }),
+);
 await client.connect();
 try {
   if (process.argv.includes('--verify')) {
