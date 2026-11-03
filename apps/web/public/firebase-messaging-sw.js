@@ -10,6 +10,8 @@ self.addEventListener('push', (event) => {
     for(const client of visible)client.postMessage({type:'VIDYALAYAA_SCHOOL_UPDATE',school_id});
     await self.registration.showNotification(n.title||'Vidyalayaa',{
       body:n.body||'A school update is available.',tag:payload.data?.delivery_id||undefined,
+      icon:'/icon-192.png',
+      badge:'/notification-badge.png',
       data:{url:'/notifications'},
     });
   })());

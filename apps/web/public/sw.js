@@ -69,7 +69,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(n.title || 'Vidyalayaa', {
       body: n.body || 'A school update is available.',
       icon: '/icon-192.png',
-      badge: '/favicon-32x32.png',
+      badge: '/notification-badge.png',
       tag: payload.data?.delivery_id || undefined,
       data: { url: '/' },
     }),
