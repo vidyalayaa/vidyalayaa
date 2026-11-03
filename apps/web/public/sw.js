@@ -24,12 +24,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache API or cross-origin requests
+  // Vite modules must come from the development server so React uses one module graph.
   if (
     event.request.method !== 'GET' ||
     url.origin !== self.location.origin ||
     url.pathname.startsWith('/api') ||
-    url.pathname.startsWith('/auth')
+    url.pathname.startsWith('/auth') ||
+    /^\/(?:src\/|node_modules\/|@)/.test(url.pathname)
   ) {
     return;
   }

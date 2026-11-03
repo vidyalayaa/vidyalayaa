@@ -38,7 +38,42 @@ function loopbackAliases(): Plugin {
 }
 export default defineConfig({
   plugins: [react(), loopbackAliases()],
-  server: { port: 5173, proxy: { '/api': 'http://127.0.0.1:4000' } },
+  // Use fresh dependency URLs for browsers that cached the old optimized React graph.
+  cacheDir: 'node_modules/.vite-vidyalayaa',
+  resolve: { dedupe: ['react', 'react-dom'] },
+  // Keep the development dependency graph fixed while tabs are open. Discovering a
+  // dependency on a lazy route can otherwise rebuild the shared React chunk mid-session.
+  optimizeDeps: {
+    noDiscovery: true,
+    include: [
+      '@firebase/app',
+      '@firebase/messaging',
+      '@hookform/resolvers/zod',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-slot',
+      '@sentry/react',
+      '@supabase/supabase-js',
+      '@tanstack/react-query',
+      'class-variance-authority',
+      'clsx',
+      'lucide-react',
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react-hook-form',
+      'react-router-dom',
+      'react/jsx-dev-runtime',
+      'react/jsx-runtime',
+      'recharts',
+      'tailwind-merge',
+      'zod',
+    ],
+  },
+  server: {
+    port: 5173,
+    headers: { 'Cache-Control': 'no-store' },
+    proxy: { '/api': 'http://127.0.0.1:4000' },
+  },
   build: {
     sourcemap: false,
     rollupOptions: {

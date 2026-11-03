@@ -166,14 +166,32 @@ svg {
   bottom: 10px;
   border-radius: 50%;
 }
+.school-switcher {
+  margin-top: 36px;
+}
 .school-selector {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 36px;
   padding: 12px 10px;
   border: 1px solid #e7eae2;
   border-radius: 12px;
+}
+summary.school-selector {
+  cursor: pointer;
+  list-style: none;
+}
+summary.school-selector::-webkit-details-marker {
+  display: none;
+}
+summary.school-selector:hover {
+  background: #f8faf4;
+}
+.school-selector-chevron {
+  flex-shrink: 0;
+}
+.school-switcher[open] .school-selector-chevron {
+  transform: rotate(180deg);
 }
 .school-avatar {
   display: grid;
@@ -186,7 +204,7 @@ svg {
   color: #59674f;
   background: #f8faf4;
 }
-.school-selector > div {
+.school-selector-label {
   min-width: 0;
   flex: 1;
 }
@@ -198,17 +216,38 @@ svg {
   font-size: 12px;
   font-weight: 600;
 }
-.school-selector > div > span {
+.school-selector-label > span {
   display: block;
   font-size: 10px;
   color: var(--muted);
   margin-top: 5px;
   text-transform: capitalize;
 }
-.school-selector select {
-  font-size: 10px;
-  max-width: 100%;
+.school-actions {
+  margin-top: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.school-actions .nav-item[aria-current='page'] {
+  background: #e8f6cb;
+  color: #263d0e;
+  font-weight: 600;
+}
+.school-switch-control {
+  display: block;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.school-switch-control select {
+  display: block;
+  width: 100%;
   margin-top: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
 }
 .nav-label {
   font-size: 9px;

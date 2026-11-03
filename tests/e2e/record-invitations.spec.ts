@@ -51,6 +51,9 @@ async function session(page: Page, role = 'school_admin') {
   await page.route('**/api/v1/profile/family', (r) =>
     r.fulfill({ json: { profile: null, children: [] } }),
   );
+  await page.route('**/api/v1/memberships/counts', (r) =>
+    r.fulfill({ json: { staff: 0, parents: 0, students: 0 } }),
+  );
 }
 const empty = { data: [], page: 1, page_size: 25, total: 0 };
 
@@ -91,8 +94,14 @@ for (const role of ['parent', 'student', 'teacher', 'principal'])
       return r.fulfill({ status: 201, json: { id, status: 'SENT', email_sent: true } });
     });
     await page.goto(authAppURL + '/admin/members');
+    if (role === 'parent' || role === 'student')
+      await page.getByRole('tab', { name: role === 'parent' ? /^Parents/ : /^Students/ }).click();
     await page.getByRole('button', { name: 'Invite member', exact: true }).click();
     const dialog = page.getByRole('dialog');
+    if (role === 'parent' || role === 'student') {
+      await expect(dialog.getByLabel('Role', { exact: true })).toHaveValue(role);
+      await expect(dialog.getByLabel('Role', { exact: true }).locator('option')).toHaveCount(1);
+    }
     await dialog.getByLabel('Role', { exact: true }).selectOption(role);
     await expect(
       dialog.getByRole('button', { name: 'Send invitation', exact: true }),

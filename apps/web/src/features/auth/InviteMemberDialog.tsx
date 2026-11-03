@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InvitationCandidate, InvitationResult, Page, Role } from '@vidyalayaa/contracts';
+import {
+  memberCategoryRoles,
+  type InvitationCandidate,
+  type InvitationResult,
+  type MemberCategory,
+  type Page,
+  type Role,
+} from '@vidyalayaa/contracts';
 import { api, useAuth } from '../../lib/auth';
 import { schoolPath } from '../../lib/portals';
+import { label } from '../../lib/utils';
 import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import { ErrorState, Loading } from '../../components/common';
@@ -12,13 +20,16 @@ import Pagination from '../../components/Pagination';
 export default function InviteMemberDialog({
   close,
   onResult,
+  category,
 }: {
   close: () => void;
   onResult: (value: InvitationResult) => void;
+  category: MemberCategory;
 }) {
   const auth = useAuth(),
     client = useQueryClient();
-  const [role, setRole] = useState<Role>('teacher');
+  const eligibleRoles = memberCategoryRoles[category];
+  const [role, setRole] = useState<Role>(eligibleRoles[0]);
   const [record, setRecord] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -84,12 +95,11 @@ export default function InviteMemberDialog({
               invite.reset();
             }}
           >
-            <option value="teacher">Teacher</option>
-            <option value="principal">Principal</option>
-            <option value="parent">Parent</option>
-            <option value="student">Student</option>
-            <option value="school_admin">School Admin</option>
-            <option value="finance_staff">Finance staff</option>
+            {eligibleRoles.map((value) => (
+              <option key={value} value={value}>
+                {label(value)}
+              </option>
+            ))}
           </select>
         </div>
         <div>

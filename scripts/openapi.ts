@@ -27,6 +27,10 @@ import {
   manualSchema,
   reportSchema,
   inviteSchema,
+  memberCategories,
+  membershipStatuses,
+  invitationDisplayStatuses,
+  roles,
   bulkMarksSchema,
   singleMarkSchema,
   firstAdminSchema,
@@ -770,7 +774,26 @@ operation(
   'get',
   'Eligible existing records; users.manage; role required; optional page, page_size and search',
 );
-operation('/invitations', 'get', 'Paginated school invitations; users.manage');
+const memberListParameters = [
+  { name: 'category', in: 'query', schema: { type: 'string', enum: memberCategories } },
+  { name: 'role', in: 'query', schema: { type: 'string', enum: roles } },
+  { name: 'search', in: 'query', schema: { type: 'string', maxLength: 120 } },
+  { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+  { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+];
+operation(
+  '/invitations',
+  'get',
+  'Paginated school invitations with display status; users.manage',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      ...memberListParameters,
+      { name: 'status', in: 'query', schema: { type: 'string', enum: invitationDisplayStatuses } },
+    ],
+  },
+);
 operation(
   '/invitations/pending',
   'get',
@@ -1210,8 +1233,23 @@ for (const p of [
   '/audit',
   '/memberships',
   '/support-grants',
-])
-  operation(p, 'get', `Read ${p}`);
+]) {
+  if (p !== '/memberships') {
+    operation(p, 'get', `Read ${p}`);
+    continue;
+  }
+  operation(p, 'get', 'Paginated school memberships; users.manage', undefined, 'UserJWT', {
+    parameters: [
+      ...memberListParameters,
+      { name: 'status', in: 'query', schema: { type: 'string', enum: membershipStatuses } },
+    ],
+  });
+  operation(
+    '/memberships/counts',
+    'get',
+    'School membership counts by category across all statuses; users.manage',
+  );
+}
 for (const p of ['/schools', '/devices', '/plans', '/support-grants']) {
   operation('/platform' + p, 'get', `Platform metadata ${p}`);
   if (p !== '/plans') operation('/platform' + p, 'post', `Platform operation ${p}`);

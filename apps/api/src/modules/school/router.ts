@@ -21,6 +21,13 @@ import {
   correctionSchema,
   reportSchema,
   inviteSchema,
+  roles,
+  memberCategories,
+  memberCategoryRoles,
+  membershipStatuses,
+  invitationDisplayStatuses,
+  type MemberCounts,
+  type Role,
   uuid,
   date,
   attendanceStatuses,
@@ -1375,10 +1382,18 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         );
     }),
   );
+  const memberFilters = z.object({
+    category: z.enum(memberCategories).optional(),
+    role: z.enum(roles).optional(),
+    search: z.string().trim().max(120).default(''),
+  });
   router.get(
     '/invitations',
     permission('users.manage'),
     asyncRoute(async (req, res) => {
+      const filters = memberFilters
+        .extend({ status: z.enum(invitationDisplayStatuses).optional() })
+        .parse(req.query);
       res.json(
         await transaction(
           pool,
@@ -1386,8 +1401,25 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              'SELECT id,email,full_name,role_code,status,expires_at FROM school_invitations WHERE school_id=$1 ORDER BY created_at DESC,id',
-              [res.locals.actor.context.schoolId],
+              `SELECT id,email,full_name,role_code,status,expires_at,display_status FROM (
+                 SELECT id,email,full_name,role_code,status,expires_at,created_at,
+                   CASE WHEN status='ACCEPTED' THEN 'Accepted'
+                        WHEN status='REVOKED' THEN 'Cancelled'
+                        WHEN expires_at<=now() THEN 'Expired'
+                        ELSE 'Pending' END AS display_status
+                 FROM school_invitations WHERE school_id=$1
+                   AND role_code::text=ANY($2::text[])
+                   AND ($3::text IS NULL OR role_code::text=$3)
+                   AND strpos(lower(concat_ws(' ',full_name,email)),lower($4))>0
+               ) AS invitations WHERE ($5::text IS NULL OR display_status=$5)
+               ORDER BY created_at DESC,id`,
+              [
+                res.locals.actor.context.schoolId,
+                filters.category ? memberCategoryRoles[filters.category] : roles,
+                filters.role ?? null,
+                filters.search,
+                filters.status ?? null,
+              ],
               req.query,
             ),
           true,
@@ -1447,10 +1479,40 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     }),
   );
   router.get(
+    '/memberships/counts',
+    permission('users.manage'),
+    asyncRoute(async (_req, res) => {
+      const a = res.locals.actor;
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          async (tx) => {
+            const counts: MemberCounts = { staff: 0, parents: 0, students: 0 };
+            const { rows } = await tx.query<{ role: Role; total: number }>(
+              `SELECT r.code AS role,count(*)::int AS total FROM school_memberships m
+           JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 GROUP BY r.code`,
+              [a.context.schoolId],
+            );
+            for (const category of memberCategories)
+              counts[category] = rows
+                .filter((row) => memberCategoryRoles[category].includes(row.role))
+                .reduce((total, row) => total + row.total, 0);
+            return counts;
+          },
+          true,
+        ),
+      );
+    }),
+  );
+  router.get(
     '/memberships',
     permission('users.manage'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor;
+      const filters = memberFilters
+        .extend({ status: z.enum(membershipStatuses).optional() })
+        .parse(req.query);
       res.json(
         await transaction(
           pool,
@@ -1458,8 +1520,20 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              'SELECT m.id,m.user_id,u.full_name,u.email,r.code AS role,m.status FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 ORDER BY u.full_name,m.id',
-              [a.context.schoolId],
+              `SELECT m.id,m.user_id,u.full_name,u.email,r.code AS role,m.status
+               FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id
+               WHERE m.school_id=$1 AND r.code::text=ANY($2::text[])
+                 AND ($3::text IS NULL OR r.code::text=$3)
+                 AND strpos(lower(concat_ws(' ',u.full_name,u.email)),lower($4))>0
+                 AND ($5::text IS NULL OR m.status::text=$5)
+               ORDER BY u.full_name,m.id`,
+              [
+                a.context.schoolId,
+                filters.category ? memberCategoryRoles[filters.category] : roles,
+                filters.role ?? null,
+                filters.search,
+                filters.status ?? null,
+              ],
               req.query,
             ),
           true,

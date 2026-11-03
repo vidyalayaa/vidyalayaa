@@ -1,5 +1,5 @@
 import PushUpdates from '../features/notifications/PushUpdates';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -44,9 +44,7 @@ const navigationFeatures: Record<string, string> = {
   '/devices': 'nfc_attendance',
 };
 const items = [
-  { to: '/exports', text: 'School exports', icon: Layers3, permission: 'school.manage' },
   { to: '/', text: 'Overview', icon: LayoutDashboard },
-  { to: '/school-information', text: 'School information', icon: Building2 },
   { to: '/r/students', text: 'Students', icon: Users, permission: 'students.read' },
   { to: '/r/parents', text: 'Parents', icon: Users, permission: 'parents.read' },
   {
@@ -92,6 +90,7 @@ export default function Layout() {
     [online, setOnline] = useState(navigator.onLine),
     [confirmLogout, setConfirmLogout] = useState(false),
     [loggingOut, setLoggingOut] = useState(false),
+    schoolMenu = useRef<HTMLDetailsElement>(null),
     navigate = useNavigate(),
     location = useLocation();
 
@@ -131,6 +130,30 @@ export default function Layout() {
     a.me?.platform_role === 'SUPER_ADMIN' &&
     (!role || location.pathname.startsWith('/platform'));
   const name = platformOnly ? 'Vidyalayaa platform' : a.me?.school?.school_name || 'Your school';
+  const memberships = a.me?.memberships || [];
+  const canSwitchSchool = memberships.length > 1;
+  const canExportSchool = !platformOnly && (!configured || permissions.includes('school.manage'));
+  const closeSchoolMenu = () => {
+    if (schoolMenu.current) schoolMenu.current.open = false;
+    setOpen(false);
+  };
+  const schoolLabel = (
+    <>
+      <span className="school-avatar" aria-hidden="true">
+        <Building2 size={20} />
+      </span>
+      <span className="school-selector-label">
+        <strong>{name}</strong>
+        <span>
+          {configured
+            ? platformOnly
+              ? 'Super Admin'
+              : role?.replaceAll('_', ' ') || 'Select a workspace'
+            : 'Workspace setup'}
+        </span>
+      </span>
+    </>
+  );
   const path = (value: string) =>
     platformOnly && value === '/' ? '/platform' : schoolPath(value, role);
   const navigation: typeof items = platformOnly
@@ -274,38 +297,69 @@ export default function Layout() {
         >
           <X size={20} />
         </button>
-        <div className="school-selector">
-          <span className="school-avatar">
-            <Building2 size={20} />
-          </span>
-          <div>
-            <strong>{name}</strong>
-            {a.me?.memberships.length && a.me.memberships.length > 1 ? (
-              <select
-                aria-label="Active school"
-                value={a.school}
-                onChange={(e) => {
-                  a.setSchool(e.target.value);
-                  navigate('/');
-                }}
-              >
-                {a.me.memberships.map((s) => (
-                  <option value={s.school_id} key={s.school_id}>
-                    {s.school_name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span>
-                {configured
-                  ? a.me?.school?.role.replaceAll('_', ' ') ||
-                    (platformOnly ? 'Super Admin' : 'Select a workspace')
-                  : 'Workspace setup'}
-              </span>
-            )}
+        {!platformOnly || canSwitchSchool ? (
+          <details
+            ref={schoolMenu}
+            className="school-switcher"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                event.currentTarget.open = false;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && event.currentTarget.open) {
+                event.stopPropagation();
+                event.currentTarget.querySelector('summary')?.focus();
+                event.currentTarget.open = false;
+              }
+            }}
+          >
+            <summary className="school-selector" aria-label={`School menu: ${name}`}>
+              {schoolLabel}
+              <ChevronDown className="school-selector-chevron" size={14} aria-hidden="true" />
+            </summary>
+            <nav className="school-actions" aria-label="School actions">
+              {canSwitchSchool && (
+                <label className="school-switch-control">
+                  Active school
+                  <select
+                    value={a.school}
+                    onChange={(e) => {
+                      a.setSchool(e.target.value);
+                      closeSchoolMenu();
+                      navigate('/');
+                    }}
+                  >
+                    {memberships.map((s) => (
+                      <option value={s.school_id} key={s.school_id}>
+                        {s.school_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {!platformOnly && (
+                <NavLink
+                  to={path('/school-information')}
+                  className="nav-item"
+                  onClick={closeSchoolMenu}
+                >
+                  <Building2 size={17} aria-hidden="true" />
+                  School information
+                </NavLink>
+              )}
+              {canExportSchool && (
+                <NavLink to={path('/exports')} className="nav-item" onClick={closeSchoolMenu}>
+                  <Layers3 size={17} aria-hidden="true" />
+                  School exports
+                </NavLink>
+              )}
+            </nav>
+          </details>
+        ) : (
+          <div className="school-switcher">
+            <div className="school-selector">{schoolLabel}</div>
           </div>
-          <ChevronDown size={14} />
-        </div>
+        )}
         <p className="nav-label">{platformOnly ? 'PLATFORM' : 'WORKSPACE'}</p>
         <nav aria-label="Main navigation">
           {navigation
@@ -358,7 +412,7 @@ export default function Layout() {
               Let’s talk <ArrowUpRight size={14} />
             </a>
           </div>
-          <NavLink to={path('/settings')} className="nav-item">
+          <NavLink to={path('/settings')} className="nav-item" onClick={() => setOpen(false)}>
             <Settings2 size={18} />
             Settings
           </NavLink>
@@ -477,7 +531,7 @@ export default function Layout() {
             </div>
           )}
         </main>
-        {family && (
+        {family && !open && (
           <nav className="family-navigation" aria-label="Family navigation">
             {[
               { to: '/', text: 'Home', Icon: LayoutDashboard },
