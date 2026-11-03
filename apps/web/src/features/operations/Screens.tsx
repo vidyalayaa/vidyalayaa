@@ -17,7 +17,14 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react';
-import type { Page } from '@vidyalayaa/contracts';
+import {
+  memberCategories,
+  memberCategoryRoles,
+  membershipStatuses,
+  type MemberCategory,
+  type MemberCounts,
+  type Page,
+} from '@vidyalayaa/contracts';
 import { api, configured, useAuth, downloadReport } from '../../lib/auth';
 import { Button } from '../../components/ui/button';
 import {
@@ -734,29 +741,161 @@ export function Notifications() {
     </>
   );
 }
+const memberCategoryLabels: Record<MemberCategory, string> = {
+  staff: 'School Staff',
+  parents: 'Parents',
+  students: 'Students',
+};
+
 export function Members() {
-  const a = useAuth(),
-    query = useRows('/memberships'),
-    [open, setOpen] = useState(false),
-    [invitationMessage, setInvitationMessage] = useState(''),
-    [edit, setEdit] = useState<Record<string, unknown> | null>(null);
+  const auth = useAuth();
+  const [category, setCategory] = useState<MemberCategory>('staff');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const counts = useQuery({
+    queryKey: [auth.school, 'membership-counts'],
+    queryFn: () => api<MemberCounts>('/memberships/counts'),
+    enabled: configured && !!auth.me?.school,
+    refetchInterval: 30000,
+  });
   return (
     <>
       <PageHeading
-        title="A community, connected."
-        description="Invite accounts and manage school memberships."
+        title="Members & invitations"
+        description="Manage school access for staff, parents, and students."
         actions={
-          <Button variant="lime" disabled={!configured} onClick={() => setOpen(true)}>
+          <Button variant="lime" disabled={!configured} onClick={() => setInviteOpen(true)}>
             <Plus size={16} />
             Invite member
           </Button>
         }
       />
-      <Panel title="School memberships">
+      <div role="tablist" aria-label="Member categories" className="mb-5 flex flex-wrap gap-2">
+        {memberCategories.map((value, index) => (
+          <button
+            type="button"
+            key={value}
+            id={`members-tab-${value}`}
+            role="tab"
+            aria-selected={category === value}
+            aria-controls="members-category"
+            tabIndex={category === value ? 0 : -1}
+            onClick={() => setCategory(value)}
+            onKeyDown={(event) => {
+              const last = memberCategories.length - 1;
+              const next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? last
+                    : event.key === 'ArrowRight'
+                      ? (index + 1) % (last + 1)
+                      : event.key === 'ArrowLeft'
+                        ? (index + last) % (last + 1)
+                        : null;
+              if (next === null) return;
+              event.preventDefault();
+              const tab = memberCategories[next];
+              setCategory(tab);
+              document.getElementById(`members-tab-${tab}`)?.focus();
+            }}
+            className={`flex items-center gap-2 rounded-xl border border-line px-4 py-2 text-sm font-semibold ${category === value ? 'bg-lime-300 text-stone-950' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
+          >
+            {memberCategoryLabels[value]}
+            <Badge>{counts.data?.[value] ?? '—'}</Badge>
+          </button>
+        ))}
+      </div>
+      {counts.error && <ErrorState error={counts.error} retry={() => counts.refetch()} />}
+      <div role="tabpanel" id="members-category" aria-labelledby={`members-tab-${category}`}>
+        <MemberCategoryPanel
+          key={category}
+          category={category}
+          inviteOpen={inviteOpen}
+          closeInvite={() => setInviteOpen(false)}
+        />
+      </div>
+    </>
+  );
+}
+
+function MemberCategoryPanel({
+  category,
+  inviteOpen,
+  closeInvite,
+}: {
+  category: MemberCategory;
+  inviteOpen: boolean;
+  closeInvite: () => void;
+}) {
+  const [search, setSearch] = useState(''),
+    [role, setRole] = useState(''),
+    [status, setStatus] = useState(''),
+    [invitationMessage, setInvitationMessage] = useState(''),
+    [view, setView] = useState<Record<string, unknown> | null>(null),
+    [edit, setEdit] = useState<Record<string, unknown> | null>(null);
+  const filters = new URLSearchParams({ category });
+  if (search.trim()) filters.set('search', search.trim());
+  if (role) filters.set('role', role);
+  const query = useRows(`/memberships?${filters}${status ? `&status=${status}` : ''}`);
+  const name = memberCategoryLabels[category];
+  return (
+    <>
+      <Panel
+        title={`${name} memberships`}
+        subtitle="Includes invited, active, suspended, and removed membership records."
+      >
+        <div className="grid gap-3 px-5 pb-4 sm:grid-cols-2 lg:grid-cols-3">
+          <label>
+            <span className="field-label">Search {name.toLowerCase()}</span>
+            <input
+              className="input"
+              type="search"
+              placeholder="Name or email"
+              maxLength={120}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          {category === 'staff' && (
+            <div>
+              <label className="field-label" htmlFor="members-staff-role">Staff role</label>
+              <select
+                id="members-staff-role"
+                className="input"
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+              >
+                <option value="">All staff roles</option>
+                {memberCategoryRoles.staff.map((value) => (
+                  <option key={value} value={value}>
+                    {label(value)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="field-label" htmlFor="members-status">Membership status</label>
+            <select
+              id="members-status"
+              className="input"
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              <option value="">All membership statuses</option>
+              {membershipStatuses.map((value) => (
+                <option key={value} value={value}>
+                  {label(value.toLowerCase())}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         {query.data?.data.length ? (
           <DataTable
             rows={query.data.data}
             columns={['full_name', 'email', 'role', 'status']}
+            onView={setView}
             actions={(row) =>
               row.status === 'INVITED' ? (
                 <span className="text-xs text-stone-600">Awaiting acceptance</span>
@@ -767,8 +906,13 @@ export function Members() {
               )
             }
           />
-        ) : (
+        ) : query.isLoading || query.error ? (
           <Rows query={query} columns={['full_name', 'email', 'role', 'status']} />
+        ) : (
+          <Empty
+            title="No matching memberships"
+            description="Try a different name, email, or status."
+          />
         )}
         {!!query.data?.data.length && <Pages query={query} />}
       </Panel>
@@ -777,10 +921,11 @@ export function Members() {
           {invitationMessage}
         </p>
       )}
-      <MemberInvitations />
-      {open && (
+      <MemberInvitations filters={filters.toString()} />
+      {inviteOpen && (
         <InviteMemberDialog
-          close={() => setOpen(false)}
+          category={category}
+          close={closeInvite}
           onResult={(result) =>
             setInvitationMessage(
               result.status === 'READY'
@@ -791,6 +936,25 @@ export function Members() {
             )
           }
         />
+      )}
+      {view && (
+        <Dialog
+          open
+          onOpenChange={(value) => !value && setView(null)}
+          title="Member details"
+          description={name}
+        >
+          <dl className="grid gap-4 sm:grid-cols-2">
+            {['full_name', 'email', 'role', 'status'].map((field) => (
+              <div key={field}>
+                <dt className="field-label">{label(field)}</dt>
+                <dd className="break-words">
+                  {field === 'role' ? label(String(view[field])) : display(view[field])}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Dialog>
       )}
       {edit && (
         <ActionDialog

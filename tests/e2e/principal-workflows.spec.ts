@@ -61,6 +61,10 @@ test('Principal dashboard, school-wide analytics and permitted navigation work',
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   for (const name of ['Members & invitations', 'Platform console', 'School exports'])
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
+  await page.locator('summary.school-selector').click();
+  const schoolActions = page.getByRole('navigation', { name: 'School actions' });
+  await expect(schoolActions.getByRole('link', { name: 'School information' })).toBeVisible();
+  await expect(schoolActions.getByRole('link', { name: 'School exports' })).toHaveCount(0);
 });
 
 for (const resource of [

@@ -40,6 +40,16 @@ export const roles = [
   'finance_staff',
 ] as const;
 export type Role = (typeof roles)[number];
+export const memberCategories = ['staff', 'parents', 'students'] as const;
+export type MemberCategory = (typeof memberCategories)[number];
+export const memberCategoryRoles: Record<MemberCategory, readonly Role[]> = {
+  staff: ['teacher', 'principal', 'school_admin', 'finance_staff'],
+  parents: ['parent'],
+  students: ['student'],
+};
+export const membershipStatuses = ['ACTIVE', 'INVITED', 'SUSPENDED', 'REMOVED'] as const;
+export const invitationDisplayStatuses = ['Pending', 'Accepted', 'Expired', 'Cancelled'] as const;
+export type MemberCounts = Record<MemberCategory, number>;
 export const attendanceStatuses = [
   'PENDING',
   'PRESENT',

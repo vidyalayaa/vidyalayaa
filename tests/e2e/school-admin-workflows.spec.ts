@@ -25,6 +25,13 @@ test('School Admin dashboard, navigation and review-grant shortcut work', async 
   platformApp,
   isMobile,
 }) => {
+  const f = platformApp.records;
+  await platformApp.db.query(
+    `INSERT INTO daily_attendance(school_id,student_id,class_id,academic_session_id,attendance_date,attendance_status)
+     SELECT id,$2,$3,$4,(now() AT TIME ZONE timezone)::date,'PRESENT' FROM schools WHERE id=$1
+     ON CONFLICT DO NOTHING`,
+    [f.schoolA, f.student, f.classId, f.session],
+  );
   const grant = await platformApp.request('/platform/support-grants', 'POST', {
     school_id: platformApp.records.schoolA,
     reason: 'Generated school administrator support review',
@@ -36,6 +43,9 @@ test('School Admin dashboard, navigation and review-grant shortcut work', async 
   await page.goto(authAppURL + '/admin');
   await expect(page.getByText('Leadership Quick Actions', { exact: true })).toBeVisible();
   await expect(page.getByText('Total students', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('img', { name: 'Attendance totals over the last seven days' }).locator('svg.recharts-surface'),
+  ).toBeVisible();
   await page.getByRole('link', { name: 'Review Grants', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/support$/);
   await expect(page.getByText('SCHOOL-REVIEW', { exact: true })).toBeVisible();
@@ -43,6 +53,18 @@ test('School Admin dashboard, navigation and review-grant shortcut work', async 
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await expect(nav.getByRole('link', { name: 'Members & invitations' })).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Platform console' })).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: /School information|School exports/ })).toHaveCount(0);
+  const schoolMenu = page.locator('summary.school-selector');
+  const schoolActions = page.getByRole('navigation', { name: 'School actions' });
+  await schoolMenu.click();
+  await schoolActions.getByRole('link', { name: 'School information', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/school-information$/);
+  await expect(page.getByRole('heading', { name: 'School profile', exact: true })).toBeVisible();
+  await expect(schoolActions).toBeHidden();
+  if (isMobile) await page.getByRole('button', { name: 'Open navigation' }).click();
+  await schoolMenu.click();
+  await schoolActions.getByRole('link', { name: 'School exports', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'School exports', exact: true })).toBeVisible();
 });
 
 for (const resource of [
@@ -777,7 +799,7 @@ test('School Admin invites an existing Principal, resends and cancels, and prote
   await invited.getByRole('button', { name: 'Resend', exact: true }).click();
   await expect(page.getByRole('status').last()).toContainText('setup email');
   await invited.getByRole('button', { name: 'Cancel invitation', exact: true }).click();
-  await expect(invited).toContainText(/REVOKED/i);
+  await expect(invited).toContainText('Cancelled');
   const memberships = (
     await platformApp.request('/memberships', 'GET', undefined, f.admin, f.schoolA)
   ).body.data;
@@ -790,6 +812,83 @@ test('School Admin invites an existing Principal, resends and cancels, and prote
     f.schoolA,
   );
   expect(result.status).toBe(409);
+});
+
+test('School Admin filters membership categories and invitation states within the active school', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  test.setTimeout(90_000);
+  const f = platformApp.records;
+  await platformApp.db.query(
+    `INSERT INTO school_invitations(school_id,email,full_name,role_code,invited_by,status,expires_at) VALUES
+     ($1,'parent-pending@example.test','Pending guardian','parent',$3,'READY',now()+interval '1 day'),
+     ($1,'parent-expired@example.test','Expired guardian','parent',$3,'SENT',now()-interval '1 day'),
+     ($1,'parent-accepted@example.test','Accepted guardian','parent',$3,'ACCEPTED',now()-interval '1 day'),
+     ($1,'parent-cancelled@example.test','Cancelled guardian','parent',$3,'REVOKED',now()+interval '1 day'),
+     ($1,'student-pending@example.test','Student recipient','student',$3,'SENT',now()+interval '1 day'),
+     ($2,'other-school@example.test','Other school guardian','parent',$3,'SENT',now()+interval '1 day')`,
+    [f.schoolA, f.schoolB, f.admin],
+  );
+  await page.goto(authAppURL + '/admin/members');
+  await expect(page.getByRole('tab', { name: 'School Staff 3', exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByLabel('Staff role', { exact: true }).selectOption('principal');
+  await expect(
+    page.getByRole('row').filter({ hasText: `${f.principal}@example.invalid` }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('row').filter({ hasText: `${f.teacher}@example.invalid` }),
+  ).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Parents 1', exact: true }).click();
+  await page
+    .getByRole('row')
+    .filter({ hasText: `${f.parent}@example.invalid` })
+    .getByRole('button', { name: 'View', exact: true })
+    .click();
+  await expect(page.getByRole('dialog')).toContainText(`${f.parent}@example.invalid`);
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('row').filter({ hasText: 'parent-pending@example.test' }),
+  ).toContainText('Pending');
+  await expect(
+    page.getByRole('row').filter({ hasText: 'parent-accepted@example.test' }),
+  ).toContainText('Accepted');
+  await expect(
+    page.getByRole('row').filter({ hasText: 'parent-cancelled@example.test' }),
+  ).toContainText('Cancelled');
+  await page.getByLabel('Invitation status', { exact: true }).selectOption('Expired');
+  await expect(
+    page.getByRole('row').filter({ hasText: 'parent-expired@example.test' }),
+  ).toContainText('Expired');
+  await expect(
+    page.getByRole('row').filter({ hasText: 'parent-pending@example.test' }),
+  ).toHaveCount(0);
+  await page.getByRole('searchbox', { name: 'Search parents' }).fill('no matching parent');
+  await expect(page.getByText('No matching memberships')).toBeVisible();
+  await expect(page.getByText('No matching invitations')).toBeVisible();
+  await page.getByRole('tab', { name: 'Students 1', exact: true }).click();
+  await expect(
+    page.getByRole('row').filter({ hasText: 'student-pending@example.test' }),
+  ).toContainText('Pending');
+  await expect(
+    page.getByRole('row').filter({ hasText: /parent-expired|other-school/ }),
+  ).toHaveCount(0);
+  const parents = await platformApp.request(
+    '/invitations?category=parents&page_size=1',
+    'GET',
+    undefined,
+    f.admin,
+    f.schoolA,
+  );
+  expect(parents.body.total).toBe(4);
+  expect(parents.body.data).toHaveLength(1);
+  expect(
+    (await platformApp.request('/memberships/counts', 'GET', undefined, f.teacher, f.schoolA))
+      .status,
+  ).toBe(403);
 });
 
 test('School Admin retries failed notifications, requests movement reconciliation and reads audit history', async ({
@@ -1073,6 +1172,7 @@ test('School Admin school switching clears the previous school records and navig
   await page.goto(authAppURL + '/admin/r/students');
   await expect(page.getByRole('heading', { name: 'Class 8', exact: true })).toBeVisible();
   if (isMobile) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page.locator('summary.school-selector').click();
   await page
     .getByRole('combobox', { name: 'Active school', exact: true })
     .selectOption(other.school_id);

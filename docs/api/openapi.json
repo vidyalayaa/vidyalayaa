@@ -13244,7 +13244,7 @@
         }
       },
       "get": {
-        "summary": "Paginated school invitations; users.manage",
+        "summary": "Paginated school invitations with display status; users.manage",
         "security": [
           {
             "UserJWT": []
@@ -13258,6 +13258,71 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "parents",
+                "students"
+              ]
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "school_admin",
+                "principal",
+                "teacher",
+                "parent",
+                "student",
+                "finance_staff"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Pending",
+                "Accepted",
+                "Expired",
+                "Cancelled"
+              ]
             }
           }
         ],
@@ -16595,7 +16660,119 @@
     },
     "/memberships": {
       "get": {
-        "summary": "Read /memberships",
+        "summary": "Paginated school memberships; users.manage",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "parents",
+                "students"
+              ]
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "school_admin",
+                "principal",
+                "teacher",
+                "parent",
+                "student",
+                "finance_staff"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INVITED",
+                "SUSPENDED",
+                "REMOVED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/memberships/counts": {
+      "get": {
+        "summary": "School membership counts by category across all statuses; users.manage",
         "security": [
           {
             "UserJWT": []
