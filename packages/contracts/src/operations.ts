@@ -8,8 +8,49 @@ export const securityPolicySchema = z
     step_up_sensitive: z.boolean(),
     device_offline_minutes: z.number().int().min(1).max(60),
     policy_ref: z.string().trim().min(5).max(200),
+    parent_login_enabled: z.boolean().optional(),
+    mfa_teachers: z.boolean().optional(),
+    mfa_finance_staff: z.boolean().optional(),
+    idle_timeout_minutes: z.number().int().min(5).max(240).nullable().optional(),
+    new_login_alerts: z.boolean().optional(),
+    suspicious_login_alerts: z.boolean().optional(),
+    approval_details: z.string().trim().max(1000).optional(),
+    confirm_enforcement: z.boolean().optional(),
+    expected_version: z.number().int().nonnegative().optional(),
   })
   .strict();
+export const securityPolicyDefaults = {
+  require_privileged_mfa: false,
+  student_login_enabled: true,
+  parent_login_enabled: true,
+  step_up_sensitive: false,
+  mfa_teachers: false,
+  mfa_finance_staff: false,
+  idle_timeout_minutes: null as number | null,
+  new_login_alerts: true,
+  suspicious_login_alerts: false,
+  device_offline_minutes: 3,
+  policy_ref: '',
+  approval_details: '',
+};
+export type SchoolSecurityPolicy = typeof securityPolicyDefaults & {
+  version: number;
+  approved_at: string | null;
+  approved_by: string | null;
+  approved_by_name: string | null;
+  recovery_ready?: boolean;
+};
+export interface SchoolSecurityEvent {
+  id: string;
+  actor: string | null;
+  account: string | null;
+  action: string;
+  outcome: 'SUCCESS' | 'FAILED' | 'ATTEMPTED';
+  occurred_at: string;
+  ip_address: string | null;
+  device: string | null;
+  source: 'VIDYALAYAA' | 'SUPABASE';
+}
 export const exportRequestSchema = z.object({ format: z.enum(['JSON', 'CSV']), reason }).strict();
 export const reconciliationRequestSchema = z.object({ reason }).strict();
 export const retirementSchema = z.object({ reason }).strict();

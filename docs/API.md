@@ -4,6 +4,25 @@ The [Subject study materials](SUBJECT_MATERIALS.md) panel reuses assignments wit
 
 The [Student learning pages](STUDENT_LEARNING.md) use `GET /student/academics` (no query parameters) and `GET /student/results` (optional `exam_id`, `subject_id`, `page`, `page_size`, maximum page size 100). Both derive the student from the authenticated account and active school; student/user/class ID overrides are rejected. Results include only the student's published, non-retired examinations, with class/session/subject labels, recorded zero scores and performance summaries. There is no implicit date window that hides older results. Results from ended enrollments remain available. These projections and their underlying database policies are read-only for students.
 
+### School results and academic analytics
+
+School Admin and Principal use these school-scoped endpoints with `marks.read`.
+
+| Path | Purpose |
+| --- | --- |
+| `GET /results/examinations?session_id=` | Examination catalogue with a representative `cohort_id` for each comparable group |
+| `GET /results/exams/{id}/students` | Searchable, paginated examination roster |
+| `GET /results/exams/{id}/students/{student}` | Subject scores, maxima, recorded percentage, configured grades and applicable ranks |
+| `GET /results/analytics?session_id=&cohort_id=&grade=&class_id=` | Class and subject comparisons, distribution, toppers and trends. Grade and class ID are optional. |
+| `GET /results/policy` | Current grading policy |
+| `PUT /results/policy` | School Admin saves `pass_percentage` and grade bands. Requires `school.manage` and a writable subscription. |
+
+Comparisons group section exams by academic session, normalized exam name, exam type, and assessment kind. Subject tests also match subject name. Multiple matching exams in the same section remain separate. The roster uses exam-date enrollments and includes students with recorded marks. For an undated exam, active enrollments also qualify. A mark of zero is a recorded result. Rows without marks stay in roster totals and are excluded from appeared counts, percentage averages, and rankings. The system has no exam-specific absence status.
+
+An official examination's subject list comes from the subjects recorded for that exam. Incomplete results retain their recorded-subject percentage and are excluded from overall grades, pass/fail counts, and rankings. Complete published results rank by the displayed two-decimal percentage. Equal percentages share a competition rank. School ranks use the full cohort, while the class and section filters narrow the displayed rows. A student with two qualifying results in the same cohort keeps each class rank and is excluded from the school ranking. Exam and session trends use published results of the selected assessment kind and match the subject for subject tests.
+
+Grades and pass/fail require a school-configured policy. That policy classifies the calculated overall percentage against the pass threshold and applies the highest qualifying grade band. Policy changes apply when results are viewed. Existing mark records, exam publication, teacher permissions and family access continue through their established routes.
+
 The [Student profile page](STUDENT_PROFILE.md) uses `GET /student/profile` with the authenticated student session and active school. No student ID, user ID or query parameters are accepted. It returns only personal fields, school identifiers, active linked guardian contacts and the student's enrollment history. Profile writes are rejected. Restrictive database policies also scope the underlying student/family/enrollment records to the authenticated student. The endpoint does not return private account credentials or accept email-based identity matching.
 
 The [Parent workspace](PARENT_WORKSPACE.md) exposes `/parent/children` and checked,
@@ -28,11 +47,11 @@ School Admin's [class-wise Results](CLASS_WISE_RESULTS.md) select a class/sectio
 
 Class Teacher official-mark subject choices also intersect the selected class's configured subjects; being assigned to other classes does not mix their subjects into these choices. School Admin Homework subject fields require a class first and use the same class filter. New homework, subject tests and marks with an unrelated subject are rejected by database guards. Students' unfiltered subject lists are additionally restricted by RLS to their own current class/enrollment and dated teaching relationships. Migration `20261029180825_class_subject_visibility.sql` adds these guards without rewriting saved records; unchanged historical scopes remain editable according to their existing role/status permissions.
 
-School Admin's [student and family admission form and class-wise student directory](STUDENT_ADMISSION.md) use `/student-directory/*`. `POST /student-directory/admissions` atomically saves a student, class enrollment, one or two new/existing parents, and their family connections. Existing email matches require explicit parent selection; this workflow does not create Auth accounts or send invitations.
+The [student and family admission form and class-wise student directory](STUDENT_ADMISSION.md) use `/student-directory/*`. School Admin and Principal can read the school-scoped `classes` and `students` lists. School Admin's `POST /student-directory/admissions` atomically saves a student, class enrollment, one or two new/existing parents, and their family connections. Existing email matches require explicit parent selection; this workflow does not create Auth accounts or send invitations.
 
 [Complete student CSV import/export](STUDENT_CSV.md) uses `POST /student-directory/imports` (preview or atomic, idempotent commit) and `GET /student-directory/export.csv` (streamed, school-scoped student/enrollment/family records, optional search/session filter). Both are School Admin only. The blank import template includes every admission field; exports also preserve read-only enrollment/parent/link statuses and formula protection. The legacy record-only `/imports/students` contract remains compatible.
 
-School Admin's expandable [class-wise Academics workspace](CLASS_WISE_ACADEMICS.md) uses `/academics/classes` and its paginated subjects and unconfigured-assignment child endpoints. Class summaries include `student_count`, `male_count`, `female_count`, `other_count` and `unspecified_count`, based on dated active enrollments and active students. No individual student roster is loaded by Academics. The enrollment-list API remains compatible; enrollment management lives in student profiles. `POST /academics/classes/{id}/subjects` atomically creates or selects a subject and assigns its required teacher to that section. Other actions reuse existing resource write APIs; no duplicate class/subject/enrollment store is introduced.
+School Admin and Principal share the expandable [class-wise Academics workspace](CLASS_WISE_ACADEMICS.md) using `GET /academics/classes` and its paginated subjects and unconfigured-assignment child endpoints. Class summaries include `student_count`, `male_count`, `female_count`, `other_count` and `unspecified_count`, based on dated active enrollments and active students. No individual student roster is loaded by Academics. The enrollment-list API remains School Admin only, and enrollment management lives in student profiles. School Admin's `POST /academics/classes/{id}/subjects` atomically creates or selects a subject and assigns its required teacher to that section. Other actions reuse existing resource write APIs; no duplicate class/subject/enrollment store is introduced.
 
 Student resource and admission contracts accept `gender: MALE | FEMALE | OTHER | NOT_SPECIFIED`, defaulting to NOT_SPECIFIED for older clients/imports. Both API validation and the database constraint reject invalid values. Student/profile responses include the persisted value; all existing role and ownership checks still apply.
 
@@ -146,7 +165,9 @@ The Render worker has no public HTTP listener. Its private database heartbeat is
 
 | Method/path                                    | Authority and behavior                                                                                                                                                                                     |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET/PUT /school/security                       | school.manage; changing policy requires MFA and policy_ref                                                                                                                                                 |
+| GET/PUT /school/security | School Admin only. Saves use the current version and require confirmation and verified recovery for stricter MFA. |
+| GET /school/security/history and /school/security/audit | School Admin only. Paginated policy history and tenant-scoped security events. |
+| POST /account/sessions/activity | Extends the current live session after user interaction and returns its inactivity deadline. |
 | GET /analytics?student_id=                     | marks.read; published marks and current class/child/self scope                                                                                                                                             |
 | GET /corrections?status=REQUESTED&reviewable=1 | attendance.read; status filter applies before pagination/count; reviewable=1 requires attendance.correct_approve and excludes own requests                                                                 |
 | GET /attendance/events                         | attendance.read; scoped immutable movement history, optional date/student/review filter                                                                                                                    |

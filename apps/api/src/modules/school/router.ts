@@ -7,6 +7,7 @@ import { studentProfileRouter } from './student-profile.js';
 import { subjectMaterialsRouter } from './materials.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
+import { resultsRouter } from './results.js';
 import { studentDirectoryRouter } from './student-directory.js';
 import { calendarRouter } from './calendar.js';
 import { timetableRouter } from './timetable.js';
@@ -194,6 +195,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/student', studentProfileRouter(pool));
   router.use('/materials', subjectMaterialsRouter(pool));
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
+  router.use('/results', resultsRouter(pool, requireWrite));
   router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
   router.use('/timetable', timetableRouter(pool, { requireWrite, withIdempotency }));
@@ -440,7 +442,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           const deviceHealth = a.active!.permissions.includes('devices.read')
             ? (
                 await tx.query(
-                  "SELECT count(*)::int AS total,count(*) FILTER(WHERE status='ACTIVE' AND last_seen_at>now()-interval '3 minutes')::int AS online,coalesce(sum(pending_event_count),0)::int AS pending FROM devices WHERE school_id=$1",
+                  "SELECT count(*)::int AS total,count(*) FILTER(WHERE d.status='ACTIVE' AND d.last_seen_at>=now()-make_interval(mins=>app.reader_offline_minutes(s.settings)))::int AS online,coalesce(sum(d.pending_event_count),0)::int AS pending FROM devices d JOIN schools s ON s.id=d.school_id WHERE d.school_id=$1",
                   [a.context.schoolId],
                 )
               ).rows[0]

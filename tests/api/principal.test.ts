@@ -8,8 +8,13 @@ import { createApp } from '../../apps/api/src/app.js';
 import type { Config } from '../../apps/api/src/lib/config.js';
 
 let db: PGlite, f: Awaited<ReturnType<typeof fixture>>, app: ReturnType<typeof createApp>;
+let signIn = 0;
 function token(role = 'principal', aal = 'aal2') {
-  return 'fixture.' + Buffer.from(JSON.stringify({ role, aal })).toString('base64url') + '.fixture';
+  return (
+    'fixture.' +
+    Buffer.from(JSON.stringify({ role, aal, signIn })).toString('base64url') +
+    '.fixture'
+  );
 }
 beforeAll(async () => {
   db = await portableDatabase();
@@ -144,14 +149,16 @@ it('revokes Principal access immediately when membership is suspended', async ()
     [f.schoolA, f.principal],
   );
   try {
-    expect((await call('/resources/students')).status).toBe(404);
-    expect((await call('/analytics')).status).toBe(404);
+    expect((await call('/resources/students')).status).toBe(401);
+    expect((await call('/analytics')).body.error.code).toBe('SESSION_ENDED');
   } finally {
     await db.query(
       "UPDATE school_memberships SET status='ACTIVE' WHERE school_id=$1 AND user_id=$2",
       [f.schoolA, f.principal],
     );
   }
+  expect((await call('/resources/students')).status).toBe(401);
+  signIn++;
   expect((await call('/resources/students')).status).toBe(200);
 });
 

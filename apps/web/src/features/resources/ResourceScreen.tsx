@@ -1,5 +1,5 @@
 import { useSearchParams, Link } from 'react-router-dom';
-import { schoolPath } from '../../lib/portals';
+import { isSchoolLeadership, schoolPath } from '../../lib/portals';
 import RecordImportDialog, { type ImportResource } from './RecordImportDialog';
 import { ActionDialog } from '../../components/ActionDialog';
 import BulkMarksDialog from './BulkMarksDialog';
@@ -7,6 +7,7 @@ import RollMarksDialog from './RollMarksDialog';
 import RecordSelect from '../../components/RecordSelect';
 import ResourceDetails from './ResourceDetails';
 import StudentProfileDialog from './StudentProfileDialog';
+import StudentRecordTabs from '../students/StudentRecordTabs';
 import AttendanceRuleBuilder from '../operations/AttendanceRuleBuilder';
 import FeePaymentDialog from './FeePaymentDialog';
 import { IssueCardDialog, BlockCardDialog } from './CardActionDialogs';
@@ -73,6 +74,7 @@ export function ResourceScreen({
       (!assessment || assessment.exam.status === 'OPEN'),
     locked = !!info.feature && !a.me?.features[info.feature];
   const Heading = assessment ? ResultsHeading : PageHeading;
+  const canRecordMarks = a.me?.school?.permissions.includes('marks.write');
   useEffect(() => {
     setPage(1);
     setSearch(params.get('search') || '');
@@ -103,7 +105,9 @@ export function ResourceScreen({
         title={assessment ? 'Student marks' : info.title}
         description={
           assessment
-            ? 'Select a student enrolled in this class to record their marks.'
+            ? canRecordMarks
+              ? 'Select a student enrolled in this class to record their marks.'
+              : 'Review recorded marks for students in this class.'
             : info.description
         }
         actions={
@@ -150,28 +154,7 @@ export function ResourceScreen({
           </>
         }
       />
-      {['students', 'parents', 'student_parents'].includes(resource) && (
-        <div className="tabs">
-          <Link
-            className={resource === 'students' ? 'tab-active' : ''}
-            to={schoolPath('/r/students', a.me?.school?.role)}
-          >
-            Students
-          </Link>
-          <Link
-            className={resource === 'parents' ? 'tab-active' : ''}
-            to={schoolPath('/r/parents', a.me?.school?.role)}
-          >
-            Parents & Guardians
-          </Link>
-          <Link
-            className={resource === 'student_parents' ? 'tab-active' : ''}
-            to={schoolPath('/r/student_parents', a.me?.school?.role)}
-          >
-            Family Connections
-          </Link>
-        </div>
-      )}
+      {['students', 'parents', 'student_parents'].includes(resource) && <StudentRecordTabs />}
       {[
         'classes',
         'academic_sessions',
@@ -183,7 +166,7 @@ export function ResourceScreen({
           <Link
             className={resource === 'classes' ? 'tab-active' : ''}
             to={schoolPath(
-              a.me?.school?.role === 'school_admin' ? '/academics' : '/r/classes',
+              isSchoolLeadership(a.me?.school?.role) ? '/academics' : '/r/classes',
               a.me?.school?.role,
             )}
           >
@@ -367,9 +350,11 @@ export function ResourceScreen({
             <Empty
               title={`Your ${info.title.toLowerCase()} belong here`}
               description={
-                configured
-                  ? 'Add your first record to get started.'
-                  : 'Connect your school’s Supabase project and API to start managing real records.'
+                !configured
+                  ? 'Connect your school’s Supabase project and API to start managing real records.'
+                  : assessment && !canRecordMarks
+                    ? 'There are no recorded marks for this examination.'
+                    : 'Add your first record to get started.'
               }
               action={
                 canWrite && (

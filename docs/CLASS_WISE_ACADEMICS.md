@@ -1,6 +1,6 @@
 # Class-wise School Admin Academics
 
-School Admin → **Academics** opens `/admin/academics`. Classes are grouped by academic session and grade, with each section beneath its class. Expand a section to manage subjects, subject teachers and its Class Teacher, and see student counts by recorded gender. Individual student records and enrollment management belong to Students. Other roles retain their existing workspaces.
+**Academics** opens the same workspace for School Admin at `/admin/academics` and Principal at `/principal/academics`. Classes are grouped by academic session and grade, with each section beneath its class. Expand a section to see its subjects, subject teachers, Class Teacher and student counts by recorded gender. School Admin can also manage these records. Individual student records and enrollment management belong to Students.
 
 ## Source of truth
 
@@ -20,11 +20,11 @@ Editing a subject's code/name affects that shared catalogue record across sectio
 
 Use **Students → student profile → Class enrollments** to add/edit class, session, dates, roll number and status, including future or ended records. End an enrollment by changing its status to ENDED. Active enrollments still prevent class archival. Archival never deletes student, enrollment, subject or assignment history.
 
-**Academic sessions** expands management inside this workspace; add, edit and archive actions use the existing forms and resource APIs. School Admin's legacy session/class/subject/teacher-assignment URLs redirect here; legacy enrollment URLs redirect to Students. Principal and Teacher navigation are unchanged. The separate generic academic resource tables are no longer entry points for School Admin.
+**Academic sessions** expands the session list inside this workspace. School Admin can add, edit and archive sessions through the existing forms and resource APIs. School Admin's legacy session/class/subject/teacher-assignment URLs redirect here, and legacy enrollment URLs redirect to Students. The Principal's previous Classes & Sections URL also redirects to this workspace.
 
 ## API and permissions
 
-All paths use the existing `/api/v1` base, verified authentication and selected school context. The new aggregation endpoints require the School Admin role and academic/student/teacher read permissions; they do not grant additional write permissions.
+All paths use the existing `/api/v1` base, verified authentication and selected school context. Class summaries, assigned subjects and unconfigured assignments are readable by School Admin and Principal with academic/student/teacher read permissions. Subject choices, enrollment lists and writes require School Admin.
 
 | GET path | Result |
 | --- | --- |
@@ -36,7 +36,7 @@ All paths use the existing `/api/v1` base, verified authentication and selected 
 
 `POST /academics/classes/{id}/subjects` requires both `academics.write` and `teachers.write`. Supply exactly one of `subject_id` or `subject: {code,name}`, plus `teacher_id`, `starts_on` and optional `ends_on`. The path fixes the section; clients cannot override it in the body. An optional `Idempotency-Key` makes retries safe and rejects changed requests reusing the same key.
 
-Every query binds the school and class, using the existing non-bypass API role and forced RLS. Foreign and missing class IDs return the same 404 code. Teacher, Principal, Parent and Student callers cannot use these endpoints. The atomic subject action reuses existing teacher validation, auditing, subscription and uniqueness enforcement. Other create/update/archive actions continue through the existing resource APIs and archival guards.
+Every query binds the school and class, using the existing non-bypass API role and forced RLS. Foreign and missing class IDs return the same 404 code. The atomic subject action reuses existing teacher validation, auditing, subscription and uniqueness enforcement. Other create/update/archive actions continue through the existing resource APIs and archival guards.
 
 Lists remain bounded and paginated. The page loads all class summaries across batches of 100, then lazily loads a section's paginated subjects when expanded. It does not silently omit classes after the first page. A single lateral aggregation counts students by gender using the existing roster indexes. The enrollment-list API remains available for compatibility; the Academics UI never calls it.
 

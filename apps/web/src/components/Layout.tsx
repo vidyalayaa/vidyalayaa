@@ -20,7 +20,6 @@ import {
   X,
   LogOut,
   ArrowUpRight,
-  HelpCircle,
   ShieldCheck,
   Building2,
   Layers3,
@@ -31,9 +30,10 @@ import {
 import { configured, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
 import { Dialog } from './ui/dialog';
+import SupportContact from './SupportContact';
 import { cn } from '../lib/utils';
 import { Loading } from './common';
-import { schoolPath } from '../lib/portals';
+import { isSchoolLeadership, schoolPath } from '../lib/portals';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/auth';
 import { display } from '../lib/utils';
@@ -209,7 +209,7 @@ export default function Layout() {
             permission: 'classrooms.read',
           },
         ]
-      : role === 'school_admin'
+      : isSchoolLeadership(role)
         ? items
             .filter(
               (i) =>
@@ -266,6 +266,7 @@ export default function Layout() {
     if (to === '/devices') {
       return current.includes('/devices') || current.includes('/r/device_locations');
     }
+    if (to === '/r/marks') return current.endsWith('/r/exams');
     return false;
   };
 
@@ -301,10 +302,6 @@ export default function Layout() {
           <details
             ref={schoolMenu}
             className="school-switcher"
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget))
-                event.currentTarget.open = false;
-            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape' && event.currentTarget.open) {
                 event.stopPropagation();
@@ -374,7 +371,7 @@ export default function Layout() {
                 key={i.to}
                 to={path(i.to)}
                 end={i.to === '/'}
-                onClick={() => setOpen(false)}
+                onClick={closeSchoolMenu}
                 className={({ isActive }) =>
                   cn('nav-item', isItemActive(i.to, isActive) && 'nav-active')
                 }
@@ -402,16 +399,12 @@ export default function Layout() {
             <Compass size={18} />
             Explore Vidyalayaa
           </Link>
-          <div className="support-card">
-            <div className="support-circle">
-              <HelpCircle size={19} />
-            </div>
-            <h3>A little help goes a long way.</h3>
-            <p>We’re here for your school.</p>
-            <a href="mailto:vidyalayaainfo@gmail.com">
-              Let’s talk <ArrowUpRight size={14} />
-            </a>
-          </div>
+          <SupportContact
+            requestPath={
+              !platformOnly && permissions.includes('users.manage') ? path('/support') : undefined
+            }
+            onNavigate={closeSchoolMenu}
+          />
           <NavLink to={path('/settings')} className="nav-item" onClick={() => setOpen(false)}>
             <Settings2 size={18} />
             Settings

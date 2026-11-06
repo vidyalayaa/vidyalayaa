@@ -70,9 +70,16 @@ export default function StudentDirectory() {
     queryKey: [a.school, 'student-directory', debounced],
     queryFn: ({ signal }) => classes(debounced, signal),
   });
-  const canWrite = ['students.write', 'parents.write'].every((p) =>
-    a.me?.school?.permissions.includes(p),
-  );
+  const school = a.me?.school;
+  const isAdmin = school?.role === 'school_admin';
+  const canEdit = isAdmin && school.permissions.includes('students.write');
+  const canAdmit = canEdit && school.permissions.includes('parents.write');
+  const editStudent = canEdit
+    ? (student: DirectoryStudent) => {
+        setDirty(false);
+        setEditing(student);
+      }
+    : undefined;
   const groups = new Map<string, DirectoryClass[]>();
   for (const c of q.data?.classes || []) {
     if (session && c.academic_session_id !== session) continue;
@@ -98,10 +105,12 @@ export default function StudentDirectory() {
         description="Every learner, with their class and family connected."
         actions={
           <>
-            <Button variant="outline" disabled={exporting} onClick={exportCsv}>
-              {exporting ? 'Exporting…' : 'Export CSV'}
-            </Button>
-            {canWrite && (
+            {isAdmin && (
+              <Button variant="outline" disabled={exporting} onClick={exportCsv}>
+                {exporting ? 'Exporting…' : 'Export CSV'}
+              </Button>
+            )}
+            {canAdmit && (
               <>
                 <Button variant="outline" onClick={() => setImporting(true)}>
                   Import CSV
@@ -215,11 +224,8 @@ export default function StudentDirectory() {
                             classroom={section}
                             search={debounced}
                             profile={setProfile}
-                            edit={(r) => {
-                              setDirty(false);
-                              setEditing(r);
-                            }}
-                            add={canWrite ? () => setAdding(section.id) : undefined}
+                            edit={editStudent}
+                            add={canAdmit ? () => setAdding(section.id) : undefined}
                           />
                         ))}
                     </div>
@@ -248,14 +254,7 @@ export default function StudentDirectory() {
               </summary>
               {expanded.unassigned && (
                 <div className="border-t border-stone-100 p-5">
-                  <Roster
-                    search={debounced}
-                    profile={setProfile}
-                    edit={(r) => {
-                      setDirty(false);
-                      setEditing(r);
-                    }}
-                  />
+                  <Roster search={debounced} profile={setProfile} edit={editStudent} />
                 </div>
               )}
             </details>
@@ -311,7 +310,7 @@ function Roster({
   classroom?: DirectoryClass;
   search: string;
   profile: (id: string) => void;
-  edit: (row: DirectoryStudent) => void;
+  edit?: (row: DirectoryStudent) => void;
   add?: () => void;
 }) {
   const a = useAuth(),
@@ -393,13 +392,13 @@ function Roster({
                     Full profile
                   </span>
                 </button>
-                <div className="px-4 pb-4">
-                  {a.me?.school?.permissions.includes('students.write') && (
+                {edit && (
+                  <div className="px-4 pb-4">
                     <Button size="sm" variant="ghost" onClick={() => edit(s)}>
                       Edit student
                     </Button>
-                  )}
-                </div>
+                  </div>
+                )}
               </article>
             ))}
           </div>

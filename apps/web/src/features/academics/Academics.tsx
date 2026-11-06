@@ -17,6 +17,7 @@ import { ActionDialog } from '../../components/ActionDialog';
 import { ResourceForm } from '../resources/ResourceScreen';
 import ClassSubjectForm from './ClassSubjectForm';
 import SubjectMaterials, { type MaterialSubject } from '../materials/SubjectMaterials';
+import { isSchoolLeadership, schoolPath } from '../../lib/portals';
 
 interface ClassPage extends Page<AcademicClass> {
   sessions: AcademicSession[];
@@ -87,7 +88,9 @@ function Paging({
 
 export default function Academics() {
   const a = useAuth(),
-    qc = useQueryClient();
+    qc = useQueryClient(),
+    role = a.me?.school?.role,
+    canBrowse = isSchoolLeadership(role);
   const [search, setSearch] = useState(''),
     [session, setSession] = useState(''),
     [edit, setEdit] = useState<Edit>(),
@@ -98,7 +101,7 @@ export default function Academics() {
   const q = useQuery({
     queryKey: [a.school, 'academic-classes'],
     queryFn: ({ signal }) => allClasses(signal),
-    enabled: a.me?.school?.role === 'school_admin',
+    enabled: canBrowse,
   });
   const can = (permission: string) => !!a.me?.school?.permissions.includes(permission);
   function open(next: Edit) {
@@ -129,11 +132,11 @@ export default function Academics() {
       compare(x[0].grade, y[0].grade) ||
       compare(x[0].academic_session_label, y[0].academic_session_label),
   );
-  if (a.me?.school?.role !== 'school_admin')
+  if (!canBrowse)
     return (
       <Empty
         title="Access unavailable"
-        description="Class-wise academic management belongs to School Admin."
+        description="The class-wise Academics workspace is available to school leadership."
       />
     );
   return (
@@ -143,9 +146,11 @@ export default function Academics() {
         description="Classes, sections, subjects, student counts and teachers, in one place."
         actions={
           <>
-            <Button asChild variant="outline">
-              <Link to="/admin/academic-years">Academic-year promotion</Link>
-            </Button>
+            {role === 'school_admin' && (
+              <Button asChild variant="outline">
+                <Link to={schoolPath('/academic-years', role)}>Academic-year promotion</Link>
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setSessionsOpen((v) => !v)}
@@ -193,7 +198,9 @@ export default function Academics() {
             <ErrorState error={q.error} retry={() => q.refetch()} />
           ) : !q.data?.sessions.length ? (
             <p className="text-sm text-stone-500">
-              Add an academic session before creating classes.
+              {can('academics.write')
+                ? 'Add an academic session before creating classes.'
+                : 'No academic sessions have been added.'}
             </p>
           ) : (
             <ul className="divide-y divide-stone-100">
@@ -288,7 +295,9 @@ export default function Academics() {
           description={
             q.data?.classes.length
               ? 'Adjust the search or session filter.'
-              : 'Add the first class and section to start organising your academics.'
+              : can('academics.write')
+                ? 'Add the first class and section to start organising your academics.'
+                : 'No classes or sections have been added.'
           }
         />
       ) : (
@@ -434,8 +443,9 @@ function LegacyAssignments({
     >
       <h3 className="font-semibold">Assignments needing a subject</h3>
       <p className="my-2 text-sm">
-        These existing assignments have no subject. Choose a subject or archive the assignment; no
-        historical record is deleted.
+        {canWrite
+          ? 'Choose a subject for each assignment or archive it to preserve its history.'
+          : 'These teacher assignments do not have a subject yet.'}
       </p>
       {q.isLoading ? (
         <Loading />
@@ -556,56 +566,54 @@ function ClassSection({
           role="region"
           aria-label={classroom}
         >
-          <div className="flex flex-wrap gap-2">
-            {can('academics.write') && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    open({
-                      resource: 'classes',
-                      title: 'Edit class & section',
-                      initial: c,
-                      scope: c.id,
-                    })
-                  }
-                >
-                  Edit class & section
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    open({
-                      resource: 'classes',
-                      title: 'Designate Class Teacher',
-                      description: classroom,
-                      initial: c,
-                      preset: {
-                        academic_session_id: c.academic_session_id,
-                        grade: c.grade,
-                        section: c.section,
-                      },
-                      hidden: ['academic_session_id', 'grade', 'section'],
-                      scope: `class-teacher:${c.id}`,
-                    })
-                  }
-                >
-                  Designate Class Teacher
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    archive({ resource: 'classes', id: c.id, title: `Archive ${classroom}` })
-                  }
-                >
-                  Archive section
-                </Button>
-              </>
-            )}
-          </div>
+          {can('academics.write') && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  open({
+                    resource: 'classes',
+                    title: 'Edit class & section',
+                    initial: c,
+                    scope: c.id,
+                  })
+                }
+              >
+                Edit class & section
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  open({
+                    resource: 'classes',
+                    title: 'Designate Class Teacher',
+                    description: classroom,
+                    initial: c,
+                    preset: {
+                      academic_session_id: c.academic_session_id,
+                      grade: c.grade,
+                      section: c.section,
+                    },
+                    hidden: ['academic_session_id', 'grade', 'section'],
+                    scope: `class-teacher:${c.id}`,
+                  })
+                }
+              >
+                Designate Class Teacher
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  archive({ resource: 'classes', id: c.id, title: `Archive ${classroom}` })
+                }
+              >
+                Archive section
+              </Button>
+            </div>
+          )}
           {!!c.legacy_assignment_count && (
             <LegacyAssignments
               classId={c.id}
@@ -636,7 +644,11 @@ function ClassSection({
             ) : !subjects.data?.data.length ? (
               <Empty
                 title="No subject assignments yet"
-                description="Choose a catalogue subject and assign a teacher to this section."
+                description={
+                  can('teachers.write')
+                    ? 'Choose a catalogue subject and assign a teacher to this section.'
+                    : 'No subjects or teachers have been assigned to this section.'
+                }
               />
             ) : (
               <>
@@ -763,8 +775,8 @@ function ClassSection({
           <section aria-label={`Student counts for ${classroom}`}>
             <h3 className="text-lg font-semibold">Enrolled students · {c.student_count}</h3>
             <p className="mt-1 text-sm text-stone-500">
-              Active students enrolled on today's school date. Manage individual students and
-              enrollments from Students.
+              Active students enrolled on today's school date.{' '}
+              {can('academics.write') ? 'Manage' : 'View'} individual records in Students.
             </p>
             <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {[

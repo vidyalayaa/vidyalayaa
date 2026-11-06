@@ -16,13 +16,18 @@ if (!token || !/^[a-z0-9]{8,40}$/.test(project || '')) {
     const read = await fetch(endpoint, { headers, signal: AbortSignal.timeout(20000) });
     if (!read.ok) throw new Error(`Auth configuration read failed (HTTP ${read.status}).`);
     const current = await read.json();
-    const desired = buildAuthConfig(current, process.env.AUTH_SITE_URL);
+    const desired = buildAuthConfig(
+      current,
+      process.env.AUTH_SITE_URL,
+      process.env.AUTH_PASSWORD_MIN_LENGTH,
+    );
     // Never print or back up provider/SMTP secrets returned by Management API.
     console.log('Project:', project, '| Site URL:', desired.site_url);
     console.log(
       'Plan: 8 branded templates, verified email changes, password security, and exact callback URLs.',
     );
     console.log('Custom SMTP configured:', Boolean(current.smtp_host && current.smtp_user));
+    console.log('Project minimum password length:', desired.password_min_length);
     if (!process.argv.includes('--apply'))
       console.log(
         'Read-only preview. Run with --apply after deploying the new frontend callback and database migration.',

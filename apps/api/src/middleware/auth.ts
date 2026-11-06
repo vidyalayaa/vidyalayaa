@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import type pg from 'pg';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Me, Membership } from '@vidyalayaa/contracts';
+import type { Me, Membership, Role, SchoolSecurityPolicy } from '@vidyalayaa/contracts';
 import { ApiError, asyncRoute, notFound } from '../lib/errors.js';
 import { transaction, type TenantContext } from '../lib/db.js';
 import { equalHash } from '../lib/crypto.js';
@@ -10,7 +10,7 @@ export interface Actor extends Me {
   context: TenantContext;
   active?: Membership;
   aal2: boolean;
-  securityPolicy?: { require_privileged_mfa?: boolean; step_up_sensitive?: boolean };
+  securityPolicy?: Partial<SchoolSecurityPolicy>;
   security_mfa_required?: boolean;
   recentVerification?: boolean;
   hasVerifiedFactor?: boolean;
@@ -44,21 +44,23 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
     let aal2 = false;
     let sessionId: string | undefined;
     let expired = false;
-    let recentVerification = false;
+    let totpVerifiedAt: number | undefined;
     try {
       const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
       expired = typeof claims.exp === 'number' && claims.exp <= Date.now() / 1000;
       aal2 = claims.aal === 'aal2';
-      recentVerification =
-        aal2 &&
-        Array.isArray(claims.amr) &&
-        claims.amr.some(
-          (x: { method?: string; timestamp?: number }) =>
-            ['totp', 'mfa/totp'].includes(x.method || '') &&
-            typeof x.timestamp === 'number' &&
-            Date.now() / 1000 - x.timestamp >= 0 &&
-            Date.now() / 1000 - x.timestamp <= 900,
-        );
+      if (aal2 && Array.isArray(claims.amr)) {
+        const now = Date.now() / 1000;
+        for (const event of claims.amr) {
+          if (
+            ['totp', 'mfa/totp'].includes(event?.method) &&
+            typeof event.timestamp === 'number' &&
+            event.timestamp <= now &&
+            event.timestamp > now - 900
+          )
+            totpVerifiedAt = Math.max(totpVerifiedAt ?? 0, event.timestamp);
+        }
+      }
       if (
         typeof claims.session_id === 'string' &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claims.session_id)
@@ -75,34 +77,74 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
       );
     if (!sessionId)
       throw new ApiError(401, 'SESSION_ENDED', 'This login session has ended. Sign in again.');
-    const live = (
-      await pool.query('SELECT app.observe_login_session($1,$2) AS live', [me.id, sessionId])
-    ).rows[0]?.live;
-    if (live !== true)
-      throw new ApiError(401, 'SESSION_ENDED', 'This login session has ended. Sign in again.');
-    if (!aal2 && data.user.factors?.some((factor) => factor.status === 'verified'))
+    const hasVerifiedFactor = !!data.user.factors?.some((factor) => factor.status === 'verified');
+    if (!aal2 && hasVerifiedFactor)
       throw new ApiError(403, 'MFA_REQUIRED', 'Complete multi-factor authentication to continue.');
-    if (sessionId)
-      await pool.query('SELECT app.record_privileged_login($1,$2)', [me.id, sessionId]);
-    const policies = new Map<string, Record<string, unknown>>();
+    const policies = new Map<string, Partial<SchoolSecurityPolicy>>();
     for (const member of me.memberships) {
       const policy =
         (await pool.query('SELECT app.school_security_policy($1) AS policy', [member.school_id]))
           .rows[0]?.policy || {};
       policies.set(member.school_id, policy);
     }
-    me.memberships = me.memberships.filter(
-      (member) =>
-        member.role !== 'student' ||
-        policies.get(member.school_id)?.student_login_enabled !== false,
-    );
     const selected = req.header('X-School-Id');
+    const deniedSchools = new Set(
+      me.memberships
+        .filter((member) => {
+          const policy = policies.get(member.school_id);
+          return (
+            (member.role === 'student' && policy?.student_login_enabled === false) ||
+            (member.role === 'parent' && policy?.parent_login_enabled === false)
+          );
+        })
+        .map((member) => member.school_id),
+    );
+    me.memberships = me.memberships.filter((member) => !deniedSchools.has(member.school_id));
+    const schoolLoginDenied = selected
+      ? deniedSchools.has(selected)
+      : !me.memberships.length && deniedSchools.size > 0 && !me.platform_role;
     const active = selected
       ? me.memberships.find((x) => x.school_id === selected)
       : me.memberships.length === 1
         ? me.memberships[0]
         : undefined;
+    const policy = active && policies.get(active.school_id);
+    const schoolMfa =
+      active &&
+      ((['school_admin', 'principal'].includes(active.role) && policy?.require_privileged_mfa) ||
+        (active.role === 'teacher' && policy?.mfa_teachers) ||
+        (active.role === 'finance_staff' &&
+          (policy?.mfa_finance_staff ?? policy?.require_privileged_mfa)));
+    const requiresMfa = !aal2 && (me.platform_role === 'SUPER_ADMIN' || !!schoolMfa);
+    const workspaceAdmitted = !requiresMfa && !schoolLoginDenied && (!selected || !!active);
+    const session = (
+      await pool.query<{
+        session: { live: boolean; inactive?: boolean; idle_expires_at?: string | null };
+      }>('SELECT app.check_workspace_login_session($1,$2,$3,$4,to_timestamp($5)) AS session', [
+        me.id,
+        sessionId,
+        workspaceAdmitted && req.method === 'POST' && req.path === '/account/sessions/activity',
+        workspaceAdmitted,
+        totpVerifiedAt ?? null,
+      ])
+    ).rows[0]?.session;
+    if (!session?.live)
+      throw new ApiError(
+        401,
+        'SESSION_ENDED',
+        session?.inactive
+          ? 'Your session ended after inactivity. Sign in again.'
+          : 'This login session has ended. Sign in again.',
+      );
+    if (schoolLoginDenied && (selected || req.path === '/me'))
+      throw new ApiError(
+        403,
+        'SCHOOL_LOGIN_DISABLED',
+        'Your school has paused sign-in for this account role.',
+      );
     if (selected && !active) throw notFound();
+    if (workspaceAdmitted)
+      await pool.query('SELECT app.record_privileged_login($1,$2)', [me.id, sessionId]);
     res.locals.actor = {
       ...me,
       sessionId,
@@ -110,14 +152,11 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
       limits: {},
       subscription_status: null,
       aal2,
-      recentVerification,
-      hasVerifiedFactor: !!data.user.factors?.some((factor) => factor.status === 'verified'),
-      securityPolicy: active ? policies.get(active.school_id) : undefined,
-      security_mfa_required:
-        !!active &&
-        ['school_admin', 'principal', 'finance_staff'].includes(active.role) &&
-        policies.get(active.school_id)?.require_privileged_mfa === true &&
-        !aal2,
+      recentVerification: totpVerifiedAt !== undefined,
+      hasVerifiedFactor,
+      securityPolicy: policy,
+      security_mfa_required: requiresMfa,
+      idle_expires_at: session.idle_expires_at ?? null,
       active,
       context: {
         schoolId: active?.school_id || '',
@@ -142,8 +181,10 @@ export const requireSchool: RequestHandler = (req, res, next) => {
   if (
     actor.securityPolicy?.step_up_sensitive &&
     !actor.recentVerification &&
-    req.method !== 'GET' &&
-    /^\/(memberships|devices|support-grants|reports|school\/security)/.test(req.path)
+    !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+    /^\/(memberships|invitations|devices|support-grants|reports|exports|school\/(security|retention))(\/|$)/.test(
+      req.path,
+    )
   )
     return next(
       new ApiError(
@@ -165,6 +206,14 @@ export function permission(code: string): RequestHandler {
     if (!res.locals.actor.active?.permissions.includes(code))
       next(new ApiError(403, 'FORBIDDEN', 'Your role does not allow this action.'));
     else next();
+  };
+}
+export function schoolRoles(...roles: Role[]): RequestHandler {
+  return (_req, res, next) => {
+    const role = res.locals.actor.active?.role;
+    if (!role || !roles.includes(role))
+      return next(new ApiError(403, 'FORBIDDEN', 'Your role does not allow this action.'));
+    next();
   };
 }
 export const platformOnly: RequestHandler = (_req, res, next) => {

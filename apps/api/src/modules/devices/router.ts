@@ -370,7 +370,7 @@ export function managementRouter(pool: pg.Pool) {
           (tx) =>
             paged(
               tx,
-              "SELECT d.id,d.device_code,d.name,d.location_id,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,d.storage_used_pct,d.wifi_rssi_dbm,d.config_version,d.config,l.name AS location_name,l.location_type,(d.status='ACTIVE' AND d.last_seen_at>now()-interval '3 minutes') AS online FROM devices d LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.school_id=$1 ORDER BY d.name,d.id",
+              "SELECT d.id,d.device_code,d.name,d.location_id,d.status,d.firmware_version,d.last_seen_at,d.pending_event_count,d.reader_status,d.rtc_status,d.storage_used_pct,d.wifi_rssi_dbm,d.config_version,d.config,l.name AS location_name,l.location_type,coalesce(d.status='ACTIVE' AND d.last_seen_at>=now()-make_interval(mins=>app.reader_offline_minutes(s.settings)),false) AS online FROM devices d JOIN schools s ON s.id=d.school_id LEFT JOIN device_locations l ON l.school_id=d.school_id AND l.id=d.location_id WHERE d.school_id=$1 ORDER BY d.name,d.id",
               [a.context.schoolId],
               req.query,
             ),

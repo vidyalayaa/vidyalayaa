@@ -8,7 +8,8 @@ import { providerSessionSchema } from '../helpers/provider-sessions.js';
 import { fixture } from '../helpers/database.js';
 it('preserves existing provider sessions, credentials and school records without queuing historical login alerts', async () => {
   const db = new PGlite({ extensions: { btree_gist, pgcrypto, citext } }),
-    migration = '20261023151112_login_sessions.sql';
+    migration = '20261023151112_login_sessions.sql',
+    policyUpgrade = '20261106124505_school_security_policy_upgrade.sql';
   try {
     await db.exec(
       "CREATE SCHEMA auth;CREATE SCHEMA storage;CREATE ROLE anon;CREATE ROLE authenticated;CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}');CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);",
@@ -16,10 +17,14 @@ it('preserves existing provider sessions, credentials and school records without
     await db.exec(providerSessionSchema);
     for (const file of readdirSync('db/migrations')
       .sort()
-      .filter((f) => f !== migration))
+      .filter((f) => f !== migration && f !== policyUpgrade))
       await db.exec(readFileSync('db/migrations/' + file, 'utf8'));
     const f = await fixture(db),
       sid = crypto.randomUUID();
+    await db.query(
+      'UPDATE schools SET settings=jsonb_set(settings,\'{security}\',\'{"device_offline_minutes":7,"require_privileged_mfa":true}\') WHERE id=$1',
+      [f.schoolA],
+    );
     await db.query(
       "INSERT INTO auth.sessions(id,user_id,created_at,refreshed_at,user_agent,ip) VALUES($1,$2,now()-interval '2 days',now()-interval '1 hour','Original browser','192.0.2.1')",
       [sid, f.admin],
@@ -40,6 +45,7 @@ it('preserves existing provider sessions, credentials and school records without
       tables.map((t) => db.query('SELECT * FROM ' + t + ' ORDER BY id')),
     );
     await db.exec(readFileSync('db/migrations/' + migration, 'utf8'));
+    await db.exec(readFileSync('db/migrations/' + policyUpgrade, 'utf8'));
     const after = await Promise.all(
       tables.map((t) => db.query('SELECT * FROM ' + t + ' ORDER BY id')),
     );

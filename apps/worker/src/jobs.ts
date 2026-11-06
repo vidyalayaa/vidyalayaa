@@ -13,7 +13,10 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
       ).rows[0].locked
     )
       return;
-    const school = (await tx.query('SELECT * FROM schools WHERE id=$1', [schoolId])).rows[0],
+    const school = (await tx.query(
+      'SELECT *,app.reader_offline_minutes(settings) AS offline_minutes FROM schools WHERE id=$1',
+      [schoolId],
+    )).rows[0],
       local = localParts(new Date(), school.timezone);
     const run = (
       await tx.query(
@@ -21,9 +24,7 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
         [schoolId],
       )
     ).rows[0].id;
-    const offlineMs =
-      Math.max(1, Math.min(60, Number(school.settings.security?.device_offline_minutes || 3))) *
-      60000;
+    const offlineMs = school.offline_minutes * 60000;
     const devices = (
       await tx.query("SELECT * FROM devices WHERE school_id=$1 AND status='ACTIVE'", [schoolId])
     ).rows;
