@@ -198,11 +198,15 @@ export default function LoginSessions() {
               {sessions.data?.events.map((event) => (
                 <li key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
                   <span>
-                    {event.kind === 'NEW_LOGIN'
-                      ? 'New login detected'
-                      : event.kind === 'OTHER_SESSIONS_ENDED'
-                        ? `${event.affected_count} other session(s) ended`
-                        : 'Login session ended'}
+                    {event.kind === 'NEW_LOGIN' && event.unfamiliar_network
+                      ? 'Sign-in from an unfamiliar network'
+                      : event.kind === 'NEW_LOGIN'
+                        ? 'New login detected'
+                        : event.kind === 'OTHER_SESSIONS_ENDED'
+                          ? `${event.affected_count} other session(s) ended`
+                          : event.kind === 'MFA_VERIFIED'
+                            ? 'Authenticator verified'
+                            : 'Login session ended'}
                     {event.kind === 'NEW_LOGIN' && event.email_status === 'SENT' && ' · Email sent'}
                   </span>
                   <time dateTime={event.created_at} className="text-stone-500">

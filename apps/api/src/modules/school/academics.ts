@@ -5,7 +5,7 @@ import { uuid, classSubjectSchema } from '@vidyalayaa/contracts';
 import { transaction, audit, type Tx } from '../../lib/db.js';
 import { paged } from '../../lib/pagination.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
-import { type Actor } from '../../middleware/auth.js';
+import { permission, schoolRoles, type Actor } from '../../middleware/auth.js';
 import { resourceSelect, validateBusiness } from './resources.js';
 
 // One definition for the section badge and current-enrollment list. Historical
@@ -42,23 +42,12 @@ interface AcademicWriteControls {
 }
 export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
   const r = Router();
-  // Aggregation must not turn academic read permission into access to staff or
-  // student records. The Principal keeps their existing read-only resource pages.
-  r.use((_req, res, next) => {
-    const a: Actor = res.locals.actor;
-    if (
-      a.active?.role !== 'school_admin' ||
-      !['academics.read', 'students.read', 'teachers.read'].every((p) =>
-        a.active!.permissions.includes(p),
-      )
-    )
-      return next(
-        new ApiError(403, 'FORBIDDEN', 'School Admin academic management access is required.'),
-      );
-    next();
-  });
+  const adminOnly = schoolRoles('school_admin');
+  const academicsReaders = schoolRoles('school_admin', 'principal');
+  r.use(permission('academics.read'), permission('students.read'), permission('teachers.read'));
   r.post(
     '/classes/:id/subjects',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         id = uuid.parse(req.params.id),
@@ -152,6 +141,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
   );
   r.get(
     '/classes/:id/unconfigured-assignments',
+    academicsReaders,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         id = uuid.parse(req.params.id);
@@ -176,6 +166,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
   );
   r.get(
     '/classes',
+    academicsReaders,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor;
       const q = z.object({ session_id: uuid.optional() }).parse(req.query);
@@ -221,6 +212,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
   );
   r.get(
     '/classes/:id/subject-choices',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         id = uuid.parse(req.params.id);
@@ -246,6 +238,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
   );
   r.get(
     '/classes/:id/subjects',
+    academicsReaders,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         id = uuid.parse(req.params.id);
@@ -279,6 +272,7 @@ export function academicsRouter(pool: pg.Pool, writes: AcademicWriteControls) {
   );
   r.get(
     '/classes/:id/enrollments',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         id = uuid.parse(req.params.id);

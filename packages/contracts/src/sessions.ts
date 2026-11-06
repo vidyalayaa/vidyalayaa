@@ -11,7 +11,8 @@ export interface LoginSession {
 }
 export interface AccountSecurityEvent {
   id: string;
-  kind: 'NEW_LOGIN' | 'SESSION_ENDED' | 'OTHER_SESSIONS_ENDED';
+  kind: 'NEW_LOGIN' | 'SESSION_ENDED' | 'OTHER_SESSIONS_ENDED' | 'MFA_VERIFIED';
+  unfamiliar_network?: boolean;
   affected_count: number;
   created_at: string;
   email_status: 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED' | 'NOT_REQUIRED';

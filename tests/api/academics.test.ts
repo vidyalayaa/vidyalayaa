@@ -268,8 +268,8 @@ it('paginates complete class, subject and enrollment results and validates query
   expect(second.body.data).toHaveLength(2);
 });
 
-it('rejects non-admin roles and foreign classes without exposing student or assignment data', async () => {
-  for (const role of ['teacher', 'principal', 'parent', 'studentUser']) {
+it('allows Principal academic summaries while restricting management and foreign classes', async () => {
+  for (const role of ['teacher', 'parent', 'studentUser']) {
     for (const path of [
       '/academics/classes',
       `/academics/classes/${f.classId}/subjects`,
@@ -278,6 +278,23 @@ it('rejects non-admin roles and foreign classes without exposing student or assi
     ])
       expect((await call('get', path, role)).status, role + path).toBe(403);
   }
+  const principal = (path: string) => call('get', path, 'principal');
+  for (const path of [
+    '/academics/classes',
+    `/academics/classes/${f.classId}/subjects`,
+    `/academics/classes/${f.classId}/unconfigured-assignments`,
+  ]) {
+    const result = await principal(path);
+    expect(result.status, path).toBe(200);
+    expect(result.body).toEqual((await call('get', path)).body);
+  }
+  for (const child of ['subject-choices', 'enrollments'])
+    expect((await principal(`/academics/classes/${f.classId}/${child}`)).status).toBe(403);
+  expect((await call('post', `/academics/classes/${f.classId}/subjects`, 'principal')).status).toBe(
+    403,
+  );
+  expect((await principal(`/academics/classes/${foreignClass}/subjects`)).status).toBe(404);
+  expect((await principal('/academics/classes').set('X-School-Id', f.schoolB)).status).toBe(404);
   for (const suffix of ['subjects', 'enrollments', 'unconfigured-assignments']) {
     const foreign = await call('get', `/academics/classes/${foreignClass}/${suffix}`),
       missing = await call('get', `/academics/classes/${crypto.randomUUID()}/${suffix}`);

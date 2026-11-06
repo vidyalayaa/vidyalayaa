@@ -216,3 +216,66 @@ test('Creating a class subject test filters subjects and clears the subject when
     ),
   ).toBe(true);
 });
+
+test('School Admin filters performance, drills into a result and prints the result sheet', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  const s = await setup(platformApp, 'ANALYTICS');
+  const exam = await s.createExam(s.f.classId, null, 'Leadership analytics examination');
+  const second = await s.createExam(s.section, null, 'Leadership analytics examination');
+  for (const [exam_id, student_id, subject_id, score] of [
+    [exam, s.f.student, s.f.subject, 86],
+    [second, s.child, s.english, 75],
+  ]) {
+    expect(
+      (await s.call('/resources/marks', 'POST', { exam_id, student_id, subject_id, score })).status,
+    ).toBe(201);
+    expect(
+      (await s.call('/resources/exams/' + exam_id, 'PATCH', { status: 'PUBLISHED' })).status,
+    ).toBe(200);
+  }
+  const response = await s.call('/results/examinations?session_id=' + s.f.session);
+  const cohort = response.body.data.find((item: { id: string }) => item.id === exam).cohort_id;
+
+  await page.goto(authAppURL + '/admin/r/marks');
+  await page.getByRole('button', { name: 'Grading policy', exact: true }).click();
+  const policy = page.getByRole('dialog');
+  await policy.getByLabel('Overall pass percentage').fill('40');
+  await policy.getByRole('button', { name: 'Add grade band' }).click();
+  await policy.getByLabel('Grade 1', { exact: true }).fill('A');
+  await policy.getByLabel('Minimum percentage 1').fill('80');
+  await policy.getByRole('button', { name: 'Add grade band' }).click();
+  await policy.getByLabel('Grade 2', { exact: true }).fill('B');
+  await policy.getByLabel('Minimum percentage 2').fill('0');
+  await policy.getByRole('button', { name: 'Save grading policy' }).click();
+  await expect(policy).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Academic analytics', exact: true }).click();
+  await page.getByLabel('Examination', { exact: true }).selectOption(cohort);
+  const stats = page.getByRole('table', { name: 'Class-wise statistics' });
+  await expect(stats.getByRole('row')).toHaveCount(3);
+  await expect(page.getByRole('heading', { name: 'Overall school toppers' })).toBeVisible();
+  await expect(
+    page.getByRole('img', { name: 'Performance distribution' }).locator('svg.recharts-surface'),
+  ).toBeVisible();
+  await stats.getByRole('button', { name: 'Class 8 · Section A', exact: true }).click();
+  await expect(page.getByLabel('Section', { exact: true })).toHaveValue(s.f.classId);
+  await expect(stats.getByRole('row')).toHaveCount(2);
+  await expect(stats).toContainText('86%');
+  await page
+    .getByRole('button', { name: /Test learner.*Rank 1/ })
+    .first()
+    .click();
+  await expect(page.getByLabel('Student', { exact: true })).toHaveValue(s.f.student);
+  const result = page.getByRole('article', { name: 'Student result' });
+  await expect(result).toContainText('86 / 100');
+  await expect(result).toContainText('Passed');
+  await expect(result.getByRole('row', { name: /Mathematics/ })).toContainText('A');
+  await expect(result.getByRole('button', { name: 'Print / Save as PDF' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.emulateMedia({ media: 'print' });
+  await expect(result.getByRole('table', { name: 'Subject-wise marks' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Results views' })).toBeHidden();
+});

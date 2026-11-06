@@ -60,7 +60,7 @@ export default function TeacherPortalSection() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
             <a href="/r/assignments">
               <BookOpen size={15} />

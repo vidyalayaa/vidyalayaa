@@ -5,6 +5,14 @@ import { authEmails, emailConfig, renderAuthEmail } from '../../scripts/lib/auth
 // @ts-expect-error Node deployment module has no separate declaration file.
 import { buildAuthConfig } from '../../scripts/lib/auth-config.mjs';
 
+it('validates the configurable project password floor without weakening an existing requirement', () => {
+  const site = 'https://school.example';
+  expect(buildAuthConfig({ password_min_length: 14 }, site, '18').password_min_length).toBe(18);
+  expect(buildAuthConfig({ password_min_length: 20 }, site, '18').password_min_length).toBe(20);
+  for (const invalid of ['11', '65', '12.5', 'weak'])
+    expect(() => buildAuthConfig({}, site, invalid)).toThrow(/AUTH_PASSWORD_MIN_LENGTH/);
+});
+
 it('creates all six auth templates and two security notifications without external assets or unsafe metadata', () => {
   expect(authEmails.map((x: { key: string }) => x.key)).toEqual([
     'confirmation',

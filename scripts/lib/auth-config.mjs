@@ -1,6 +1,9 @@
 import { emailConfig } from './auth-emails.mjs';
 
-export function buildAuthConfig(current, site) {
+export function buildAuthConfig(current, site, minimumPasswordLength) {
+  const passwordLength = minimumPasswordLength || '12';
+  if (!/^(1[2-9]|[2-5][0-9]|6[0-4])$/.test(passwordLength))
+    throw new Error('AUTH_PASSWORD_MIN_LENGTH must be a whole number from 12 to 64.');
   const url = new URL(site || current.site_url);
   if (
     url.username ||
@@ -30,7 +33,7 @@ export function buildAuthConfig(current, site) {
     mailer_secure_email_change_enabled: true,
     security_update_password_require_reauthentication: true,
     security_update_password_require_current_password: true,
-    password_min_length: Math.max(12, current.password_min_length || 0),
+    password_min_length: Math.max(Number(passwordLength), current.password_min_length || 0),
     mailer_otp_exp: Math.min(1800, current.mailer_otp_exp || 1800),
   };
 }

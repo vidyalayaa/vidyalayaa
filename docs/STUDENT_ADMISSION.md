@@ -26,11 +26,13 @@ Search matches student name, code and email across the school. Classes are loade
 
 The old **All student records** button, separate School Admin Parents/Family links navigation, and disconnected entry pages have been removed. Old `?view=records`, `/admin/r/parents` and `/admin/r/student_parents` links redirect to the class-wise Students workspace; student search parameters are retained. Existing parent contact details and family relationships/alert settings can be edited inside the selected student's profile. Underlying records and resource APIs remain intact, and Principal/Teacher/Parent/Student views retain their existing role restrictions.
 
+In the Principal workspace, the former **Parents & Guardians** and **Family Connections** pages redirect to Students. Principals can view linked guardians within each student's profile.
+
 The Students page's CSV import now supports complete admissions, including enrollment, gender, parent details and family connections. Download its template before preparing the file. **Export CSV** downloads full matching student and parent records across all pages. See [student CSV import and export](STUDENT_CSV.md). The older generic record-only import API remains compatible; older unplaced students remain in the unassigned group. Class enrollment management is inside each student's profile, with existing dates, roll numbers, status and history retained. The Student 360 current enrollment no longer selects a future or expired placement as current.
 
 ## API
 
-All paths use `/api/v1`, verified Supabase authentication and the selected `X-School-Id` membership. The directory requires School Admin plus `students.read`, `parents.read` and `academics.read`. Admissions also require `students.write`, `parents.write`, a writable subscription and the existing student limit. Teacher, Principal, Parent, Student and platform-only callers cannot use this management API; their existing scoped views remain unchanged.
+All paths use `/api/v1`, verified Supabase authentication and the selected `X-School-Id` membership. Class and student lists require School Admin or Principal with `students.read`, `parents.read` and `academics.read`. Principal can browse the class-wise directory and open student profiles. Admission lookups, admissions, CSV import and CSV export require School Admin. Admissions also require `students.write`, `parents.write`, a writable subscription and the existing student limit.
 
 | Endpoint | Contract |
 | --- | --- |

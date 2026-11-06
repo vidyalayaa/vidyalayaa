@@ -32,6 +32,7 @@ import {
   invitationDisplayStatuses,
   roles,
   bulkMarksSchema,
+  resultPolicySchema,
   singleMarkSchema,
   firstAdminSchema,
   deviceTuningSchema,
@@ -185,6 +186,7 @@ const schemas = {
   ReportRequest: reportSchema,
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
+  ResultPolicy: resultPolicySchema,
   SingleMark: singleMarkSchema,
   FirstSchoolAdministrator: firstAdminSchema,
   DeviceTuning: deviceTuningSchema,
@@ -463,6 +465,11 @@ operation(
   '/account/sessions',
   'get',
   'List only the current user’s provider sessions and recent account security alerts; no school selection required',
+);
+operation(
+  '/account/sessions/activity',
+  'post',
+  'Extend the current active provider session after user interaction and return its inactivity deadline',
 );
 operation(
   '/account/sessions/logout-others',
@@ -828,7 +835,9 @@ for (const child of ['classes', 'students', 'parents', 'enrollment-classes'])
   operation(
     `/student-directory/${child}`,
     'get',
-    'School Admin only; school-scoped class-wise student directory and admission lookups',
+    ['classes', 'students'].includes(child)
+      ? 'School Admin or Principal; school-scoped class-wise student directory'
+      : 'School Admin only; school-scoped student admission lookups',
     undefined,
     'UserJWT',
     {
@@ -1057,7 +1066,7 @@ operation(
 operation(
   '/academics/classes',
   'get',
-  'School Admin only; class/section summaries with student_count, male_count, female_count, other_count, unspecified_count for dated active enrollments, assigned subjects, Class Teacher and school sessions with dates',
+  'School Admin or Principal; class/section summaries with student_count, male_count, female_count, other_count, unspecified_count for dated active enrollments, assigned subjects, Class Teacher and school sessions with dates',
   undefined,
   'UserJWT',
   {
@@ -1099,7 +1108,7 @@ for (const child of ['subjects', 'subject-choices', 'enrollments', 'unconfigured
   operation(
     `/academics/classes/{id}/${child}`,
     'get',
-    `School Admin only; school- and class-scoped ${child}`,
+    `${['subjects', 'unconfigured-assignments'].includes(child) ? 'School Admin or Principal' : 'School Admin only'}; school- and class-scoped ${child}`,
     undefined,
     'UserJWT',
     {
@@ -1291,6 +1300,81 @@ operation(
   'get',
   'Approved, scoped, paginated support read; live grant lock and audit in one transaction',
 );
+const resultSchoolHeader = {
+  name: 'X-School-Id',
+  in: 'header',
+  required: true,
+  schema: { type: 'string', format: 'uuid' },
+};
+const resultIdParameter = (name: string, location: 'path' | 'query', required = true) => ({
+  name,
+  in: location,
+  required,
+  schema: { type: 'string', format: 'uuid' },
+});
+operation(
+  '/results/examinations',
+  'get',
+  'School Admin and Principal examination catalogue with session cohort identifiers',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [resultSchoolHeader, resultIdParameter('session_id', 'query')],
+  },
+);
+operation(
+  '/results/exams/{id}/students',
+  'get',
+  'School Admin and Principal paginated examination roster',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      resultSchoolHeader,
+      resultIdParameter('id', 'path'),
+      { name: 'search', in: 'query', schema: { type: 'string', maxLength: 120 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'page_size', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+    ],
+  },
+);
+operation(
+  '/results/exams/{id}/students/{student}',
+  'get',
+  'School Admin and Principal individual result, marks and applicable ranks',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      resultSchoolHeader,
+      resultIdParameter('id', 'path'),
+      resultIdParameter('student', 'path'),
+    ],
+  },
+);
+operation(
+  '/results/analytics',
+  'get',
+  'School Admin and Principal class, subject, ranking and performance analytics',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      resultSchoolHeader,
+      resultIdParameter('session_id', 'query'),
+      resultIdParameter('cohort_id', 'query'),
+      resultIdParameter('class_id', 'query', false),
+      { name: 'grade', in: 'query', schema: { type: 'string' } },
+    ],
+  },
+);
+operation('/results/policy', 'get', 'School Admin and Principal grading policy');
+operation(
+  '/results/policy',
+  'put',
+  'School Admin updates the school grading policy',
+  'ResultPolicy',
+);
 for (const [path, method, summary, schema] of [
   ['/support-requests', 'get', 'Own school support requests; no implied support grant', undefined],
   ['/support-requests', 'post', 'School Admin support intake', 'SupportRequest'],
@@ -1298,7 +1382,24 @@ for (const [path, method, summary, schema] of [
   ['/platform/support-requests/{id}', 'patch', 'Platform support response', 'SupportResponse'],
   ['/platform/notices', 'get', 'Metadata-only lifecycle and device escalations', undefined],
   ['/school/security', 'get', 'Read approved school security policy', undefined],
-  ['/school/security', 'put', 'Set policy; school.manage and verified MFA', 'SchoolSecurity'],
+  [
+    '/school/security',
+    'put',
+    'Versioned School Admin policy update with confirmation and verified recovery for stricter MFA',
+    'SchoolSecurity',
+  ],
+  [
+    '/school/security/history',
+    'get',
+    'School Admin only: read immutable school security policy versions',
+    undefined,
+  ],
+  [
+    '/school/security/audit',
+    'get',
+    'School Admin only: read scoped, sanitized security events',
+    undefined,
+  ],
   ['/analytics', 'get', 'Current authorized academic and attendance aggregates', undefined],
   ['/attendance/events', 'get', 'Scoped raw movement history', undefined],
   [

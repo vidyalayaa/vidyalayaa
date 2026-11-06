@@ -16,7 +16,8 @@ import { exportsRouter } from './modules/school/exports.js';
 import { supportRouter } from './modules/school/support.js';
 import { workflowsRouter } from './modules/school/workflows.js';
 import { bulkRouter } from './modules/school/bulk.js';
-import { schoolRouter, schoolAccess } from './modules/school/router.js';
+import { schoolRouter, schoolAccess, requireWrite } from './modules/school/router.js';
+import { securityPolicyRouter } from './modules/school/security-policy.js';
 import { deviceRouter, managementRouter } from './modules/devices/router.js';
 import { billingRouter } from './modules/platform/billing.js';
 import { platformRouter, supportApprovalRouter } from './modules/platform/router.js';
@@ -182,6 +183,7 @@ export function createApp(config: Config, deps: Dependencies) {
   );
   app.use('/api/v1/platform', platformRouter(deps.platform, deps.api, deps.supabase, config));
   app.use('/api/v1', requireSchool, schoolAccess(deps.api));
+  app.use('/api/v1/school/security', securityPolicyRouter(deps.api, requireWrite));
   app.use('/api/v1', exportsRouter(deps.api, deps.supabase, config.TOKEN_ENCRYPTION_KEY));
   app.use('/api/v1', workflowsRouter(deps.api));
   app.use('/api/v1', supportRouter(deps.api));

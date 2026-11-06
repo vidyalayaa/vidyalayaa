@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { studentAdmissionSchema, studentImportRequestSchema, uuid } from '@vidyalayaa/contracts';
 import { transaction, type Tx } from '../../lib/db.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
-import type { Actor } from '../../middleware/auth.js';
+import { permission, schoolRoles, type Actor } from '../../middleware/auth.js';
 import { paged } from '../../lib/pagination.js';
 import { saveStudentAdmission } from './student-admissions.js';
 import { importStudentAdmissions } from './student-import.js';
@@ -30,21 +30,12 @@ const placement = `e.status='ACTIVE' AND c.retired_at IS NULL
 const matches = `concat_ws(' ',s.student_code,s.first_name,s.last_name,s.email::text) ILIKE $2`;
 export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   const r = Router();
-  r.use((_req, res, next) => {
-    const a: Actor = res.locals.actor;
-    if (
-      a.active?.role !== 'school_admin' ||
-      !['students.read', 'parents.read', 'academics.read'].every((p) =>
-        a.active!.permissions.includes(p),
-      )
-    )
-      return next(
-        new ApiError(403, 'FORBIDDEN', 'School Admin student management access is required.'),
-      );
-    next();
-  });
+  const adminOnly = schoolRoles('school_admin');
+  const directoryReaders = schoolRoles('school_admin', 'principal');
+  r.use(permission('students.read'), permission('parents.read'), permission('academics.read'));
   r.get(
     '/parents',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         q = z.object({ search: z.string().max(120).default('') }).parse(req.query);
@@ -66,6 +57,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   );
   r.get(
     '/enrollment-classes',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         q = z.object({ search: z.string().max(120).default('') }).parse(req.query);
@@ -87,6 +79,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   );
   r.get(
     '/classes',
+    directoryReaders,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         q = z.object({ search: z.string().max(120).default('') }).parse(req.query);
@@ -120,6 +113,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   );
   r.get(
     '/students',
+    directoryReaders,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         q = z
@@ -162,6 +156,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   );
   r.post(
     '/imports',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         b = studentImportRequestSchema.parse(req.body),
@@ -190,6 +185,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   );
   r.get(
     '/export.csv',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor;
       const q = z
@@ -199,7 +195,6 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
         })
         .strict()
         .parse(req.query);
-      // Directory middleware already requires a School Admin and student/parent read permissions.
       res.type('text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="vidyalayaa-students.csv"');
       res.setHeader('Cache-Control', 'no-store');
@@ -229,6 +224,7 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
   );
   r.post(
     '/admissions',
+    adminOnly,
     asyncRoute(async (req, res) => {
       const a: Actor = res.locals.actor,
         b = studentAdmissionSchema.parse(req.body),

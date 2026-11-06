@@ -1,5 +1,4 @@
 import {
-  securityPolicySchema,
   notificationPrivacySchema,
   reconciliationRequestSchema,
   retirementSchema,
@@ -128,63 +127,6 @@ export function workflowsRouter(pool: pg.Pool) {
           true,
         ),
       });
-    }),
-  );
-  const securitySchema = securityPolicySchema;
-  r.get(
-    '/school/security',
-    permission('school.manage'),
-    asyncRoute(async (_req, res) => {
-      const a = res.locals.actor;
-      const result = await transaction(
-        pool,
-        a.context,
-        async (tx) =>
-          (
-            await tx.query("SELECT settings->'security' AS policy FROM schools WHERE id=$1", [
-              a.context.schoolId,
-            ])
-          ).rows[0]?.policy || {},
-        true,
-      );
-      res.json({
-        require_privileged_mfa: false,
-        student_login_enabled: true,
-        step_up_sensitive: false,
-        device_offline_minutes: 3,
-        policy_ref: '',
-        ...result,
-      });
-    }),
-  );
-  r.put(
-    '/school/security',
-    permission('school.manage'),
-    asyncRoute(async (req, res) => {
-      const a = res.locals.actor,
-        b = securitySchema.parse(req.body);
-      if ((b.require_privileged_mfa || b.step_up_sensitive) && !a.aal2)
-        throw new ApiError(
-          403,
-          'MFA_REQUIRED',
-          'Enroll and verify your authenticator before enabling this policy.',
-        );
-      await transaction(pool, a.context, async (tx) => {
-        await requireWrite(tx, a);
-        await tx.query(
-          "UPDATE schools SET settings=jsonb_set(settings,'{security}',$2::jsonb) WHERE id=$1",
-          [a.context.schoolId, { ...b, approved_by: a.id, approved_at: new Date().toISOString() }],
-        );
-        await audit(
-          tx,
-          a.context.schoolId,
-          a.id,
-          'security.policy.updated',
-          'schools',
-          a.context.schoolId,
-        );
-      });
-      res.json(b);
     }),
   );
   r.get(

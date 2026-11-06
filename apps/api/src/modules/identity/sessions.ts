@@ -47,7 +47,7 @@ export function sessionsRouter(pool: pg.Pool) {
             .rows;
           const events = (
             await tx.query(
-              "SELECT id,kind,affected_count,created_at,email_status FROM app.account_security_events WHERE user_id=$1 AND created_at>now()-interval '90 days' ORDER BY created_at DESC,id DESC LIMIT 20",
+              "SELECT id,kind,affected_count,created_at,email_status,unfamiliar_network FROM app.account_security_events WHERE user_id=$1 AND created_at>now()-interval '90 days' ORDER BY created_at DESC,id DESC LIMIT 20",
               [a.id],
             )
           ).rows;
@@ -65,6 +65,9 @@ export function sessionsRouter(pool: pg.Pool) {
       res.json(result);
     }),
   );
+  router.post('/activity', (_req, res) => {
+    res.json({ idle_expires_at: res.locals.actor.idle_expires_at ?? null });
+  });
   router.post(
     '/logout-others',
     asyncRoute(async (_req, res) => {

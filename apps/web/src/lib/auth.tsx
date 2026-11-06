@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   createClient,
   type Session,
@@ -8,6 +8,7 @@ import {
 } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Me } from '@vidyalayaa/contracts';
+import { IdleSessionWarning } from '../features/auth/IdleSessionWarning';
 import { clearDrafts, suspendDrafts, resumeDrafts, discardDraftCheckpoint } from './drafts';
 import { safeReturnTo } from './auth-return';
 const url = import.meta.env.VITE_SUPABASE_URL,
@@ -372,7 +373,11 @@ export async function api<T = Record<string, unknown>>(
       .catch(() => ({}));
     if (failure.error?.code === 'SESSION_ENDED') {
       await supabase.auth.signOut({ scope: 'local' });
-      throw new HttpError('SESSION_ENDED', 401, 'This login session has ended. Sign in again.');
+      throw new HttpError(
+        'SESSION_ENDED',
+        401,
+        failure.error.message || 'This login session has ended. Sign in again.',
+      );
     }
     const current = await supabase.auth.getSession();
     if (
@@ -520,6 +525,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
   });
+  const userId = session?.user.id;
+  const extendIdleSession = useCallback(async () => {
+    if (!userId) return;
+    const { idle_expires_at } = await api<{ idle_expires_at: string | null }>(
+      '/account/sessions/activity',
+      { method: 'POST', signal: AbortSignal.timeout(8000) },
+      true,
+      'json',
+      { userId, schoolId: school },
+    );
+    const queryKey = ['me', userId, school];
+    await queryClient.cancelQueries({ queryKey, exact: true });
+    queryClient.setQueryData<Me>(queryKey, (current) =>
+      current ? { ...current, idle_expires_at } : current,
+    );
+  }, [queryClient, userId, school]);
+  const checkIdleExpiry = useCallback(async () => {
+    if (!userId || !supabase) return;
+    const { data: before } = await supabase.auth.getSession();
+    try {
+      const current = await api<Me>('/me', { signal: AbortSignal.timeout(8000) }, true, 'json', {
+        userId,
+        schoolId: school,
+      });
+      // Another tab may have extended this session. Keep the server's deadline.
+      queryClient.setQueryData(['me', userId, school], current);
+    } catch (error) {
+      if (
+        error instanceof HttpError &&
+        ['SESSION_ENDED', 'UNAUTHENTICATED', 'CONTEXT_CHANGED'].includes(error.code)
+      )
+        return;
+      const { data: latest } = await supabase.auth.getSession();
+      if (
+        selectedSchool === school &&
+        latest.session?.user.id === userId &&
+        latest.session.access_token === before.session?.access_token
+      )
+        await supabase.auth.signOut({ scope: 'local' });
+    }
+  }, [queryClient, userId, school]);
   useEffect(() => {
     if (
       !session ||
@@ -592,6 +638,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      {userId && me.data?.idle_expires_at && !me.data.security_mfa_required && (
+        <IdleSessionWarning
+          key={userId + ':' + school}
+          deadline={me.data.idle_expires_at}
+          extend={extendIdleSession}
+          checkExpiry={checkIdleExpiry}
+        />
+      )}
     </Context.Provider>
   );
 }

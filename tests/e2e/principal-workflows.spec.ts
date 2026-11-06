@@ -26,6 +26,7 @@ test('Principal dashboard, school-wide analytics and permitted navigation work',
   platformApp,
   isMobile,
 }) => {
+  test.setTimeout(75_000);
   const f = platformApp.records;
   const dashboard = await platformApp.request(
     '/dashboard',
@@ -51,20 +52,52 @@ test('Principal dashboard, school-wide analytics and permitted navigation work',
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   for (const name of [
     'Students',
-    'Parents',
+    'School staff',
     'Attendance',
+    'Calendar',
     'Academics',
+    'Homework',
     'Results',
+    'Timetable',
+    'Fees',
+    'NFC devices',
     'Reports',
     'Announcements',
+    'Notifications',
+    'Corrections',
   ])
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
-  for (const name of ['Members & invitations', 'Platform console', 'School exports'])
+  for (const name of [
+    'Members & invitations',
+    'Platform console',
+    'School exports',
+    'Parents',
+    'Family links',
+  ])
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   await page.locator('summary.school-selector').click();
   const schoolActions = page.getByRole('navigation', { name: 'School actions' });
   await expect(schoolActions.getByRole('link', { name: 'School information' })).toBeVisible();
   await expect(schoolActions.getByRole('link', { name: 'School exports' })).toHaveCount(0);
+  await nav.getByRole('link', { name: 'Academics', exact: true }).click();
+  await expect(page).toHaveURL(/\/principal\/academics$/);
+  await expect(
+    page.getByRole('heading', { name: 'Every class. Everything together.' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Academic sessions', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Academic sessions', exact: true })).toContainText(
+    'Current',
+  );
+  await page.locator('main summary').filter({ hasText: 'Section A' }).first().click();
+  const subjects = page.getByRole('region', { name: /Subjects for Class/ });
+  await expect(subjects.getByRole('heading', { name: 'Mathematics' })).toBeVisible();
+  await expect(subjects).toContainText('Teacher Test');
+  await expect(page.getByRole('region', { name: /Student counts for Class/ })).toContainText(
+    'Total students',
+  );
+  await expect(page.getByRole('link', { name: 'Academic-year promotion' })).toHaveCount(0);
+  for (const name of ['Add academic session', 'Add class & section', 'Add subject & teacher'])
+    await expect(page.getByRole('button', { name })).toHaveCount(0);
 });
 
 for (const resource of [
@@ -168,29 +201,33 @@ for (const resource of [
     expect(records.status).toBe(200);
     expect(records.body.data.length).toBeGreaterThan(0);
     const first = records.body.data[0];
-    await page.goto(authAppURL + '/principal/r/' + resource);
-    const button = page
-      .getByRole('button', { name: resource === 'students' ? 'Profile' : 'View', exact: true })
-      .first();
-    await expect(button).toBeVisible();
-    for (const action of [
-      'Add student',
-      'Add record',
-      'Edit',
-      'Archive',
-      'Import CSV',
-      'Pay',
-      'Remind',
-      'Issue Card',
-      'Block',
-    ])
-      await expect(page.getByRole('button', { name: action, exact: true })).toHaveCount(0);
-    await button.click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(
-      page.getByRole('dialog').getByRole('status', { name: 'Loading records' }),
-    ).toHaveCount(0);
-    await expect(page.getByRole('dialog').getByRole('alert')).toHaveCount(0);
+    if (['parents', 'student_parents'].includes(resource)) {
+      await page.goto(authAppURL + '/principal/r/' + resource);
+      await expect(page).toHaveURL(/\/principal\/r\/students$/);
+      await expect(page.getByRole('heading', { name: 'Students', exact: true })).toBeVisible();
+    } else if (!['students', 'classes', 'marks'].includes(resource)) {
+      await page.goto(authAppURL + '/principal/r/' + resource);
+      const button = page.getByRole('button', { name: 'View', exact: true }).first();
+      await expect(button).toBeVisible();
+      for (const action of [
+        'Add student',
+        'Add record',
+        'Edit',
+        'Archive',
+        'Import CSV',
+        'Pay',
+        'Remind',
+        'Issue Card',
+        'Block',
+      ])
+        await expect(page.getByRole('button', { name: action, exact: true })).toHaveCount(0);
+      await button.click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(
+        page.getByRole('dialog').getByRole('status', { name: 'Loading records' }),
+      ).toHaveCount(0);
+      await expect(page.getByRole('dialog').getByRole('alert')).toHaveCount(0);
+    }
     const detail = await platformApp.request(
       `/resources/${resource}/${first.id}`,
       'GET',
@@ -258,11 +295,12 @@ test('Principal views the school calendar with no event-management actions', asy
   ).toBe(403);
 });
 
-test('Principal reviews all student profile sections without administration controls', async ({
+test('Principal reviews class results and student profiles without administration controls', async ({
   page,
   authAppURL,
   platformApp,
 }) => {
+  test.setTimeout(75_000);
   const f = platformApp.records;
   const admin = (path: string, body: unknown) =>
     platformApp.request(path, 'POST', body, f.admin, f.schoolA);
@@ -296,11 +334,28 @@ test('Principal reviews all student profile sections without administration cont
       })
     ).status,
   ).toBe(201);
+  await page.goto(authAppURL + '/principal/r/marks');
+  await page.getByLabel('Class and section', { exact: true }).selectOption(f.classId);
+  await page.getByLabel('Examination', { exact: true }).selectOption(exam.body.id);
+  const mark = page.getByRole('row').filter({ hasText: 'Principal profile academic record' });
+  await expect(mark).toContainText('83');
+  await mark.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Principal profile academic record');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  for (const name of ['Add record', 'Enter by roll number', 'Import CSV'])
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await page.getByRole('link', { name: 'View examinations', exact: true }).click();
+  await expect(page).toHaveURL(/\/principal\/r\/exams$/);
   await page.goto(authAppURL + '/principal/r/students');
+  await page.locator('main summary').filter({ hasText: 'Class 8' }).click();
+  for (const name of ['Parents & Guardians', 'Family Connections'])
+    await expect(page.getByRole('link', { name, exact: true })).toHaveCount(0);
+  for (const name of ['Add student', 'Edit student', 'Import CSV', 'Export CSV'])
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
   await page
-    .getByRole('row')
-    .filter({ hasText: 'STU001' })
-    .getByRole('button', { name: 'Profile', exact: true })
+    .getByRole('article', { name: 'Student STU001', exact: true })
+    .getByRole('button', { name: /Full profile/ })
     .click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Parent Test');
@@ -331,6 +386,12 @@ test('Principal reviews all student profile sections without administration cont
   expect(await dialog.evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   for (const name of ['Mark Attendance', 'Replace NFC Card', 'Link Parent', 'Record payment'])
     await expect(dialog.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await page.goto(authAppURL + '/principal/r/marks');
+  await page.getByRole('button', { name: 'Academic analytics', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Class-wise statistics' })).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page.getByRole('button', { name: 'Grading policy', exact: true })).toHaveCount(0);
 });
 
 test('Principal creates, edits and reads school and class announcements', async ({
@@ -956,22 +1017,28 @@ test('Principal searches students, pages results, and resets filters', async ({
   });
   expect(response.status, await response.text()).toBe(201);
   await page.goto(authAppURL + '/principal/r/students');
+  const unassigned = page.locator('main summary').filter({ hasText: 'Not currently enrolled' });
   if (!isMobile) {
     await page.locator('.global-search input').fill(prefix + '_051');
     await page.locator('.global-search input').press('Enter');
-    await expect(page.getByRole('row').filter({ hasText: prefix + '_051' })).toBeVisible();
-    await expect(page.getByRole('row').filter({ hasText: prefix + '_050' })).toHaveCount(0);
+    await expect(unassigned).toContainText('1 students');
+    await unassigned.click();
+    await expect(page.getByRole('article', { name: 'Student ' + prefix + '_051' })).toBeVisible();
+    await expect(page.getByRole('article', { name: 'Student ' + prefix + '_050' })).toHaveCount(0);
   }
   const search = page
     .getByRole('main')
-    .getByRole('textbox', { name: 'Search Students', exact: true });
+    .getByRole('textbox', { name: 'Search students', exact: true });
   await search.fill(prefix);
-  await expect(page.locator('.pagination')).toContainText('52 records');
-  await page.getByRole('button', { name: 'Next page', exact: true }).click();
-  await expect(page.locator('.pagination')).toContainText('Page 2');
+  await expect(unassigned).toContainText('52 students');
+  if (isMobile) await unassigned.click();
+  const roster = page.getByRole('region', { name: 'Students without current enrollment' });
+  await expect(roster.getByText('Page 1 · 52 students', { exact: true })).toBeVisible();
+  await roster.getByRole('button', { name: 'Next students', exact: true }).click();
+  await expect(roster.getByText('Page 2 · 52 students', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
   await expect(search).toHaveValue('');
-  await expect(page.locator('.pagination')).toContainText('Page 1');
+  await expect(roster.getByText(/^Page 1 ·/)).toBeVisible();
 });
 
 test('Principal drafts, schedules and archives announcements without publishing early', async ({

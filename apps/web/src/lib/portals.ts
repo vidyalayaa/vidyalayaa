@@ -7,6 +7,10 @@ export const portals: Record<Role, string> = {
   student: 'student',
   finance_staff: 'finance',
 };
+export function isSchoolLeadership(role?: Role) {
+  return role === 'school_admin' || role === 'principal';
+}
+
 export function schoolPath(path: string, role?: Role) {
   if (
     !role ||

@@ -21,7 +21,7 @@ import { resourceInfo } from './features/resources/metadata';
 import { TeacherRoster, TeacherAssessments } from './features/operations/Teaching';
 
 import './styles.css';
-import { portals, schoolPath, platformSections } from './lib/portals';
+import { isSchoolLeadership, portals, schoolPath, platformSections } from './lib/portals';
 const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
 const SchoolProfile = lazy(() => import('./features/school-profile/SchoolProfile'));
 const Academics = lazy(() => import('./features/academics/Academics'));
@@ -106,13 +106,30 @@ function Guard() {
         replace
       />
     );
+  if (a.error instanceof HttpError && a.error.code === 'SCHOOL_LOGIN_DISABLED')
+    return (
+      <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-white p-8">
+        <h1 className="text-xl font-semibold">School sign-in paused</h1>
+        <p className="my-4">{a.error.message}</p>
+        <div className="flex flex-wrap gap-4">
+          {a.requestSchool && (
+            <button className="underline" onClick={() => a.setSchool('')}>
+              Choose another workspace
+            </button>
+          )}
+          <button className="underline" onClick={() => void a.logout()}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
   if (a.error) return <ErrorState error={a.error} retry={a.refetch} />;
   if (a.me?.security_mfa_required)
     return (
       <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-white p-8">
-        <h1 className="text-xl font-semibold">Secure your school account</h1>
+        <h1 className="text-xl font-semibold">Secure your account</h1>
         <p className="my-4">
-          Your school requires an authenticator. Enroll and verify it to continue.
+          Your role requires an authenticator. Enroll and verify it to continue.
         </p>
         <AuthenticatorSetup />
         <button
@@ -181,6 +198,7 @@ function ResourcePage() {
   const location = useLocation();
   if (!resourceNames.includes(resource as Resource)) return <Empty title="Page not found" />;
   const name = resource as Resource;
+  const role = a.me?.school?.role;
   if (
     a.me?.school?.role === 'student' &&
     ['teacher_class_assignments', 'enrollments', 'fee_records'].includes(name)
@@ -216,34 +234,30 @@ function ResourcePage() {
       return <StudentAcademics key={a.school} />;
     if (['marks', 'exams'].includes(name)) return <StudentResults key={a.school} />;
   }
-  if (a.me?.school?.role === 'school_admin' && name === 'marks')
-    return <SchoolResults key={a.school} />;
+  if (isSchoolLeadership(role) && name === 'marks') return <SchoolResults key={a.school} />;
   if (name === 'timetable_entries') return <Timetable key={a.school} />;
   if (name === 'assignments') return <HomeworkDiary key={a.school} />;
   if (name === 'fee_records') return <Fees key={a.school} />;
-  if (
-    a.me?.school?.role === 'school_admin' &&
-    ['students', 'parents', 'student_parents'].includes(name)
-  ) {
+  if (isSchoolLeadership(role) && ['students', 'parents', 'student_parents'].includes(name)) {
     const params = new URLSearchParams(location.search);
     if (name !== 'students' || params.has('view')) {
       params.delete('view');
       return (
         <Navigate
           replace
-          to={
-            schoolPath('/r/students', 'school_admin') + (params.size ? '?' + params.toString() : '')
-          }
+          to={schoolPath('/r/students', role) + (params.size ? '?' + params.toString() : '')}
         />
       );
     }
     return <StudentDirectory key={a.school} />;
   }
   if (
-    a.me?.school?.role === 'school_admin' &&
-    ['academic_sessions', 'classes', 'subjects', 'teacher_class_assignments'].includes(name)
+    isSchoolLeadership(role) &&
+    (name === 'classes' ||
+      (role === 'school_admin' &&
+        ['academic_sessions', 'subjects', 'teacher_class_assignments'].includes(name)))
   )
-    return <Navigate replace to={schoolPath('/academics', 'school_admin')} />;
+    return <Navigate replace to={schoolPath('/academics', role)} />;
   if (a.me?.school?.role === 'school_admin' && name === 'enrollments')
     return <Navigate replace to={schoolPath('/r/students', 'school_admin')} />;
   if (a.me?.school?.role === 'student' && name === 'students')
@@ -263,7 +277,7 @@ function AcademicPage() {
   return a.me?.school?.role === 'student' ? (
     <StudentAcademics key={a.school} />
   ) : (
-    <Permission code="academics.write">
+    <Permission code="academics.read">
       <Academics />
     </Permission>
   );

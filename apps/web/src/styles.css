@@ -317,8 +317,10 @@ summary.school-selector:hover {
   color: var(--muted);
   margin-top: 5px;
 }
-.support-card a {
-  margin-top: 15px;
+.support-card-trigger {
+  margin-top: 7px;
+  min-height: 32px;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1050,6 +1052,26 @@ td {
   white-space: normal;
 }
 @media print {
+  body:has(.student-result-sheet) #root
+    :not(:has(.student-result-sheet), .student-result-sheet, .student-result-sheet *),
+  body:has(.student-result-sheet) .result-print-hidden {
+    display: none !important;
+  }
+  body:has(.student-result-sheet) :is(.app-shell, .main-column, .main-content, .student-result-sheet) {
+    display: block;
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: white;
+  }
+  .student-result-sheet .table-scroll {
+    overflow: visible;
+  }
+  .student-result-sheet tr {
+    break-inside: avoid;
+  }
   body:has(.fee-receipt) #root,
   body:has(.fee-receipt) .receipt-actions {
     display: none !important;

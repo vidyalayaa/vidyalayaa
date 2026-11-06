@@ -208,6 +208,7 @@ export interface Membership {
 }
 export interface Me {
   security_mfa_required?: boolean;
+  idle_expires_at?: string | null;
   locale?: 'en-IN' | 'hi-IN';
   id: string;
   full_name: string;
@@ -659,3 +660,4 @@ export * from './marks-entry.js';
 export * from './homework.js';
 export * from './promotion.js';
 export * from './school-profile.js';
+export * from './results.js';

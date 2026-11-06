@@ -278,8 +278,9 @@ it('denies other roles, foreign schools and inactive parents without exposing or
   const b = payload('DENIED');
   for (const role of ['teacher', 'principal', 'parent', 'studentUser', 'root']) {
     for (const path of [
-      '/student-directory/classes',
-      '/student-directory/students?unassigned=1',
+      ...(role === 'principal'
+        ? []
+        : ['/student-directory/classes', '/student-directory/students?unassigned=1']),
       '/student-directory/parents',
       '/student-directory/enrollment-classes',
     ])
@@ -321,6 +322,25 @@ it('denies other roles, foreign schools and inactive parents without exposing or
   } finally {
     await db.query("UPDATE parents SET status='ACTIVE' WHERE id=$1", [f.parentId]);
   }
+});
+
+it('gives the Principal a school-scoped roster and keeps bulk student export admin-only', async () => {
+  const principal = (path: string) => call('get', path, 'principal');
+  const classes = await principal('/student-directory/classes?search=STU001');
+  expect(classes.status).toBe(200);
+  expect(classes.body.data).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: f.classId, student_count: 1 })]),
+  );
+  const roster = await principal(`/student-directory/students?class_id=${f.classId}&search=STU001`);
+  expect(roster.status).toBe(200);
+  expect(roster.body.data.map((s: { id: string }) => s.id)).toEqual([f.student]);
+  const unassigned = await principal('/student-directory/students?unassigned=1');
+  expect(unassigned.status).toBe(200);
+  expect(unassigned.body.data.map((s: { id: string }) => s.id)).not.toContain(f.foreignStudent);
+  expect((await principal('/student-directory/export.csv')).status).toBe(403);
+  expect((await principal('/student-directory/classes').set('X-School-Id', f.schoolB)).status).toBe(
+    404,
+  );
 });
 it('enforces subscription and student quota without orphan family or enrollment rows', async () => {
   await db.query("UPDATE subscriptions SET status='EXPIRED' WHERE school_id=$1", [f.schoolA]);

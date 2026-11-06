@@ -7,7 +7,7 @@ export async function sendLoginAlerts(pool: pg.Pool) {
   if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return;
   const lease = randomUUID();
   const jobs = (
-    await pool.query<{ id: string; email: string; login_at: Date }>(
+    await pool.query<{ id: string; email: string; login_at: Date; unfamiliar_network: boolean }>(
       'SELECT * FROM app.claim_login_alerts($1)',
       [lease],
     )
@@ -17,10 +17,11 @@ export async function sendLoginAlerts(pool: pg.Pool) {
       permanent = false;
     try {
       const time = new Date(job.login_at).toISOString();
+      const event = job.unfamiliar_network ? 'A sign-in from an unfamiliar network' : 'A new login';
       await deliver(
         'EMAIL',
         job.email,
-        `A new login to your Vidyalayaa account was detected at ${time}. If this was not you, open Settings → Security & Login Sessions to end unfamiliar sessions, then change your password. Vidyalayaa will never ask for your password or verification code by email.`,
+        `${event} to your Vidyalayaa account was detected at ${time}. If this was not you, open Settings → Security & Login Sessions to end unfamiliar sessions, then change your password. Vidyalayaa will never ask for your password or verification code by email.`,
         'login-alert-' + job.id,
       );
       sent = true;
