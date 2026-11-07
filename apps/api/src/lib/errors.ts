@@ -72,6 +72,10 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     dbCode === '23514' &&
     (
       {
+        PLATFORM_NOTIFICATION_TIME: 'Choose a future send time within the next year.',
+        PLATFORM_NOTIFICATION_SCHOOL: 'Choose an active school with an eligible subscription.',
+        PLATFORM_NOTIFICATION_RECIPIENTS: 'The selected school must have between 1 and 5,000 active members.',
+        IDEMPOTENCY_CONFLICT: 'This request key was already used with different details.',
         DEVICE_SYNC_REQUIRED:
           'Synchronize every active reader and clear its pending queue before closing the school.',
         OFFBOARDING_APPROVAL_REQUIRED:

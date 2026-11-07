@@ -18,10 +18,24 @@ let db: PGlite,
   foreign: string,
   finance: string;
 const key = 'ab'.repeat(32);
+let financeLogin = 0;
+const platformUser = crypto.randomUUID();
+const platformToken =
+  'fixture.' +
+  Buffer.from(
+    JSON.stringify({
+      sub: platformUser,
+      aal: 'aal2',
+    }),
+  ).toString('base64url') +
+  '.fixture';
 const call = (method: 'get' | 'post' | 'put', path: string, role = 'admin') =>
   request(app)
     [method]('/api/v1' + path)
-    .set('Authorization', 'Bearer ' + fixtureBearer(role))
+    .set(
+      'Authorization',
+      'Bearer ' + fixtureBearer(role === 'finance' ? 'finance:' + financeLogin : role),
+    )
     .set('X-School-Id', f.schoolA);
 const payload = (ids: string[], title = 'School reminder') => ({
   title,
@@ -43,6 +57,13 @@ beforeAll(async () => {
   pools = poolAdapters(db);
   foreign = crypto.randomUUID();
   finance = crypto.randomUUID();
+  await db.query('INSERT INTO auth.users(id,email) VALUES($1,$2)', [
+    platformUser,
+    'platform-notify@example.invalid',
+  ]);
+  await db.query("INSERT INTO platform_staff(user_id,platform_role) VALUES($1,'SUPER_ADMIN')", [
+    platformUser,
+  ]);
   for (const [uid, school, role] of [
     [foreign, f.schoolB, 'school_admin'],
     [finance, f.schoolA, 'finance_staff'],
@@ -67,7 +88,8 @@ beforeAll(async () => {
               student: f.studentUser,
               teacher: f.teacher,
               principal: f.principal,
-              finance,
+              ['finance:' + financeLogin]: finance,
+              [platformToken]: platformUser,
             }[token],
           },
         },
@@ -145,6 +167,7 @@ it('rejects foreign-school, malformed, and inactive recipients', async () => {
   await db.query("UPDATE school_memberships SET status='SUSPENDED' WHERE user_id=$1", [finance]);
   expect((await call('post', '/notifications/preview').send(payload([finance]))).status).toBe(422);
   await db.query("UPDATE school_memberships SET status='ACTIVE' WHERE user_id=$1", [finance]);
+  financeLogin++;
 });
 it('resolves whole-school and role targeting without duplicates', async () => {
   const all = await call('post', '/notifications/preview').send({
@@ -301,6 +324,7 @@ it('rechecks membership just before delivery and blocks cross-school history', a
     ).rows,
   ).toHaveLength(0);
   await db.query("UPDATE school_memberships SET status='ACTIVE' WHERE user_id=$1", [finance]);
+  financeLogin++;
 });
 it('reports missing device registration and retries after an endpoint is enabled', async () => {
   await db.query('UPDATE push_tokens SET is_active=false WHERE user_id=$1', [f.studentUser]);
@@ -438,4 +462,195 @@ it('requires the checked queue function for inherited API login roles too', asyn
   } finally {
     await db.exec('ROLLBACK');
   }
+});
+
+it('schedules a Super Admin notification for one school, delivers when due, and cancels pending messages', async () => {
+  const recipient = crypto.randomUUID();
+  await db.query('INSERT INTO auth.users(id,email) VALUES($1,$2)', [
+    recipient,
+    'scheduled-recipient@example.invalid',
+  ]);
+  await db.query(
+    "INSERT INTO school_memberships(school_id,user_id,role_id,status) SELECT $1,$2,id,'ACTIVE' FROM roles WHERE code='student'",
+    [f.schoolB, recipient],
+  );
+  await db.query(
+    "INSERT INTO subscriptions(school_id,plan_id,status,current_period_end) SELECT $1,plan_id,'ACTIVE',now()+interval '1 year' FROM subscriptions WHERE school_id=$2 LIMIT 1",
+    [f.schoolB, f.schoolA],
+  );
+  const token = 'scheduled-platform-push-token';
+  await db.query(
+    "INSERT INTO push_tokens(school_id,user_id,token_hash,token_encrypted,platform) VALUES($1,$2,$3,$4,'WEB')",
+    [f.schoolB, recipient, 'platform-notification-test', encrypt(token, key)],
+  );
+  const platform = (method: 'get' | 'post', path = '') =>
+    request(app)
+      [method]('/api/v1/platform/notifications' + path)
+      .set('Authorization', 'Bearer ' + fixtureBearer(platformToken));
+  const job = {
+    school_id: f.schoolB,
+    title: 'Scheduled platform test',
+    body: 'Message for this school',
+    scheduled_at: new Date(Date.now() + 8000).toISOString(),
+  };
+  const retry = crypto.randomUUID();
+  expect(
+    (await call('post', '/platform/notifications').set('Idempotency-Key', retry).send(job)).status,
+  ).toBe(403);
+  expect(
+    (
+      await platform('post')
+        .set('Idempotency-Key', crypto.randomUUID())
+        .send({ ...job, scheduled_at: '2020-01-01T00:00:00Z' })
+    ).body.error.code,
+  ).toBe('PLATFORM_NOTIFICATION_TIME');
+  const queued = await platform('post').set('Idempotency-Key', retry).send(job);
+  expect(queued.status, JSON.stringify(queued.body)).toBe(202);
+  const id = queued.body.id;
+  expect((await platform('post').set('Idempotency-Key', retry).send(job)).body.id).toBe(id);
+  expect(
+    (
+      await platform('post')
+        .set('Idempotency-Key', retry)
+        .send({ ...job, body: 'Changed' })
+    ).status,
+  ).toBe(409);
+  expect((await platform('get')).body.data).toContainEqual(
+    expect.objectContaining({ id, status: 'SCHEDULED', recipients: 2 }),
+  );
+  const visible = (schoolId: string, userId: string, oid = id) =>
+    transaction(
+      pools.api,
+      { schoolId, userId },
+      (tx) => tx.query('SELECT id FROM notification_outbox WHERE id=$1', [oid]),
+      true,
+    );
+  expect((await visible(f.schoolB, recipient)).rows).toHaveLength(0);
+  expect((await visible(f.schoolA, f.studentUser)).rows).toHaveLength(0);
+  expect(
+    (
+      await db.query('SELECT school_id FROM notification_recipient_targets WHERE outbox_id=$1', [
+        id,
+      ])
+    ).rows,
+  ).toEqual([{ school_id: f.schoolB }, { school_id: f.schoolB }]);
+
+  const delivery = vi.spyOn(providers, 'deliver').mockResolvedValue('scheduled-test-receipt');
+  try {
+    await drainOutbox(pools.worker, f.schoolB, key);
+    expect(delivery).not.toHaveBeenCalled();
+    const cancelled = await platform('post')
+      .set('Idempotency-Key', crypto.randomUUID())
+      .send({
+        ...job,
+        title: 'Cancelled platform test',
+        scheduled_at: new Date(Date.now() + 3600000).toISOString(),
+      });
+    expect(cancelled.status).toBe(202);
+    expect((await platform('post', '/' + cancelled.body.id + '/cancel')).status).toBe(204);
+    expect((await platform('get')).body.data).toContainEqual(
+      expect.objectContaining({ id: cancelled.body.id, status: 'CANCELLED' }),
+    );
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(0, Date.parse(job.scheduled_at) - Date.now() + 100)),
+    );
+    expect((await visible(f.schoolB, recipient)).rows).toHaveLength(1);
+    await drainOutbox(pools.worker, f.schoolB, key);
+    expect(delivery.mock.calls.some((args) => args[0] === 'PUSH' && args[1] === token)).toBe(true);
+    expect((await platform('get')).body.data).toContainEqual(
+      expect.objectContaining({ id, status: 'COMPLETED', sent: 1 }),
+    );
+    expect((await platform('post', '/' + id + '/cancel')).status).toBe(409);
+    const immediate = await platform('post')
+      .set('Idempotency-Key', crypto.randomUUID())
+      .send({ ...job, title: 'Immediate platform test', scheduled_at: null });
+    expect(immediate.status).toBe(202);
+    expect((await platform('get')).body.data).toContainEqual(
+      expect.objectContaining({ id: immediate.body.id, status: 'QUEUED' }),
+    );
+  } finally {
+    delivery.mockRestore();
+  }
+});
+
+it('queues a daily Super Admin notification once per local day and stops future runs', async () => {
+  const {
+    rows: [clock],
+  } = await db.query<{ local_time: string; expected: string }>(
+    `SELECT to_char(t,'HH24:MI') AS local_time,
+      ((t::date+1+date_trunc('minute',t)::time) AT TIME ZONE 'Asia/Kolkata')::text AS expected
+     FROM (SELECT now() AT TIME ZONE 'Asia/Kolkata' AS t) local_clock`,
+  );
+  const body = {
+    school_id: f.schoolA,
+    title: 'Daily platform test',
+    body: 'Bring your school diary.',
+    local_time: clock.local_time,
+  };
+  const retry = crypto.randomUUID();
+  const path = '/api/v1/platform/notifications/daily';
+  const platform = (method: 'get' | 'post', suffix = '') =>
+    request(app)
+      [method](path + suffix)
+      .set('Authorization', 'Bearer ' + fixtureBearer(platformToken));
+  const schedule = (data = body) => platform('post').set('Idempotency-Key', retry).send(data);
+  expect((await call('get', '/platform/notifications/daily', 'student')).status).toBe(403);
+  expect(
+    (await call('post', '/platform/notifications/daily').set('Idempotency-Key', retry).send(body))
+      .status,
+  ).toBe(403);
+  expect((await schedule({ ...body, local_time: '24:00' })).status).toBe(422);
+  const created = await schedule();
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.id;
+  expect((await schedule()).body.id).toBe(id);
+  expect((await schedule({ ...body, body: 'Different text' })).status).toBe(409);
+  const list = async () => (await platform('get')).body.data;
+  const next = (await list()).find((row: { id: string }) => row.id === id);
+  expect(next).toMatchObject({
+    status: 'ACTIVE',
+    timezone: 'Asia/Kolkata',
+    local_time: body.local_time,
+  });
+  expect(Date.parse(next.next_run_at)).toBe(Date.parse(clock.expected));
+
+  const occurrences = async () =>
+    (
+      await db.query('SELECT id,school_id FROM notification_outbox WHERE dedupe_key LIKE $1', [
+        'PLATFORM_NOTIFY:DAILY:' + id + ':%',
+      ])
+    ).rows;
+  const run = (schoolId: string) =>
+    transaction(pools.worker, { schoolId, actorType: 'SYSTEM' }, (tx) =>
+      tx.query('SELECT app.enqueue_due_platform_daily_notifications()'),
+    );
+  await run(f.schoolA);
+  expect(await occurrences()).toHaveLength(0);
+  // A worker resumed after downtime. It may queue today's occurrence, once.
+  await db.query(
+    "UPDATE app.platform_daily_notifications SET next_run_at=now()-interval '3 days' WHERE id=$1",
+    [id],
+  );
+  await run(f.schoolB);
+  expect(await occurrences()).toHaveLength(0);
+  await Promise.all([run(f.schoolA), run(f.schoolA)]);
+  const queued = await occurrences();
+  expect(queued).toEqual([{ id: expect.any(String), school_id: f.schoolA }]);
+  expect(
+    (
+      await db.query('SELECT user_id FROM notification_recipient_targets WHERE outbox_id=$1', [
+        (queued[0] as { id: string }).id,
+      ])
+    ).rows,
+  ).toContainEqual({ user_id: f.parent });
+  expect(Date.parse((await list()).find((row: { id: string }) => row.id === id).next_run_at)).toBe(
+    Date.parse(clock.expected),
+  );
+  expect((await call('post', '/platform/notifications/daily/' + id + '/cancel')).status).toBe(403);
+  expect((await platform('post', '/' + id + '/cancel')).status).toBe(204);
+  expect(await list()).toContainEqual(
+    expect.objectContaining({ id, status: 'CANCELLED', next_run_at: null }),
+  );
+  await run(f.schoolA);
+  expect(await occurrences()).toEqual(queued);
 });

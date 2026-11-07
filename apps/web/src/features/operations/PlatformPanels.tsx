@@ -410,13 +410,67 @@ export function SubscriptionEditor({
     </Dialog>
   );
 }
+type WorkerHeartbeat = {
+  id: string;
+  worker_name?: string | null;
+  state: 'STARTING' | 'RUNNING' | 'DEGRADED' | 'STOPPING';
+  alive: boolean;
+  ready: boolean | null;
+  last_seen_at: string;
+  last_success_at: string | null;
+  last_error_code: string | null;
+};
+
+function workerStatus(worker: WorkerHeartbeat) {
+  if (worker.state !== 'RUNNING') return worker.state;
+  return worker.ready ? 'RUNNING' : 'NOT_READY';
+}
+
+const workerColumns = ['worker_id', 'status', 'last_seen_at', 'last_success_at', 'last_error_code'];
+
+function BackgroundWorkers({ workers }: { workers: WorkerHeartbeat[] }) {
+  const active = workers
+    .filter((worker) => worker.alive && worker.state !== 'STOPPING')
+    .map((worker) => ({
+      ...worker,
+      worker_id: worker.id,
+      worker_label: worker.worker_name || 'Unnamed worker',
+      status: workerStatus(worker),
+    }));
+  const running = active.filter(({ status }) => status === 'RUNNING').length;
+
+  return (
+    <section className="mt-6 space-y-4" aria-labelledby="background-workers">
+      <div>
+        <h3 id="background-workers" className="font-semibold">
+          Background workers
+        </h3>
+        <p className="mt-1 text-sm text-stone-600">
+          {running} running · {active.length - running} checking in but not ready
+        </p>
+      </div>
+      {active.length ? (
+        <section aria-label="Active workers">
+          <h4 className="mb-2 text-sm font-semibold">Active workers ({active.length})</h4>
+          <DataTable rows={active} columns={workerColumns} />
+        </section>
+      ) : (
+        <p className="notice">
+          No background workers are currently checking in. Start the background worker to process
+          notifications and reports.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function PlatformHealth() {
   const q = useQuery({
     queryKey: ['platform', 'operations'],
     queryFn: () =>
       api<{
         metrics: Record<string, number>;
-        workers: Record<string, unknown>[];
+        workers: WorkerHeartbeat[];
         server_time: string;
       }>('/platform/operations'),
     refetchInterval: 30000,
@@ -441,25 +495,7 @@ export function PlatformHealth() {
                 </div>
               ))}
             </div>
-            <h3 className="my-4 font-semibold">Background workers</h3>
-            {q.data.workers.length ? (
-              <DataTable
-                rows={q.data.workers}
-                columns={[
-                  'state',
-                  'alive',
-                  'ready',
-                  'last_seen_at',
-                  'last_success_at',
-                  'last_error_code',
-                ]}
-              />
-            ) : (
-              <p className="notice">
-                No worker heartbeat has been received. Start the background worker to process
-                notifications and reports.
-              </p>
-            )}
+            <BackgroundWorkers workers={q.data.workers} />
             <p className="mt-4 text-xs text-stone-500">Observed {display(q.data.server_time)}</p>
           </div>
         )

@@ -13,6 +13,7 @@ interface Job {
   kind: string;
   payload: Record<string, unknown>;
   created_at: Date;
+  scheduled_at: Date | null;
   attempts: number;
   lease_token: string;
 }
@@ -91,17 +92,15 @@ export function messageFor(
 export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey: string) {
   const ctx = { schoolId, actorType: 'SYSTEM' as const };
   const lease = randomUUID();
-  const jobs = await transaction(
-    pool,
-    ctx,
-    async (tx) =>
-      (
-        await tx.query<Job>(
-          `WITH picked AS(SELECT id FROM notification_outbox WHERE school_id=$1 AND cancelled_at IS NULL AND next_attempt_at<=now() AND (status='PENDING' OR (status='PROCESSING' AND locked_until<now())) ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 5) UPDATE notification_outbox o SET status='PROCESSING',attempts=attempts+1,locked_until=now()+interval '5 minutes',lease_token=$2 FROM picked WHERE o.id=picked.id RETURNING o.*`,
-          [schoolId, lease],
-        )
-      ).rows,
-  );
+  const jobs = await transaction(pool, ctx, async (tx) => {
+    await tx.query('SELECT app.enqueue_due_platform_daily_notifications()');
+    return (
+      await tx.query<Job>(
+        `WITH picked AS(SELECT id FROM notification_outbox WHERE school_id=$1 AND cancelled_at IS NULL AND next_attempt_at<=now() AND (status='PENDING' OR (status='PROCESSING' AND locked_until<now())) ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 5) UPDATE notification_outbox o SET status='PROCESSING',attempts=attempts+1,locked_until=now()+interval '5 minutes',lease_token=$2 FROM picked WHERE o.id=picked.id RETURNING o.*`,
+        [schoolId, lease],
+      )
+    ).rows;
+  });
   for (const job of jobs) {
     try {
       const context = await transaction(
@@ -483,7 +482,7 @@ export async function drainOutbox(pool: pg.Pool, schoolId: string, encryptionKey
               e.permanent ||
               attempt >= 6 ||
               (['PUSH', 'SMS'].includes(channel) &&
-                Date.now() - job.created_at.getTime() > 7200000);
+                Date.now() - (job.scheduled_at ?? job.created_at).getTime() > 7200000);
             const delay = e.retryAfter || retryDelays[Math.min(attempt - 1, 5)];
             next = Math.max(next, delay);
             retry = retry || !dead;

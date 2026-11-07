@@ -13,6 +13,14 @@ School Admin can cancel pending/processing notifications with a reason or retry 
 
 Principal retains the existing school-wide notification-history visibility, with no send/settings/cancel/retry controls. Other school roles have their own inboxes only. Platform staff have no automatic access to school recipient data. Administrators never receive raw device tokens or private session credentials.
 
+## Super Admin scheduling
+
+Open **Platform → School notifications** and choose an active school with an eligible subscription. Choose **Send now** or **Schedule for later**, then enter a date and time in the displayed school timezone. The scheduled time must be in the future and within one year. The queue targets the selected school's active members at the time of scheduling and rechecks membership and delivery preferences when the worker processes it.
+
+Use **Scheduled and sent notifications** to review the status and cancel a message before the worker starts processing it. School notification settings, opted-in devices and the existing Firebase worker control push delivery. The selected time is when the message becomes eligible for processing. If the worker is offline, processing resumes when it comes back.
+
+Choose **Send daily** to repeat the message every day, including weekends, at a fixed local time in the school's timezone shown when creating the schedule. **Daily schedules** shows the next send time and lets Super Admin stop future occurrences. Each occurrence targets active members when the worker queues it. If the worker is offline, it can still queue today's occurrence after resuming, but it skips missed days. Already queued messages retain their existing delivery and cancellation rules. Apply `20261107175000_platform_daily_notifications.sql` before deploying the updated worker and API.
+
 ## Automatic alert controls
 
 The School Admin can disable all school delivery, individual channels (FCM push, email, SMS), or individual types: arrival, departure, absence, attendance correction, fee reminder, announcement, device alert, subscription update, and custom messages.
@@ -91,6 +99,9 @@ All paths are under `/api/v1`; school requests require the existing bearer sessi
 | `POST /notifications/:deliveryId/retry` | School Admin; audited reason, only eligible uncancelled deliveries. |
 | `GET /notifications/settings` | School Admin; current controls with optimistic `version` (0 before first save). |
 | `PUT /notifications/settings` | School Admin; complete enabled/channel/kind flags and last loaded `version`; stale saves return 409. |
+| `GET /platform/notifications/daily` | Super Admin with MFA; paginated schedule status and next send time. |
+| `POST /platform/notifications/daily` | Super Admin with MFA; accepts `school_id`, `title`, `body`, `local_time` (24-hour HH:MM) and an `Idempotency-Key`; returns HTTP 201 and the schedule ID. |
+| `POST /platform/notifications/daily/:id/cancel` | Super Admin with MFA; stops future occurrences. |
 | `POST /push-tokens` | Any active school role; `{ "token": "FCM registration token", "platform": "WEB" }`; token is hashed/encrypted server-side. |
 | `DELETE /push-tokens` | Own endpoint only; `{ "token_hash": "sha256 hex digest" }`. |
 

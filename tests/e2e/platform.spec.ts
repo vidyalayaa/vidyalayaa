@@ -124,9 +124,56 @@ test('Super Admin edits named plan controls and sees processing health', async (
   await expect(page.getByRole('heading', { name: 'Platform health', exact: true })).toBeVisible();
   await expect(page.getByText('Notification Backlog', { exact: true })).toBeVisible();
   await expect(
-    page.getByText('No worker heartbeat has been received.', { exact: false }),
+    page.getByText('No background workers are currently checking in.', { exact: false }),
   ).toBeVisible();
 });
+test('Super Admin sees only workers that are checking in', async ({ page, authAppURL }) => {
+  await platformSession(page);
+  const worker = {
+    last_seen_at: '2026-10-18T10:00:00Z',
+    last_success_at: '2026-10-18T10:00:00Z',
+    last_error_code: null,
+  };
+  const running = '11111111-0000-4000-8000-000000000301';
+  const degraded = '22222222-0000-4000-8000-000000000301';
+  const offline = '33333333-0000-4000-8000-000000000301';
+  const stopped = '44444444-0000-4000-8000-000000000301';
+  await page.route('**/api/v1/platform/operations', (r) =>
+    r.fulfill({
+      json: {
+        metrics: {},
+        workers: [
+          {
+            ...worker,
+            id: running,
+            worker_name: 'Voroa worker',
+            state: 'RUNNING',
+            alive: true,
+            ready: true,
+          },
+          { ...worker, id: degraded, state: 'DEGRADED', alive: true, ready: false },
+          { ...worker, id: offline, state: 'RUNNING', alive: false, ready: false },
+          { ...worker, id: stopped, state: 'STOPPING', alive: false, ready: false },
+        ],
+        server_time: worker.last_seen_at,
+      },
+    }),
+  );
+  await page.goto(authAppURL + '/platform/health');
+  await expect(page.getByText('1 running · 1 checking in but not ready')).toBeVisible();
+  const active = page.getByRole('region', { name: 'Active workers' });
+  await expect(active.getByText('Voroa worker', { exact: true })).toBeVisible();
+  await expect(active.getByText('Unnamed worker', { exact: true })).toBeVisible();
+  await expect(active.getByRole('row').filter({ has: page.getByTitle(running) })).toContainText(
+    'RUNNING',
+  );
+  await expect(active.getByRole('row').filter({ has: page.getByTitle(degraded) })).toContainText(
+    'DEGRADED',
+  );
+  await expect(page.getByTitle(offline)).toHaveCount(0);
+  await expect(page.getByTitle(stopped)).toHaveCount(0);
+});
+
 test('Super Admin sets up a school with no subscription and sees the saved values', async ({
   page,
   authAppURL,
@@ -259,3 +306,116 @@ test('support view hides records as soon as a grant expires', async ({ page, aut
   await expect(page.getByText('This support grant has expired.', { exact: false })).toBeVisible();
   await expect(page.getByText('Scoped test learner', { exact: true })).toHaveCount(0);
 });
+
+for (const cadence of ['one-time', 'daily'] as const) {
+  test(`Super Admin creates and cancels a ${cadence} school notification schedule`, async ({
+    page,
+    authAppURL,
+  }) => {
+    await platformSession(page);
+    await page.route('**/api/v1/platform/schools?**', (r) =>
+      r.fulfill({
+        json: {
+          data: [
+            {
+              id: school,
+              name: 'Green Valley School',
+              school_code: 'GV',
+              timezone: 'Asia/Kolkata',
+              status: 'ACTIVE',
+              subscription_status: 'ACTIVE',
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 100,
+        },
+      }),
+    );
+    const daily = cadence === 'daily';
+    const local_time = '09:30';
+    const scheduled_at = '2027-01-15T04:00:00.000Z';
+    let saved = false;
+    let cancelled = false;
+    await page.route('**/api/v1/platform/notifications**', async (r) => {
+      const path = new URL(r.request().url()).pathname;
+      const dailyPath = path.includes('/daily');
+      if (path.endsWith('/cancel')) {
+        expect(dailyPath).toBe(daily);
+        cancelled = true;
+        return r.fulfill({ status: 204 });
+      }
+      if (r.request().method() === 'POST') {
+        expect(dailyPath).toBe(daily);
+        expect(r.request().postDataJSON()).toEqual({
+          school_id: school,
+          title: 'School update',
+          body: 'Bring your diary.',
+          ...(daily ? { local_time } : { scheduled_at }),
+        });
+        expect(r.request().headers()['idempotency-key']).toBeTruthy();
+        saved = true;
+        return r.fulfill({ status: daily ? 201 : 202, json: { id, scheduled_at } });
+      }
+      const showRow = saved && dailyPath === daily;
+      return r.fulfill({
+        json: {
+          data: showRow
+            ? [
+                {
+                  id,
+                  school_id: school,
+                  school_name: 'Green Valley School',
+                  timezone: 'Asia/Kolkata',
+                  title: 'School update',
+                  status: cancelled ? 'CANCELLED' : daily ? 'ACTIVE' : 'SCHEDULED',
+                  scheduled_at,
+                  local_time,
+                  next_run_at: cancelled ? null : scheduled_at,
+                  created_at: '2026-11-07T10:00:00Z',
+                  recipients: 12,
+                  sent: 0,
+                  failed: 0,
+                },
+              ]
+            : [],
+          page: 1,
+          page_size: 25,
+          total: showRow ? 1 : 0,
+        },
+      });
+    });
+    await page.goto(authAppURL + '/platform/notifications');
+    await page.getByLabel('Recipient school').selectOption(school);
+    await page.getByLabel('Notification title').fill('School update');
+    await page.getByLabel('Message', { exact: true }).fill('Bring your diary.');
+    await page.getByLabel('Delivery', { exact: true }).selectOption(daily ? 'daily' : 'schedule');
+    await page
+      .getByLabel(daily ? 'Daily send time' : 'Send date and time')
+      .fill(daily ? local_time : '2027-01-15T09:30');
+    await page
+      .getByRole('button', {
+        name: daily ? 'Create daily schedule' : 'Schedule notification',
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole('status')).toContainText(
+      daily ? 'Scheduled daily at 09:30' : 'Scheduled for',
+    );
+    const row = page.getByRole('row').filter({ hasText: 'School update' });
+    await expect(row).toContainText(daily ? 'ACTIVE' : 'SCHEDULED');
+    await expect(row).toContainText('Asia/Kolkata');
+    await page
+      .getByRole('button', {
+        name: daily ? 'Stop daily schedule' : 'Cancel notification',
+        exact: true,
+      })
+      .click();
+    await page
+      .getByRole('button', { name: daily ? 'Confirm stop' : 'Confirm cancellation' })
+      .click();
+    await expect(page.getByRole('row').filter({ hasText: 'School update' })).toContainText(
+      'CANCELLED',
+    );
+  });
+}
