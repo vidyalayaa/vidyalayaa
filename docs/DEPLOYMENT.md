@@ -161,7 +161,7 @@ npm run health:live -w @vidyalayaa/worker
 npm run health:ready -w @vidyalayaa/worker
 ```
 
-Liveness requires a heartbeat within 90 seconds; readiness also requires RUNNING state and a successful cycle within five minutes. These are fleet checks over the private worker connection. Set a distinct WORKER_INSTANCE_ID UUID only when assigning stable identities to individual instances. Ensure Render's deployed commit matches the approved release; an old healthy instance is not evidence that a new deploy finished. Verify the worker's actual Render deployment status and recent completed job_runs after rollout. Configure log drains and on-call alerts outside the application source.
+Liveness requires a heartbeat within 90 seconds. Readiness also requires RUNNING state and a successful cycle within five minutes. These are fleet checks over the private worker connection. Set `WORKER_NAME` on each deployment to show a readable name such as `Voroa worker` or `Local worker` in Platform Health. The name is recorded at the worker’s next startup. Set a distinct WORKER_INSTANCE_ID UUID only when assigning stable identities to individual instances. Ensure Render's deployed commit matches the approved release and check its deployment status and recent completed job_runs after rollout. Configure log drains and on-call alerts outside the application source.
 
 ## 9. Storage and private reports
 

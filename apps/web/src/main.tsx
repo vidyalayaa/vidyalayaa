@@ -24,6 +24,7 @@ import './styles.css';
 import { isSchoolLeadership, portals, schoolPath, platformSections } from './lib/portals';
 const SchoolExports = lazy(() => import('./features/operations/SchoolExports'));
 const SchoolProfile = lazy(() => import('./features/school-profile/SchoolProfile'));
+const PlatformNotifications = lazy(() => import('./features/operations/PlatformNotifications'));
 const Academics = lazy(() => import('./features/academics/Academics'));
 const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
 const StudentProfile = lazy(() => import('./features/students/StudentProfile'));
@@ -450,6 +451,7 @@ const router = createBrowserRouter(
           {schoolRoutes()}
         </Route>
         <Route path="platform/schools/:schoolId/profile" element={<SchoolProfile />} />
+        <Route path="platform/notifications" element={<PlatformNotifications />} />
         {platformSections.map((section) => (
           <Route key={section} path={`platform/${section}`} element={<Platform />} />
         ))}

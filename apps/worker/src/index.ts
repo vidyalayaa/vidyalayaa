@@ -8,7 +8,7 @@ import { drainOutbox } from './outbox.js';
 import { scheduledJobs } from './jobs.js';
 import { reconcileEvents } from './reconcile.js';
 import { generateReports } from './reports.js';
-import { monitorWorker } from './health.js';
+import { monitorWorker, pruneWorkerInstances } from './health.js';
 import { purgeApprovedSchool } from './offboarding.js';
 import { generateSchoolExport } from './school-exports.js';
 import { applyRetention } from './retention.js';
@@ -43,8 +43,10 @@ async function run() {
     let ok = true;
     try {
       await sendLoginAlerts(pool);
-      if (Date.now() - lastJobs >= 60000)
+      if (Date.now() - lastJobs >= 60000) {
         await pool.query('SELECT app.prune_account_security_events()');
+        await pruneWorkerInstances(pool);
+      }
       const schools = (
         await pool.query<{ worker_schools: string }>('SELECT app.worker_schools()')
       ).rows.map((x) => x.worker_schools);

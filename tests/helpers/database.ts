@@ -58,7 +58,7 @@ async function nativeFixtureDatabase(connection: string): Promise<PGlite> {
 }
 // PGlite is real PostgreSQL compiled to WASM, with one backend. The mutex represents
 // its one connection; multi-connection row-lock tests use the separate CI pg suite.
-export function poolAdapters(db: PGlite) {
+export function poolAdapters(db: PGlite, runtime: { api?: string; platform?: string } = {}) {
   let chain = Promise.resolve();
   async function lock() {
     let release!: () => void;
@@ -105,9 +105,9 @@ export function poolAdapters(db: PGlite) {
     } as unknown as pg.Pool;
   }
   return {
-    api: pool('app_api'),
+    api: pool(runtime.api ?? 'app_api'),
     device: pool('app_device'),
-    platform: pool('app_platform'),
+    platform: pool(runtime.platform ?? 'app_platform'),
     worker: pool('app_worker'),
   };
 }

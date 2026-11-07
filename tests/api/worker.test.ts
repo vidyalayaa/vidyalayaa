@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { messageFor } from '../../apps/worker/src/outbox.js';
 import { encrypt } from '../../apps/api/src/lib/crypto.js';
 import { applyRetention } from '../../apps/worker/src/retention.js';
+import { monitorWorker, pruneWorkerInstances } from '../../apps/worker/src/health.js';
 let db: PGlite, pools: ReturnType<typeof poolAdapters>, f: Awaited<ReturnType<typeof fixture>>;
 beforeAll(async () => {
   db = await portableDatabase();
@@ -27,6 +28,36 @@ afterAll(async () => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   await db.close();
+});
+it('prunes old and stopped worker records while retaining recent heartbeats', async () => {
+  const [running, degraded, old, stopped] = Array.from({ length: 4 }, () => crypto.randomUUID());
+  await db.query(
+    `INSERT INTO worker_instances(id,state,last_seen_at) VALUES
+      ($1,'RUNNING',now()), ($2,'DEGRADED',now()),
+      ($3,'RUNNING',now()-interval '2 minutes'), ($4,'STOPPING',now())`,
+    [running, degraded, old, stopped],
+  );
+  expect(await pruneWorkerInstances(pools.worker)).toBe(2);
+  const result = await db.query<{ id: string }>('SELECT id FROM worker_instances');
+  expect(result.rows.map(({ id }) => id).sort()).toEqual([running, degraded].sort());
+});
+it('keeps a configured worker name on its heartbeat after a successful cycle', async () => {
+  const id = crypto.randomUUID();
+  vi.stubEnv('WORKER_INSTANCE_ID', id);
+  vi.stubEnv('WORKER_NAME', ' Voroa worker ');
+  try {
+    const worker = await monitorWorker(pools.worker);
+    try {
+      await worker.cycle(true);
+      expect(
+        (await db.query('SELECT worker_name,state FROM worker_instances WHERE id=$1', [id])).rows,
+      ).toEqual([{ worker_name: 'Voroa worker', state: 'RUNNING' }]);
+    } finally {
+      await worker.stop();
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 it('isolates invalid push tokens and skips successful targets on transient retries', async () => {
   const outbox = crypto.randomUUID(),

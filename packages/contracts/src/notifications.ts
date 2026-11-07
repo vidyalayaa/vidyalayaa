@@ -51,6 +51,40 @@ export const notificationSettingsSchema = z
       .strict(),
   })
   .strict();
+export const platformNotificationSchema = z
+  .object({
+    school_id: z.string().uuid(),
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(1000),
+    scheduled_at: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+export const platformDailyNotificationSchema = platformNotificationSchema
+  .omit({ scheduled_at: true })
+  .extend({ local_time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/) });
+export type PlatformDailyNotification = {
+  id: string;
+  school_name: string;
+  title: string;
+  local_time: string;
+  timezone: string;
+  next_run_at: string | null;
+  status: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+  created_at: string;
+};
+export type PlatformNotification = {
+  id: string;
+  school_id: string;
+  school_name: string;
+  timezone: string;
+  title: string;
+  status: 'SCHEDULED' | 'QUEUED' | 'RETRYING' | 'PROCESSING' | 'COMPLETED' | 'DEAD' | 'CANCELLED';
+  scheduled_at: string | null;
+  created_at: string;
+  recipients: number;
+  sent: number;
+  failed: number;
+};
 export type CustomNotificationInput = z.infer<typeof customNotificationSchema>;
 export type SchoolNotificationSettings = z.infer<typeof notificationSettingsSchema>;
 export const defaultNotificationSettings: SchoolNotificationSettings = {

@@ -12,6 +12,8 @@ import {
   retirementSchema,
   notificationPrivacySchema,
   customNotificationSchema,
+  platformDailyNotificationSchema,
+  platformNotificationSchema,
   notificationSettingsSchema,
   campusAssociationSchema,
   supportRequestSchema,
@@ -144,6 +146,8 @@ const schemas = {
   Retirement: retirementSchema,
   NotificationPrivacy: notificationPrivacySchema,
   CustomNotification: customNotificationSchema,
+  PlatformNotification: platformNotificationSchema,
+  PlatformDailyNotification: platformDailyNotificationSchema,
   SchoolNotificationSettings: notificationSettingsSchema,
   CampusAssociation: campusAssociationSchema,
   SupportRequest: supportRequestSchema,
@@ -1273,6 +1277,67 @@ operation(
   '/platform/operations',
   'get',
   'MFA-protected aggregate usage, backlog and private worker health',
+);
+operation(
+  '/platform/notifications',
+  'get',
+  'MFA-protected history of platform school notifications',
+);
+operation(
+  '/platform/notifications',
+  'post',
+  'Queue or schedule a push notification for one school with an Idempotency-Key',
+  'PlatformNotification',
+);
+operation(
+  '/platform/notifications/{id}/cancel',
+  'post',
+  'Cancel a platform notification before the worker claims it',
+);
+operation(
+  '/platform/notifications/daily',
+  'get',
+  'List MFA-protected daily school notification schedules',
+);
+operation(
+  '/platform/notifications/daily',
+  'post',
+  'Create a daily school-local notification schedule with an Idempotency-Key',
+  'PlatformDailyNotification',
+  'UserJWT',
+  {
+    parameters: [
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        schema: { type: 'string', minLength: 8, maxLength: 200 },
+      },
+    ],
+    responses: {
+      '201': { description: 'Daily schedule ID' },
+      '403': { description: 'Super Admin with MFA required' },
+      '409': { description: 'School is ineligible or the retry key has different details' },
+      '422': { description: 'Invalid daily time or message details' },
+    },
+  },
+);
+operation(
+  '/platform/notifications/daily/{id}/cancel',
+  'post',
+  'Stop future daily occurrences',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+    responses: {
+      '204': { description: 'Daily schedule stopped' },
+      '403': { description: 'Super Admin with MFA required' },
+      '409': { description: 'Schedule unavailable or already stopped' },
+    },
+  },
 );
 operation(
   '/platform/plans/{id}',

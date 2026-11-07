@@ -17,6 +17,10 @@ let db: PGlite,
   pools: ReturnType<typeof poolAdapters>,
   app: ReturnType<typeof createApp>;
 const root = crypto.randomUUID(),
+  runtime = {
+    api: 'profile_api_' + root.replaceAll('-', ''),
+    platform: 'profile_platform_' + root.replaceAll('-', ''),
+  },
   objects = new Map<string, Buffer>(),
   png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
@@ -26,7 +30,13 @@ let failUpload = false;
 beforeAll(async () => {
   db = await portableDatabase();
   f = await fixture(db);
-  pools = poolAdapters(db);
+  await db.exec(`
+    CREATE ROLE ${runtime.api} LOGIN INHERIT;
+    CREATE ROLE ${runtime.platform} LOGIN INHERIT;
+    GRANT app_api TO ${runtime.api};
+    GRANT app_platform TO ${runtime.platform};
+  `);
+  pools = poolAdapters(db, runtime);
   await db.query("INSERT INTO auth.users(id,email) VALUES($1,'profile-root@example.invalid')", [
     root,
   ]);
@@ -82,7 +92,14 @@ beforeAll(async () => {
     { ...pools, supabase: withProviderSessions(db, storage) },
   );
 });
-afterAll(async () => db?.close());
+afterAll(async () => {
+  if (!db) return;
+  try {
+    await db.exec(`DROP ROLE IF EXISTS ${runtime.api}, ${runtime.platform}`);
+  } finally {
+    await db.close();
+  }
+});
 function call(method: 'get' | 'put' | 'post' | 'delete', path = '/school-profile', role = 'admin') {
   const token =
     role === 'root'
@@ -209,6 +226,14 @@ it('gives Principal read-only access by default and supports explicit, revocable
   expect((await call('put', '/school-profile', 'principal').send(b)).status).toBe(403);
   const admin = await body();
   expect((await call('put').send({ ...admin, principal_edit_authorized: true })).status).toBe(200);
+  await expect(
+    transaction(pools.api, { schoolId: f.schoolA, userId: f.principal }, (tx) =>
+      tx.query(
+        'UPDATE school_profile_private SET principal_edit_authorized=false WHERE school_id=$1',
+        [f.schoolA],
+      ),
+    ),
+  ).rejects.toMatchObject({ code: '42501' });
   b = await body('principal');
   expect(
     (
@@ -243,9 +268,12 @@ it('gives Principal read-only access by default and supports explicit, revocable
   ).toBe(403);
 });
 it('isolates every school and allows Super Admin to edit all profiles without support access to children', async () => {
-  await transaction(pools.platform, { schoolId: '', userId: root }, (tx) =>
-    tx.query('SELECT app.school_profile_editor($1) AS allowed', [f.schoolB]),
-  );
+  const allowed = (userId: string) =>
+    transaction(pools.platform, { schoolId: '', userId }, (tx) =>
+      tx.query('SELECT app.school_profile_editor($1) AS allowed', [f.schoolB]),
+    );
+  expect((await allowed(root)).rows).toEqual([{ allowed: true }]);
+  expect((await allowed(f.admin)).rows).toEqual([{ allowed: false }]);
   expect((await call('get').set('X-School-Id', f.schoolB)).status).toBe(404);
   const path = `/platform/schools/${f.schoolB}/profile`;
   expect((await call('get', path, 'admin')).status).toBe(403);
@@ -264,10 +292,21 @@ it('isolates every school and allows Super Admin to edit all profiles without su
   });
   const rights = (
     await db.query(
-      "SELECT has_table_privilege('app_platform','students','SELECT') AS pupils,has_table_privilege('authenticated','school_profile_private','SELECT') AS browser,has_table_privilege('anon','school_profile_assets','SELECT') AS anon",
+      "SELECT has_table_privilege($1,'students','SELECT') AS pupils,has_function_privilege($1,'app.school_role(uuid)','EXECUTE') AS school_role,has_table_privilege('authenticated','school_profile_private','SELECT') AS browser,has_table_privilege('anon','school_profile_assets','SELECT') AS anon",
+      [runtime.platform],
     )
   ).rows[0];
-  expect(rights).toEqual({ pupils: false, browser: false, anon: false });
+  expect(rights).toEqual({ pupils: false, school_role: false, browser: false, anon: false });
+});
+it('enforces timing guards for inherited school database logins', async () => {
+  await expect(
+    transaction(pools.api, { schoolId: f.schoolA, userId: f.principal }, (tx) =>
+      tx.query("UPDATE schools SET settings=jsonb_set(settings,'{timetable}',$2) WHERE id=$1", [
+        f.schoolA,
+        { ...defaultSchoolTimings, version: 1 },
+      ]),
+    ),
+  ).rejects.toMatchObject({ code: '42501' });
 });
 it('reuses timetable settings and validates version, timing permissions and overlaps', async () => {
   const saved = await call('put', '/school-profile/timings').send({

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { platformAuditSnapshot } from './audit.js';
 import { schoolProfileRouter } from '../school-profile/router.js';
+import { platformNotificationsRouter } from './notifications.js';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -26,6 +27,7 @@ export function platformRouter(
 ) {
   const r = Router();
   r.use(platformOnly);
+  r.use('/notifications', platformNotificationsRouter(platform));
   r.use('/schools/:schoolId/profile', schoolProfileRouter(platform, auth));
   r.get(
     '/audit',
@@ -284,7 +286,12 @@ export function platformRouter(
           metrics: (await tx.query('SELECT app.platform_operations() AS metrics')).rows[0].metrics,
           workers: (
             await tx.query(
-              "SELECT id,last_seen_at,last_success_at,state,last_error_code,last_seen_at>now()-interval '90 seconds' AS alive,last_success_at>now()-interval '5 minutes' AS ready FROM worker_instances ORDER BY last_seen_at DESC LIMIT 20",
+              `SELECT id,worker_name,last_seen_at,last_success_at,state,last_error_code,
+                      true AS alive,
+                      state='RUNNING' AND coalesce(last_success_at>now()-interval '5 minutes',false) AS ready
+                 FROM worker_instances
+                WHERE state<>'STOPPING' AND last_seen_at>now()-interval '90 seconds'
+                ORDER BY last_seen_at DESC,id LIMIT 20`,
             )
           ).rows,
           server_time: new Date().toISOString(),

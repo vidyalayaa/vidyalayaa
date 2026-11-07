@@ -67,4 +67,15 @@ END $$;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='notification_outbox'::regclass AND polname='notification_read' AND NOT polpermissive) OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='notification_outbox'::regclass AND polname='custom_worker_protocol') THEN RAISE EXCEPTION 'Notification ownership or deployment guard missing';END IF;
  IF has_table_privilege('authenticated','notification_recipient_targets','SELECT') OR has_table_privilege('anon','school_notification_settings','SELECT') OR has_table_privilege('app_api','notification_recipient_targets','INSERT') OR has_function_privilege('authenticated','app.queue_custom_notification(text,text,uuid[],text,text)','EXECUTE') THEN RAISE EXCEPTION 'Notification privileged surface exposed';END IF;
+ IF NOT EXISTS(SELECT FROM pg_class WHERE oid='app.platform_daily_notifications'::regclass AND relrowsecurity)
+ OR has_table_privilege('app_platform','app.platform_daily_notifications','SELECT,INSERT,UPDATE,DELETE')
+ OR has_table_privilege('app_worker','app.platform_daily_notifications','SELECT,INSERT,UPDATE,DELETE')
+ OR has_table_privilege('authenticated','app.platform_daily_notifications','SELECT,INSERT,UPDATE,DELETE')
+ OR has_function_privilege('authenticated','app.create_platform_daily_notification(uuid,text,text,time,text)','EXECUTE')
+ OR has_function_privilege('app_api','app.platform_daily_notification_history()','EXECUTE')
+ OR has_function_privilege('app_worker','app.cancel_platform_daily_notification(uuid)','EXECUTE')
+ OR has_function_privilege('app_platform','app.enqueue_due_platform_daily_notifications()','EXECUTE')
+ OR NOT has_function_privilege('app_platform','app.create_platform_daily_notification(uuid,text,text,time,text)','EXECUTE')
+ OR NOT has_function_privilege('app_worker','app.enqueue_due_platform_daily_notifications()','EXECUTE')
+ THEN RAISE EXCEPTION 'Daily notification schedule privileges incorrect'; END IF;
 END $$;

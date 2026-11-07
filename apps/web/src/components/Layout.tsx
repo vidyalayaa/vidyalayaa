@@ -166,6 +166,7 @@ export default function Layout() {
         { to: '/platform/support-grants', text: 'Support access', icon: ShieldCheck },
         { to: '/platform/support-requests', text: 'Support requests', icon: ShieldCheck },
         { to: '/platform/notices', text: 'Platform notices', icon: Bell },
+        { to: '/platform/notifications', text: 'School notifications', icon: Bell },
         { to: '/platform/audit', text: 'Audit history', icon: ShieldCheck },
         { to: '/platform/organizations', text: 'Campus groups', icon: Building2 },
         { to: '/platform/usage', text: 'Usage', icon: Layers3 },

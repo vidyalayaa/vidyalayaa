@@ -167,6 +167,33 @@ it('exposes aggregate platform health without granting student table access', as
   expect(result.status).toBe(200);
   expect(result.body.metrics.students).toBeGreaterThanOrEqual(1);
   expect(result.body.workers).toEqual([]);
+  const [running, starting, degraded, stale, stopped, delayed] = Array.from({ length: 6 }, () =>
+    crypto.randomUUID(),
+  );
+  await db.query(
+    `INSERT INTO worker_instances(id,state,last_seen_at,last_success_at,worker_name) VALUES
+      ($1,'RUNNING',now(),now(),'Voroa worker'),
+      ($2,'STARTING',now(),NULL,NULL),
+      ($3,'DEGRADED',now(),now(),NULL),
+      ($4,'RUNNING',now()-interval '2 minutes',now()-interval '2 minutes',NULL),
+      ($5,'STOPPING',now(),now(),NULL),
+      ($6,'RUNNING',now(),now()-interval '6 minutes',NULL)`,
+    [running, starting, degraded, stale, stopped, delayed],
+  );
+  const health = await call('get', '/platform/operations');
+  expect(health.status).toBe(200);
+  expect(health.body.workers).toHaveLength(4);
+  expect(health.body.workers).toContainEqual(
+    expect.objectContaining({ id: running, worker_name: 'Voroa worker' }),
+  );
+  expect(health.body.workers.map(({ id, alive, ready }) => [id, alive, ready])).toEqual(
+    expect.arrayContaining([
+      [running, true, true],
+      [starting, true, false],
+      [degraded, true, false],
+      [delayed, true, false],
+    ]),
+  );
   expect(JSON.stringify(result.body)).not.toContain('Test learner');
   expect(
     (
