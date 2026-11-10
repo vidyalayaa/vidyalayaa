@@ -28,8 +28,10 @@ export function studentProfileRouter(pool: pg.Pool) {
         async (tx) => {
           const own = (
             await tx.query(
-              `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_of_birth::text,s.gender,s.email,s.status,u.phone
-         FROM students s JOIN users u ON u.id=s.user_id WHERE s.school_id=$1 AND s.user_id=$2`,
+              `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_of_birth::text,s.gender,s.email,s.status,u.phone,d.details AS contact
+         FROM students s JOIN users u ON u.id=s.user_id
+         LEFT JOIN school_person_details d ON d.school_id=s.school_id AND d.student_id=s.id
+         WHERE s.school_id=$1 AND s.user_id=$2`,
               [a.context.schoolId, a.id],
             )
           ).rows[0];
@@ -62,8 +64,14 @@ export function studentProfileRouter(pool: pg.Pool) {
               [a.context.schoolId, own.id],
             )
           ).rows;
-          const { id: _id, ...student } = own;
-          return { student, school, enrollments, guardians } as StudentProfile;
+          const { id: _id, contact, ...student } = own;
+          return {
+            student,
+            school,
+            enrollments,
+            guardians,
+            ...(contact ? { contact } : {}),
+          } as StudentProfile;
         },
         true,
       );

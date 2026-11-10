@@ -661,3 +661,4 @@ export * from './homework.js';
 export * from './promotion.js';
 export * from './school-profile.js';
 export * from './results.js';
+export * from './person-profiles.js';

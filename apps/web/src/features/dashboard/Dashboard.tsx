@@ -29,6 +29,7 @@ import UpcomingEvents from '../calendar/UpcomingEvents';
 import { schoolPath } from '../../lib/portals';
 import Fees from '../fees/Fees';
 import FeeOverview from '../fees/FeeOverview';
+import { OwnProfileAvatar, PersonAvatar } from '../profiles/PersonAvatar';
 const Chart = lazy(() => import('./TrendChart'));
 interface DashboardData {
   date: string;
@@ -36,6 +37,8 @@ interface DashboardData {
   trend: { date: string; present: number; total: number }[];
   recent: {
     id: string;
+    student_id?: string;
+    profile_photo_id?: string | null;
     first_name: string;
     last_name: string;
     student_code: string;
@@ -106,17 +109,27 @@ export default function Dashboard() {
             : 'A little less admin. A little more possibility.'
         }
         actions={
-          <Button variant="outline" asChild>
-            <Link to={schoolPath('/calendar', role)}>
-              <CalendarDays size={16} />
-              {new Intl.DateTimeFormat('en-IN', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                timeZone: a.me?.school?.timezone || 'Asia/Kolkata',
-              }).format(new Date())}
-            </Link>
-          </Button>
+          <>
+            {configured &&
+              (role === 'school_admin' || role === 'principal' || role === 'teacher') && (
+                <Button variant="outline" asChild>
+                  <Link to={schoolPath('/profile', role)}>
+                    <OwnProfileAvatar className="size-7 rounded-lg text-xs" /> My staff profile
+                  </Link>
+                </Button>
+              )}
+            <Button variant="outline" asChild>
+              <Link to={schoolPath('/calendar', role)}>
+                <CalendarDays size={16} />
+                {new Intl.DateTimeFormat('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  timeZone: a.me?.school?.timezone || 'Asia/Kolkata',
+                }).format(new Date())}
+              </Link>
+            </Button>
+          </>
         }
       />
       {configured && a.me?.school?.permissions.includes('marks.read') && <AcademicOverview />}
@@ -373,10 +386,13 @@ export default function Dashboard() {
                   <tr key={s.id}>
                     <td>
                       <span className="person-cell">
-                        <i>
-                          {s.first_name[0]}
-                          {s.last_name?.[0]}
-                        </i>
+                        <PersonAvatar
+                          kind="student"
+                          id={s.student_id}
+                          photo={s.profile_photo_id}
+                          name={[s.first_name, s.last_name].filter(Boolean).join(' ')}
+                          decorative
+                        />
                         {s.first_name} {s.last_name}
                       </span>
                     </td>

@@ -7,6 +7,9 @@ import RollMarksDialog from './RollMarksDialog';
 import RecordSelect from '../../components/RecordSelect';
 import ResourceDetails from './ResourceDetails';
 import StudentProfileDialog from './StudentProfileDialog';
+import { StaffProfileDialog } from '../profiles/StaffProfile';
+import { PersonAvatar } from '../profiles/PersonAvatar';
+import PhotoImportDialog from '../profiles/PhotoImportDialog';
 import StudentRecordTabs from '../students/StudentRecordTabs';
 import AttendanceRuleBuilder from '../operations/AttendanceRuleBuilder';
 import FeePaymentDialog from './FeePaymentDialog';
@@ -53,6 +56,7 @@ export function ResourceScreen({
     [bulk, setBulk] = useState(false),
     [rollEntry, setRollEntry] = useState(false),
     [importing, setImporting] = useState(false),
+    [importPhotos, setImportPhotos] = useState(false),
     [retiring, setRetiring] = useState<Record<string, unknown> | null>(null),
     [dirty, setDirty] = useState(false),
     [view, setView] = useState<string | null>(null),
@@ -73,6 +77,7 @@ export function ResourceScreen({
       !!a.me?.school?.permissions.includes(info.write) &&
       (!assessment || assessment.exam.status === 'OPEN'),
     locked = !!info.feature && !a.me?.features[info.feature];
+  const staffAdmin = resource === 'teachers' && a.me?.school?.role === 'school_admin' && canWrite;
   const Heading = assessment ? ResultsHeading : PageHeading;
   const canRecordMarks = a.me?.school?.permissions.includes('marks.write');
   useEffect(() => {
@@ -125,6 +130,11 @@ export function ResourceScreen({
                   Import CSV
                 </Button>
               )}
+            {staffAdmin && (
+              <Button variant="outline" onClick={() => setImportPhotos(true)}>
+                Import photo ZIP
+              </Button>
+            )}
             {resource === 'marks' && canWrite && (
               <Button variant="outline" onClick={() => setBulk(true)}>
                 Import CSV
@@ -261,6 +271,20 @@ export function ResourceScreen({
             <DataTable
               rows={query.data.data}
               columns={assessment ? ['student_id', 'subject_id', 'score', 'remarks'] : info.columns}
+              renderCell={(column, row) =>
+                resource === 'teachers' && column === 'full_name' ? (
+                  <span className="flex items-center gap-2">
+                    <PersonAvatar
+                      kind="staff"
+                      id={String(row.id)}
+                      photo={row.profile_photo_id as string | null}
+                      name={String(row.full_name || '')}
+                      decorative
+                    />
+                    <span>{String(row.full_name || '')}</span>
+                  </span>
+                ) : undefined
+              }
               onView={(row) => setView(String(row.id))}
               actions={
                 resource === 'fee_records'
@@ -393,6 +417,7 @@ export function ResourceScreen({
           </div>
         </Panel>
       )}
+      {importPhotos && <PhotoImportDialog kind="staff" close={() => setImportPhotos(false)} />}
       {importing && (
         <RecordImportDialog
           resource={resource as ImportResource}
@@ -433,6 +458,8 @@ export function ResourceScreen({
       {view &&
         (resource === 'students' ? (
           <StudentProfileDialog studentId={view} close={() => setView(null)} />
+        ) : resource === 'teachers' && (staffAdmin || a.me?.school?.role === 'teacher') ? (
+          <StaffProfileDialog id={view} close={() => setView(null)} />
         ) : (
           <ResourceDetails resource={resource} id={view} close={() => setView(null)} />
         ))}

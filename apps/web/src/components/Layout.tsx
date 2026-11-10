@@ -1,9 +1,11 @@
 import PushUpdates from '../features/notifications/PushUpdates';
+import { OwnProfileAvatar } from '../features/profiles/PersonAvatar';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
+  UserRound,
   GraduationCap,
   CalendarCheck2,
   CalendarDays,
@@ -388,6 +390,15 @@ export default function Layout() {
               Platform console
             </NavLink>
           )}
+          {role && !platformOnly && role !== 'parent' && role !== 'student' && (
+            <NavLink
+              to={path('/profile')}
+              onClick={closeSchoolMenu}
+              className={({ isActive }) => cn('nav-item', isActive && 'nav-active')}
+            >
+              <UserRound size={18} /> My profile
+            </NavLink>
+          )}
           {permissions.includes('users.manage') && !platformOnly && (
             <NavLink className="nav-item" to={path('/members')}>
               <Users size={18} />
@@ -475,7 +486,7 @@ export default function Layout() {
                 onClick={() => setConfirmLogout(true)}
                 aria-label="Sign out"
               >
-                <span>{a.me?.full_name.slice(0, 2).toUpperCase() || 'V'}</span>
+                <OwnProfileAvatar />
                 <LogOut size={15} />
               </button>
             ) : (
@@ -548,6 +559,7 @@ export default function Layout() {
         )}
         <Dialog
           open={confirmLogout}
+          size="compact"
           onOpenChange={(v) => !loggingOut && setConfirmLogout(v)}
           title="Sign out of your account?"
           description="Are you sure you want to end your current session? You will need to sign in again to access Vidyalayaa."

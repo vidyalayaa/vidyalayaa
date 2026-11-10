@@ -2,6 +2,9 @@ import {
   notificationPrivacySchema,
   reconciliationRequestSchema,
   retirementSchema,
+  staffDetailFields,
+  staffDetailsSchema,
+  type StaffDetails,
 } from '@vidyalayaa/contracts';
 import { Router } from 'express';
 import type pg from 'pg';
@@ -20,6 +23,7 @@ import {
 } from './resources.js';
 import { requireWrite, withIdempotency } from './router.js';
 import { scheduleAnnouncement } from './announcements.js';
+import { savePersonDetails } from './person-profile-details.js';
 
 export const retirementResources = [
   'academic_sessions',
@@ -359,6 +363,8 @@ export function workflowsRouter(pool: pg.Pool) {
         d = definitions[name];
       if (!a.active!.permissions.includes(d.write!))
         throw new ApiError(403, 'FORBIDDEN', 'Import permission required.');
+      if (name === 'teachers' && a.active!.role !== 'school_admin')
+        throw new ApiError(403, 'FORBIDDEN', 'School Admin access is required to import staff.');
       const result = await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a, d.feature);
         await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
@@ -366,12 +372,31 @@ export function workflowsRouter(pool: pg.Pool) {
         ]);
         const run = async () => {
           await tx.query('SAVEPOINT import_preview');
-          const parsed: Record<string, unknown>[] = [],
+          const parsed: { row: Record<string, unknown>; details?: StaffDetails }[] = [],
             errors: { row: number; path: (string | number)[]; message: string }[] = [];
+          const insert = async (row: Record<string, unknown>, details?: StaffDetails) => {
+            const keys = Object.keys(row);
+            const result = await tx.query(
+              `INSERT INTO ${name}(school_id,${keys.join(',')}) VALUES($1,${keys.map((_, n) => '$' + (n + 2)).join(',')}) RETURNING id`,
+              [a.context.schoolId, ...keys.map((k) => row[k])],
+            );
+            if (details)
+              await savePersonDetails(tx, a.context.schoolId, 'staff', result.rows[0].id, details);
+          };
           for (let i = 0; i < b.rows.length; i++) {
             await tx.query('SAVEPOINT validate_import_row');
             try {
               const input = { ...b.rows[i] };
+              const staffFields: Record<string, unknown> = {};
+              if (name === 'teachers') {
+                for (const field of staffDetailFields) {
+                  if (field in input) staffFields[field] = input[field];
+                  delete input[field];
+                }
+              }
+              const details = Object.keys(staffFields).length
+                ? staffDetailsSchema.parse(staffFields)
+                : undefined;
               const resolve = async (
                 field: string,
                 table: string,
@@ -421,7 +446,11 @@ export function workflowsRouter(pool: pg.Pool) {
               }
               if (input.account_email) {
                 const role =
-                  name === 'parents' ? 'parent' : name === 'teachers' ? 'teacher' : 'student';
+                  name === 'parents'
+                    ? 'parent'
+                    : name === 'teachers'
+                      ? input.staff_role || 'teacher'
+                      : 'student';
                 const account = (
                   await tx.query(
                     "SELECT u.id FROM users u JOIN school_memberships m ON m.user_id=u.id JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.status='ACTIVE' AND u.status='ACTIVE' AND r.code=$2 AND lower(u.email::text)=lower($3)",
@@ -439,12 +468,8 @@ export function workflowsRouter(pool: pg.Pool) {
               }
               const row = resourceSchemas[name].parse(input) as Record<string, unknown>;
               await validateBusiness(tx, a, name, row, false);
-              const keys = Object.keys(row);
-              await tx.query(
-                `INSERT INTO ${name}(school_id,${keys.join(',')}) VALUES($1,${keys.map((_, n) => '$' + (n + 2)).join(',')})`,
-                [a.context.schoolId, ...keys.map((k) => row[k])],
-              );
-              parsed.push(row);
+              await insert(row, details);
+              parsed.push({ row, details });
             } catch (e) {
               await tx.query('ROLLBACK TO SAVEPOINT validate_import_row');
               if (e instanceof z.ZodError)
@@ -460,7 +485,11 @@ export function workflowsRouter(pool: pg.Pool) {
                   row: i + 1,
                   path: [],
                   message:
-                    e instanceof ApiError ? e.message : 'This row conflicts with existing records.',
+                    e instanceof ApiError
+                      ? e.message
+                      : e instanceof Error && e.message === 'PROFILE_CODE_DUPLICATE'
+                        ? 'This admission number or employee ID already exists in this school or import.'
+                        : 'This row conflicts with existing records.',
                 });
             }
             await tx.query('RELEASE SAVEPOINT validate_import_row');
@@ -484,7 +513,7 @@ export function workflowsRouter(pool: pg.Pool) {
               ).rows[0].count,
             );
             if (
-              active + parsed.filter((x) => x.status === 'ACTIVE').length >
+              active + parsed.filter((x) => x.row.status === 'ACTIVE').length >
               (a.limits.max_students ?? 0)
             )
               throw new ApiError(
@@ -495,13 +524,7 @@ export function workflowsRouter(pool: pg.Pool) {
           }
           if (b.validate_only) return { validated: parsed.length, imported: 0 };
           {
-            for (const row of parsed) {
-              const keys = Object.keys(row);
-              await tx.query(
-                `INSERT INTO ${name}(school_id,${keys.join(',')}) VALUES($1,${keys.map((_, i) => '$' + (i + 2)).join(',')})`,
-                [a.context.schoolId, ...keys.map((k) => row[k])],
-              );
-            }
+            for (const { row, details } of parsed) await insert(row, details);
             await audit(tx, a.context.schoolId, a.id, 'records.imported', name);
             return { validated: parsed.length, imported: parsed.length };
           }

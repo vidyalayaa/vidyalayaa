@@ -13,6 +13,7 @@ import {
 import { api, useAuth } from '../../lib/auth';
 import { Badge, Loading } from '../../components/common';
 import { Button } from '../../components/ui/button';
+import { OwnProfileAvatar } from '../profiles/PersonAvatar';
 
 interface AssignmentItem {
   id: string;
@@ -54,7 +55,9 @@ export default function StudentPortalSection() {
   return (
     <div className="mb-8 space-y-6">
       <Button asChild variant="outline">
-        <Link to="/student/profile">View my profile</Link>
+        <Link to="/student/profile">
+          <OwnProfileAvatar className="size-7 rounded-lg text-xs" /> View my profile
+        </Link>
       </Button>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {/* Homework & Due Today */}

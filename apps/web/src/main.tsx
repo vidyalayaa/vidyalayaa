@@ -28,6 +28,7 @@ const PlatformNotifications = lazy(() => import('./features/operations/PlatformN
 const Academics = lazy(() => import('./features/academics/Academics'));
 const StudentDirectory = lazy(() => import('./features/students/StudentDirectory'));
 const StudentProfile = lazy(() => import('./features/students/StudentProfile'));
+const StaffProfile = lazy(() => import('./features/profiles/StaffProfile'));
 const TeacherMaterials = lazy(() => import('./features/materials/TeacherMaterials'));
 const StudentAcademics = lazy(() =>
   import('./features/students/StudentLearning').then((m) => ({ default: m.StudentAcademics })),
@@ -299,7 +300,7 @@ function schoolRoutes() {
   return (
     <>
       <Route index element={<Dashboard />} />
-      <Route path="profile" element={<StudentProfile />} />
+      <Route path="profile" element={<OwnSchoolProfile />} />
       <Route
         path="materials"
         element={
@@ -436,6 +437,10 @@ function schoolRoutes() {
       <Route path="settings/account" element={<AccountSettings />} />
     </>
   );
+}
+function OwnSchoolProfile() {
+  const role = useAuth().me?.school?.role;
+  return role === 'student' ? <StudentProfile /> : <StaffProfile />;
 }
 const router = createBrowserRouter(
   createRoutesFromElements(

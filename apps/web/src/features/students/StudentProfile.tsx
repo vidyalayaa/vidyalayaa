@@ -7,6 +7,7 @@ import { api, useAuth } from '../../lib/auth';
 import { genderLabel, label } from '../../lib/utils';
 import { Badge, Empty, ErrorState, Loading, PageHeading } from '../../components/common';
 import { Button } from '../../components/ui/button';
+import { OwnProfileAvatar } from '../profiles/PersonAvatar';
 
 function date(value: string | null | undefined) {
   return value
@@ -80,14 +81,9 @@ export default function StudentProfile() {
         description="Ask your School Admin to link your account to your student record."
       />
     );
-  const { student, school, enrollments, guardians } = query.data,
+  const { student, school, enrollments, guardians, contact } = query.data,
     current = enrollments.find((e) => e.is_current),
     fullName = [student.first_name, student.last_name].filter(Boolean).join(' '),
-    initials = [student.first_name, student.last_name]
-      .filter(Boolean)
-      .map((n) => n![0])
-      .join('')
-      .slice(0, 2),
     firstEnrollment = enrollments.at(-1);
   return (
     <>
@@ -99,20 +95,14 @@ export default function StudentProfile() {
         aria-label="Student identity"
         className="mb-6 flex flex-wrap items-center gap-5 rounded-3xl border border-lime-200 bg-lime-50 p-6 sm:p-8"
       >
-        <div
-          className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl bg-lime-300 text-3xl font-bold text-stone-950"
-          role="img"
-          aria-label="No profile photo recorded"
-        >
-          {initials}
-        </div>
+        <OwnProfileAvatar className="size-24 rounded-3xl bg-lime-300 text-3xl" decorative={false} />
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-stone-600">
             Your student record
           </p>
           <h2 className="break-words text-2xl font-bold sm:text-3xl">{fullName}</h2>
           <p className="mt-2 break-words text-sm text-stone-600">
-            Student ID · {student.student_code}
+            Admission no. {student.student_code}
           </p>
           <p className="mt-1 break-words text-sm text-stone-600">
             {school.name}
@@ -138,8 +128,8 @@ export default function StudentProfile() {
           <Fields
             values={[
               ['Student email', student.email],
-              ['Account contact phone', student.phone],
-              ['Address', 'Not recorded'],
+              ['Contact phone', contact?.contact_phone || student.phone],
+              ['Address', contact?.address],
             ]}
           />
         </Section>

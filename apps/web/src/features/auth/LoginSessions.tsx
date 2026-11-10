@@ -231,6 +231,7 @@ export default function LoginSessions() {
       </div>
       <Dialog
         open={!!target}
+        size="compact"
         onOpenChange={(open) => {
           if (!open && !busy) setTarget(null);
         }}

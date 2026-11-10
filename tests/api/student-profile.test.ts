@@ -274,6 +274,8 @@ it('keeps other role access and browser database restrictions intact and revokes
   await db.query("UPDATE school_memberships SET status='SUSPENDED' WHERE user_id=$1", [
     f.studentUser,
   ]);
-  expect((await call()).status).toBe(404);
+  const revoked = await call();
+  expect(revoked.status).toBe(401);
+  expect(revoked.body.error.code).toBe('SESSION_ENDED');
   expect(await ownTx(async (tx) => (await tx.query('SELECT id FROM students')).rows)).toEqual([]);
 });

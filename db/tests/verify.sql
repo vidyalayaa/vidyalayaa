@@ -45,6 +45,18 @@ DO $$ DECLARE n integer; BEGIN
 END $$;
 
 DO $$ BEGIN
+ IF NOT EXISTS(SELECT FROM pg_class WHERE oid='school_person_details'::regclass AND relrowsecurity AND relforcerowsecurity)
+ OR NOT EXISTS(SELECT FROM pg_policy WHERE polrelid='school_person_details'::regclass AND polname='person_details_read')
+ OR has_table_privilege('authenticated','school_person_details','SELECT,INSERT,UPDATE')
+ OR has_table_privilege('anon','school_person_details','SELECT,INSERT,UPDATE')
+ OR has_table_privilege('app_platform','school_person_details','SELECT,INSERT,UPDATE')
+ OR has_table_privilege('app_worker','school_person_details','SELECT,INSERT,UPDATE')
+ OR NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='students'::regclass AND tgname='student_photo_guard')
+ OR NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='teachers'::regclass AND tgname='staff_photo_guard')
+ THEN RAISE EXCEPTION 'Private student and staff profile guards are incomplete'; END IF;
+END $$;
+
+DO $$ BEGIN
  IF NOT EXISTS(SELECT FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='profile' AND is_nullable='NO') OR NOT EXISTS(SELECT FROM pg_trigger WHERE tgrelid='schools'::regclass AND tgname='school_profile_guard' AND tgenabled='O') THEN RAISE EXCEPTION 'Central school profile or version guard missing';END IF;
  IF (SELECT count(*) FROM pg_class WHERE oid IN('school_profile_private'::regclass,'school_profile_assets'::regclass) AND relrowsecurity AND relforcerowsecurity)<>2 THEN RAISE EXCEPTION 'School profile tables require forced RLS';END IF;
  IF has_table_privilege('anon','school_profile_private','SELECT') OR has_table_privilege('authenticated','school_profile_private','SELECT') OR has_table_privilege('authenticated','school_profile_assets','SELECT') OR has_table_privilege('app_api','school_profile_private','DELETE') OR has_table_privilege('app_platform','school_profile_assets','DELETE') OR has_function_privilege('authenticated','app.school_profile_editor(uuid)','EXECUTE') OR has_function_privilege('anon','app.school_profile_editor(uuid)','EXECUTE') THEN RAISE EXCEPTION 'School profile private data or controls exposed';END IF;

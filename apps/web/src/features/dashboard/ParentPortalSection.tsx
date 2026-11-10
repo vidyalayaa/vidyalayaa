@@ -19,6 +19,7 @@ import { Badge, Loading } from '../../components/common';
 import StudentProfileDialog from '../resources/StudentProfileDialog';
 import { Link } from 'react-router-dom';
 import { schoolPath } from '../../lib/portals';
+import { PersonAvatar } from '../profiles/PersonAvatar';
 
 interface ChildSummary {
   id: string;
@@ -41,6 +42,7 @@ interface StudentOverview {
     last_name: string;
     status: string;
     gender?: string;
+    profile_photo_id?: string | null;
   };
   enrollment?: {
     grade?: string;
@@ -163,8 +165,17 @@ export default function ParentPortalSection() {
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-400/20 px-2.5 py-0.5 text-xs font-semibold text-lime-300 border border-lime-400/30">
                   <Sparkles size={11} /> DIGITAL STUDENT PASS
                 </span>
-                <h3 className="mt-3 text-xl font-bold tracking-tight text-white">
-                  {o.student.first_name} {o.student.last_name}
+                <h3 className="mt-3 flex items-center gap-2 text-xl font-bold tracking-tight text-white">
+                  <PersonAvatar
+                    kind="student"
+                    id={o.student.id}
+                    photo={o.student.profile_photo_id}
+                    name={`${o.student.first_name} ${o.student.last_name || ''}`}
+                    decorative
+                  />
+                  <span>
+                    {o.student.first_name} {o.student.last_name}
+                  </span>
                 </h3>
                 <p className="text-xs text-stone-300 font-mono mt-0.5">
                   ID: {o.student.student_code} ·{' '}
