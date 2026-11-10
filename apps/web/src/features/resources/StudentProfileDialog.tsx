@@ -24,6 +24,10 @@ import { Badge, Loading, ErrorState } from '../../components/common';
 import { ActionDialog } from '../../components/ActionDialog';
 import FeePaymentDialog from './FeePaymentDialog';
 import { IssueCardDialog } from './CardActionDialogs';
+import { PersonAvatar } from '../profiles/PersonAvatar';
+import PhotoEditor from '../profiles/PhotoEditor';
+import PersonDetailsForm from '../profiles/PersonDetailsForm';
+import type { StudentContact } from '@vidyalayaa/contracts';
 const StudentEnrollments = lazy(() => import('../students/StudentEnrollments'));
 const FamilyRecordForm = lazy(() =>
   import('./ResourceScreen').then((m) => ({ default: m.ResourceForm })),
@@ -40,6 +44,8 @@ interface StudentOverview {
     status: string;
     created_at: string;
     email: string | null;
+    profile_photo_id?: string | null;
+    contact?: StudentContact | null;
   };
   enrollment: {
     id: string;
@@ -122,6 +128,7 @@ export default function StudentProfileDialog({
     qc = useQueryClient(),
     [tab, setTab] = useState<'overview' | 'attendance' | 'academics' | 'fees' | 'card'>('overview'),
     [action, setAction] = useState<string | null>(null),
+    [profileEdit, setProfileEdit] = useState<'core' | 'contact' | 'photo'>(),
     [paymentFee, setPaymentFee] = useState<Record<string, unknown> | null>(null);
 
   const query = useQuery({
@@ -135,6 +142,8 @@ export default function StudentProfileDialog({
   const canManageCards = permissions.includes('cards.manage');
   const canWriteFees = permissions.includes('fees.write');
   const canWriteParents = permissions.includes('parents.write');
+  const canManageProfile =
+    a.me?.school?.role === 'school_admin' && permissions.includes('students.write');
   const [linkParentOpen, setLinkParentOpen] = useState(false);
   const [familyEdit, setFamilyEdit] = useState<{
       resource: 'parents' | 'student_parents';
@@ -172,10 +181,13 @@ export default function StudentProfileDialog({
           <div className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-stone-50 via-white to-stone-50/50 p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-lime-100 text-xl font-bold text-lime-900 shadow-inner">
-                  {d.student.first_name[0]}
-                  {d.student.last_name?.[0] || ''}
-                </div>
+                <PersonAvatar
+                  kind="student"
+                  id={studentId}
+                  photo={d.student.profile_photo_id}
+                  name={[d.student.first_name, d.student.last_name].filter(Boolean).join(' ')}
+                  className="size-16 rounded-2xl text-xl"
+                />
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold text-stone-900">
@@ -185,7 +197,7 @@ export default function StudentProfileDialog({
                   </div>
                   <p className="mt-1 flex items-center gap-2 text-sm text-stone-500">
                     <span className="font-mono text-xs font-semibold text-stone-700">
-                      {d.student.student_code}
+                      Admission no. {d.student.student_code}
                     </span>
                     <span>·</span>
                     {d.enrollment ? (
@@ -200,8 +212,34 @@ export default function StudentProfileDialog({
                 </div>
               </div>
 
-              {/* Fast Quick Actions */}
               <div className="flex flex-wrap items-center gap-2">
+                {canManageProfile && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setProfileEdit(profileEdit === 'core' ? undefined : 'core')}
+                    >
+                      Edit student record
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setProfileEdit(profileEdit === 'contact' ? undefined : 'contact')
+                      }
+                    >
+                      Edit contact details
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setProfileEdit(profileEdit === 'photo' ? undefined : 'photo')}
+                    >
+                      Manage photo
+                    </Button>
+                  </>
+                )}
                 {canManageAttendance && (
                   <Button size="sm" variant="outline" onClick={() => setAction('mark_attendance')}>
                     <CalendarCheck2 size={14} />
@@ -318,6 +356,29 @@ export default function StudentProfileDialog({
           </div>
 
           {/* TAB: Overview & Guardians */}
+          {canManageProfile && profileEdit === 'photo' && (
+            <PhotoEditor kind="student" id={studentId} photo={d.student.profile_photo_id} />
+          )}
+          {canManageProfile && profileEdit === 'contact' && (
+            <PersonDetailsForm
+              kind="student"
+              id={studentId}
+              initial={d.student.contact || {}}
+              onDone={() => setProfileEdit(undefined)}
+            />
+          )}
+          {canManageProfile && profileEdit === 'core' && (
+            <Suspense fallback={<Loading />}>
+              <FamilyRecordForm
+                resource="students"
+                initial={{ ...d.student }}
+                done={async () => {
+                  setProfileEdit(undefined);
+                  await qc.invalidateQueries({ queryKey: [a.school] });
+                }}
+              />
+            </Suspense>
+          )}
           {tab === 'overview' && (
             <div className="space-y-5">
               <section className="space-y-3">
@@ -448,6 +509,18 @@ export default function StudentProfileDialog({
                     <span className="font-semibold text-stone-700">Student email:</span>{' '}
                     {d.student.email || 'Not specified'}
                   </div>
+                  {d.student.contact && (
+                    <>
+                      <div className="break-words">
+                        <span className="font-semibold text-stone-700">Contact number</span>{' '}
+                        {d.student.contact.contact_phone || 'Not recorded'}
+                      </div>
+                      <div className="break-words">
+                        <span className="font-semibold text-stone-700">Address</span>{' '}
+                        {d.student.contact.address || 'Not recorded'}
+                      </div>
+                    </>
+                  )}
                   <div>
                     <span className="font-semibold text-stone-700">Enrollment Date:</span>{' '}
                     {d.enrollment?.starts_on ? display(d.enrollment.starts_on.slice(0, 10)) : '—'}

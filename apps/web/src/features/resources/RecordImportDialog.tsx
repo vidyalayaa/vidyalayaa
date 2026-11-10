@@ -6,6 +6,7 @@ import {
   studentImportColumns,
   studentImportFields,
   guardianImportFields,
+  staffDetailFields,
 } from '@vidyalayaa/contracts';
 import { readDraft, saveDraft, deleteDraft } from '../../lib/drafts';
 import { useUnsavedChanges } from '../../lib/use-unsaved-changes';
@@ -15,7 +16,15 @@ import { Button } from '../../components/ui/button';
 const columns = {
   students: studentImportColumns.join(','),
   parents: 'full_name,email,phone,account_email,status',
-  teachers: 'staff_code,full_name,account_email,status',
+  teachers: [
+    'staff_code',
+    'full_name',
+    'email',
+    'staff_role',
+    'account_email',
+    'status',
+    ...staffDetailFields,
+  ].join(','),
   student_parents:
     'student_code,parent_email,relationship,is_primary_contact,can_receive_alerts,status',
   teacher_class_assignments:
@@ -44,6 +53,8 @@ export default function RecordImportDialog({
     inFlight = useRef(false),
     idempotency = useRef(crypto.randomUUID());
   useUnsavedChanges(!!text && !result);
+  const excelKind =
+    resource === 'students' ? 'student' : resource === 'teachers' ? 'staff' : undefined;
   function change(value: string) {
     setText(value);
     setError('');
@@ -60,7 +71,21 @@ export default function RecordImportDialog({
     setError('');
     setProgress({ stage: commit ? 'importing' : 'validating', rows: progress?.rows || 0 });
     try {
-      const rows = csvRecords(text, resource === 'students' ? studentImportColumns : undefined);
+      const rows = csvRecords(
+        text,
+        resource === 'students' ? [...studentImportColumns, 'admission_number'] : undefined,
+      );
+      if (excelKind) {
+        const primary = excelKind === 'student' ? 'student_code' : 'staff_code';
+        const alias = excelKind === 'student' ? 'admission_number' : 'employee_id';
+        for (const row of rows) {
+          if (!row[alias]) continue;
+          if (row[primary] && row[primary] !== row[alias])
+            throw new Error(`Use one value for ${primary} or ${alias}.`);
+          row[primary] = row[alias];
+          delete row[alias];
+        }
+      }
       setProgress({ stage: commit ? 'importing' : 'validating', rows: rows.length });
       const values =
         resource === 'students'
@@ -69,7 +94,8 @@ export default function RecordImportDialog({
               Object.fromEntries(
                 Object.entries(row).map(([key, value]) => [
                   key,
-                  ['true', 'false'].includes(value.toLowerCase())
+                  ['true', 'false'].includes(value.toLowerCase()) &&
+                  ['is_primary_contact', 'can_receive_alerts'].includes(key)
                     ? value.toLowerCase() === 'true'
                     : value,
                 ]),
@@ -111,10 +137,48 @@ export default function RecordImportDialog({
                     `CSV row ${x.row + 1}${x.path?.length ? ` (${x.path.join('.')})` : ''}: ${x.message}`,
                 )
                 .join('; ')
+            : '') +
+          (details.length && excelKind
+            ? ` 0 records saved. ${new Set(details.map((row: { row: number }) => row.row)).size} rows need correction.`
             : ''),
       );
       if (!commit || (e instanceof HttpError && e.status < 500 && ![408, 429].includes(e.status)))
         setValidated(false);
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  }
+  async function loadFile(file: File) {
+    if (inFlight.current) return;
+    const xlsx = Boolean(excelKind && /\.xlsx$/i.test(file.name));
+    inFlight.current = true;
+    setPending(true);
+    setError('');
+    try {
+      if (xlsx) {
+        if (file.size > 2 * 1024 * 1024)
+          throw new Error('Choose an Excel workbook no larger than 2 MB.');
+        if (!a.me?.id || !a.school) throw new Error('Select a school before importing records.');
+        const body = new FormData();
+        body.append('workbook', file);
+        const data = await api<{ csv: string }>(
+          `/profiles/${excelKind}/workbook`,
+          { method: 'POST', body },
+          true,
+          'json',
+          { userId: a.me.id, schoolId: a.requestSchool },
+        );
+        change(data.csv);
+      } else {
+        if (file.size > 512000) throw new Error('Choose a CSV smaller than 500 KB.');
+        change(await file.text());
+      }
+    } catch (e) {
+      setError((e as Error).message);
+      setValidated(false);
+      setProgress(null);
+      setResult('');
     } finally {
       inFlight.current = false;
       setPending(false);
@@ -201,31 +265,23 @@ export default function RecordImportDialog({
         ) : (
           <p className="break-all text-sm">Columns: {columns[resource]}</p>
         )}
+        {excelKind && (
+          <p className="text-sm text-stone-600">
+            Accepts CSV or Excel (.xlsx). Put the import headers on the first worksheet and format
+            ID columns as Text to keep leading zeros. Upload photos separately using Import photo
+            ZIP.
+          </p>
+        )}
         <label className="field-label block">
-          CSV file
+          {excelKind ? 'CSV or Excel file' : 'CSV file'}
           <input
             className="input mt-2"
             type="file"
             disabled={pending}
-            accept=".csv,text/csv"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              if (f.size > 512000) {
-                setError('Choose a CSV smaller than 500 KB.');
-                setValidated(false);
-                setProgress(null);
-                setResult('');
-                return;
-              }
-              try {
-                change(await f.text());
-              } catch {
-                setError('The file could not be read. Choose the CSV again.');
-                setValidated(false);
-                setProgress(null);
-                setResult('');
-              }
+            accept={excelKind ? '.csv,.xlsx,text/csv' : '.csv,text/csv'}
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              if (file) void loadFile(file);
             }}
           />
         </label>
@@ -283,7 +339,12 @@ export default function RecordImportDialog({
           </p>
         )}
         {validated && !pending && <p role="status">All rows validated. Ready to import.</p>}
-        {result && <p role="status">{result}</p>}
+        {result && (
+          <p role="status">
+            {result}
+            {excelKind ? ' 0 failed records.' : ''}
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={pending} onClick={requestClose}>
             Close

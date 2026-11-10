@@ -4,6 +4,7 @@ import { promotionRouter } from './promotion.js';
 import { schoolProfileRouter } from '../school-profile/router.js';
 import { parentWorkspaceRouter } from './parent-workspace.js';
 import { studentProfileRouter } from './student-profile.js';
+import { personProfilesRouter } from './person-profiles.js';
 import { subjectMaterialsRouter } from './materials.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
@@ -193,6 +194,10 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/school-profile', schoolProfileRouter(pool, storage, { requireWrite }));
   router.use('/parent', parentWorkspaceRouter(pool));
   router.use('/student', studentProfileRouter(pool));
+  router.use(
+    '/profiles',
+    personProfilesRouter(pool, storage, requireWrite, config.PROFILE_PHOTO_MAX_BYTES),
+  );
   router.use('/materials', subjectMaterialsRouter(pool));
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.use('/results', resultsRouter(pool, requireWrite));
@@ -429,7 +434,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           ).rows;
           const recent = (
             await tx.query(
-              `SELECT t.id,t.attendance_status,t.movement_status,t.first_arrival_at,t.last_departure_at,t.needs_review,s.first_name,s.last_name,s.student_code FROM daily_attendance t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id WHERE t.school_id=$1 AND t.attendance_date=$3 AND ${studentScope(a, 't.student_id', '$2')} ORDER BY t.updated_at DESC LIMIT 6`,
+              `SELECT t.id,t.student_id,t.attendance_status,t.movement_status,t.first_arrival_at,t.last_departure_at,t.needs_review,s.first_name,s.last_name,s.student_code,s.profile_photo_id FROM daily_attendance t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id WHERE t.school_id=$1 AND t.attendance_date=$3 AND ${studentScope(a, 't.student_id', '$2')} ORDER BY t.updated_at DESC LIMIT 6`,
               [a.context.schoolId, a.id, date],
             )
           ).rows;
@@ -501,10 +506,12 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         async (tx) => {
           await assertStudent(tx, a, id);
           const student = (
-            await tx.query('SELECT t.* FROM students t WHERE t.school_id=$1 AND t.id=$2', [
-              a.context.schoolId,
-              id,
-            ])
+            await tx.query(
+              `SELECT t.*,d.details AS contact FROM students t
+              LEFT JOIN school_person_details d ON d.school_id=t.school_id AND d.student_id=t.id
+              WHERE t.school_id=$1 AND t.id=$2`,
+              [a.context.schoolId, id],
+            )
           ).rows[0];
           if (!student) throw notFound();
 
@@ -1522,8 +1529,12 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              `SELECT m.id,m.user_id,u.full_name,u.email,r.code AS role,m.status
+              `SELECT m.id,m.user_id,u.full_name,u.email,r.code AS role,m.status,
+                 CASE WHEN r.code='student' THEN s.id ELSE te.id END AS profile_id,
+                 CASE WHEN r.code='student' THEN s.profile_photo_id ELSE te.profile_photo_id END AS profile_photo_id
                FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN roles r ON r.id=m.role_id
+               LEFT JOIN students s ON s.school_id=m.school_id AND s.user_id=m.user_id AND r.code='student'
+               LEFT JOIN teachers te ON te.school_id=m.school_id AND te.user_id=m.user_id AND r.code=te.staff_role
                WHERE m.school_id=$1 AND r.code::text=ANY($2::text[])
                  AND ($3::text IS NULL OR r.code::text=$3)
                  AND strpos(lower(concat_ws(' ',u.full_name,u.email)),lower($4))>0

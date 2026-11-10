@@ -18,6 +18,7 @@ import { ResourceForm } from '../resources/ResourceScreen';
 import BulkMarksDialog from '../resources/BulkMarksDialog';
 import RollMarksDialog from '../resources/RollMarksDialog';
 import StudentProfileDialog from '../resources/StudentProfileDialog';
+import { PersonAvatar } from '../profiles/PersonAvatar';
 
 function ClassChoice({
   classes,
@@ -97,6 +98,20 @@ export function TeacherRoster() {
               <DataTable
                 rows={students.data?.data || []}
                 columns={['student_code', 'first_name', 'last_name', 'status']}
+                renderCell={(column, row) =>
+                  column === 'first_name' ? (
+                    <span className="flex items-center gap-2">
+                      <PersonAvatar
+                        kind="student"
+                        id={String(row.id)}
+                        photo={row.profile_photo_id as string | null}
+                        name={`${row.first_name || ''} ${row.last_name || ''}`}
+                        decorative
+                      />
+                      <span>{String(row.first_name || '')}</span>
+                    </span>
+                  ) : undefined
+                }
                 actions={(r) => (
                   <Button size="sm" variant="outline" onClick={() => setProfile(String(r.id))}>
                     Profile

@@ -1,4 +1,12 @@
-import { ArrowUpRight, Inbox, Loader2, RefreshCw, ShieldCheck, AlertCircle, Home } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Inbox,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  AlertCircle,
+  Home,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
@@ -161,12 +169,14 @@ export function DataTable({
   onEdit,
   onView,
   actions,
+  renderCell,
 }: {
   rows: Record<string, unknown>[];
   columns: string[];
   onEdit?: (row: Record<string, unknown>) => void;
   onView?: (row: Record<string, unknown>) => void;
   actions?: (row: Record<string, unknown>) => ReactNode;
+  renderCell?: (column: string, row: Record<string, unknown>) => ReactNode;
 }) {
   const timeZone = useAuth().me?.school?.timezone;
   return (
@@ -191,24 +201,25 @@ export function DataTable({
             <tr key={String(row.id || i)}>
               {columns.map((c) => (
                 <td key={c} data-label={label(c.replace(/_id$/, ''))}>
-                  {[
-                    'status',
-                    'attendance_status',
-                    'movement_status',
-                    'channel',
-                    'kind',
-                    'role',
-                  ].includes(c) ? (
-                    <Badge>{display(row[c])}</Badge>
-                  ) : c.endsWith('_id') ? (
-                    <span className="text-xs text-stone-500" title={String(row[c] || '')}>
-                      {row[c.replace(/_id$/, '_label')]
-                        ? display(row[c.replace(/_id$/, '_label')])
-                        : display(row[c]).slice(0, 12)}
-                    </span>
-                  ) : (
-                    display(row[c], timeZone)
-                  )}
+                  {renderCell?.(c, row) ??
+                    ([
+                      'status',
+                      'attendance_status',
+                      'movement_status',
+                      'channel',
+                      'kind',
+                      'role',
+                    ].includes(c) ? (
+                      <Badge>{display(row[c])}</Badge>
+                    ) : c.endsWith('_id') ? (
+                      <span className="text-xs text-stone-500" title={String(row[c] || '')}>
+                        {row[c.replace(/_id$/, '_label')]
+                          ? display(row[c.replace(/_id$/, '_label')])
+                          : display(row[c]).slice(0, 12)}
+                      </span>
+                    ) : (
+                      display(row[c], timeZone)
+                    ))}
                 </td>
               ))}
               {(onEdit || onView || actions) && (
@@ -250,4 +261,3 @@ export function SecureNote() {
 
 export { AttendanceTabs } from './AttendanceTabs';
 export type { AttendanceTab } from './AttendanceTabs';
-

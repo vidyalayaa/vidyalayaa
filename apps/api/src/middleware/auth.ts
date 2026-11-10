@@ -182,7 +182,7 @@ export const requireSchool: RequestHandler = (req, res, next) => {
     actor.securityPolicy?.step_up_sensitive &&
     !actor.recentVerification &&
     !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-    /^\/(memberships|invitations|devices|support-grants|reports|exports|school\/(security|retention))(\/|$)/.test(
+    /^\/(memberships|invitations|devices|support-grants|reports|exports|school\/(security|retention)|profiles\/staff\/from-membership)(\/|$)/.test(
       req.path,
     )
   )

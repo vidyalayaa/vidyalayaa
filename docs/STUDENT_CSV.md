@@ -6,7 +6,7 @@ Open **School Admin → Students**. **Import CSV** now imports the same student,
 
 1. Choose **Import CSV → Download CSV template**. This downloads a blank UTF-8 template with all supported fields, including gender, enrollment and two parent groups.
 2. Fill one row per student. Required fields are `student_code`, `first_name`, `class_grade`, `class_section`, `starts_on`, and at least one parent/guardian.
-3. Upload the CSV (up to 500 KB and 500 students), then choose **Validate file**. Every row is checked against the current school's records. No admission records or admission audits are retained by validation.
+3. Upload a CSV (up to 500 KB) or Excel `.xlsx` workbook (up to 2 MB), then choose **Validate file**. The workbook uses its first worksheet. Each upload supports up to 500 records. No admission records or admission audits are retained by validation.
 4. Correct all reported rows, validate again, then choose **Import validated records**. If any row fails at save time, the entire file rolls back. Retrying an unchanged submission uses the same retry key. Existing students are not overwritten or silently merged.
 5. Invite the imported student and parent accounts afterward through **Members & invitations**. The import creates profiles and family links, not accounts, passwords, memberships or emails. Invitation acceptance still performs the existing verified account linking.
 
@@ -20,6 +20,7 @@ Progress verification: ten desktop/mobile browser checks passed across `student-
 | --- | --- |
 | `student_code`, `first_name` | Required; codes remain text, including leading zeros |
 | `last_name`, `email`, `date_of_birth` | Optional profile details; use `YYYY-MM-DD` for dates |
+| `contact_phone`, `address`            | Optional student contact details                                                                    |
 | `gender` | `MALE`, `FEMALE`, `OTHER`, `NOT_SPECIFIED`; blank defaults to `NOT_SPECIFIED` |
 | `status` | `ACTIVE`, `TRANSFERRED`, `GRADUATED`, `WITHDRAWN`; blank defaults to `ACTIVE` |
 | `class_grade`, `class_section` | Required; match an existing, non-archived class/section in this school |
@@ -45,6 +46,14 @@ Repeat the following fields using `parent_1_` through `parent_2_`. Leave an enti
 For siblings, create the parent as `NEW` on the first student's row, then use `EXISTING` with that parent's email on later rows. You can also link parents already in this school. Import never overwrites an existing parent's name, phone or account link. Reusing a `NEW` email already present in this school produces an error instead of creating a duplicate. Parents without email cannot be safely matched by name or phone; select an existing parent using the admission form instead.
 
 The template contains all columns, but optional columns may be omitted. Empty optional cells are ignored. Boolean flags accept true/false, not yes/no. Quoted commas, embedded quotes and multiline text are supported. Unknown/duplicate headers and unequal cell counts fail instead of silently losing information. Excel users should format student codes, roll numbers and phone columns as Text before entering data; a CSV cannot recover leading zeros already removed by a spreadsheet.
+
+## Staff records and profile photographs
+
+**School staff → Import CSV** also accepts `.xlsx`. Use the staff template for the employee ID (`staff_code`), name, official email, staff role, employment status, professional details and emergency contacts. Keep admission numbers, employee IDs and phone numbers formatted as Text in Excel. The import dialog also accepts `admission_number` or `employee_id` as an alternative to the corresponding code header. Validation and import save the entire record batch together.
+
+To add photos, open **Students** or **School staff** and choose **Import photo ZIP**. Name each file after the admission number or employee ID, such as `0007.jpg`. Review the thumbnails, unmatched files, duplicate IDs and profiles without photos. Match filenames manually as needed. Confirm each replacement individually. The summary shows photos saved, failures and profiles still missing photos. You can upload photos in a later batch or use **Manage photo** in an individual profile to crop, replace or remove one.
+
+ZIP uploads accept up to 200 files and 32 MB per archive. Images must be single-frame JPG, JPEG, PNG or WebP. The default limit is 5 MiB per original image. The API setting `PROFILE_PHOTO_MAX_BYTES` accepts 65,536 through 10,485,760 bytes. Photos are converted to JPEG and stripped of metadata before storage in the existing private `school-documents` bucket.
 
 ## Export student records
 

@@ -8,6 +8,7 @@ import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import { ErrorState, Loading } from '../../components/common';
 import { fields, resourceInfo } from './metadata';
+import { PersonAvatar } from '../profiles/PersonAvatar';
 
 export default function ResourceDetails({
   resource,
@@ -80,7 +81,16 @@ export default function ResourceDetails({
       ) : (
         query.data && (
           <>
-            <dl className="grid gap-4">
+            {resource === 'teachers' && (
+              <PersonAvatar
+                kind="staff"
+                id={id}
+                photo={query.data.profile_photo_id as string | null}
+                name={String(query.data.full_name || '')}
+                className="mb-4 size-16 text-xl"
+              />
+            )}
+            <dl className="grid gap-x-8 gap-y-4 lg:grid-cols-2">
               {fields[resource]
                 .filter((field) => field.key !== 'storage_path')
                 .map((field) => {
@@ -89,7 +99,14 @@ export default function ResourceDetails({
                     : query.data![field.key];
                   if (value === null || value === undefined || value === '') return null;
                   return (
-                    <div key={field.key}>
+                    <div
+                      key={field.key}
+                      className={
+                        field.type === 'textarea' || typeof value === 'object'
+                          ? 'col-span-full min-w-0'
+                          : 'min-w-0'
+                      }
+                    >
                       <dt className="field-label">{label(field.key.replace(/_id$/, ''))}</dt>
                       <dd className="whitespace-pre-wrap break-words text-sm leading-6">
                         {typeof value === 'object' ? (

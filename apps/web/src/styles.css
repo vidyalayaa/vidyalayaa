@@ -407,7 +407,7 @@ summary.school-selector:hover {
   align-items: center;
   color: #59674f;
 }
-.profile-button span {
+.profile-button > span {
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -1080,14 +1080,19 @@ td {
     visibility: hidden;
   }
   body:has(.fee-receipt) .dialog-content {
+    display: block;
     position: absolute;
     inset: 0;
     transform: none;
+    translate: none;
     width: 100%;
     max-width: none;
     max-height: none;
     overflow: visible;
     box-shadow: none;
+  }
+  body:has(.fee-receipt) .dialog-body {
+    overflow: visible;
   }
   .fee-receipt,
   .fee-receipt * {
@@ -2131,9 +2136,6 @@ tbody tr:hover {
   }
   .notice {
     font-size: 10px;
-  }
-  .dialog-content {
-    padding: 22px;
   }
   .module-grid {
     padding: 0 18px 18px;

@@ -20,7 +20,7 @@ import { timetableRouter } from './timetable.js';
 import type { Actor } from '../../middleware/auth.js';
 import { subjectMaterialsRouter } from './materials.js';
 
-const childSelect = `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_of_birth::text,s.gender,s.email,s.status,
+const childSelect = `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_of_birth::text,s.gender,s.email,s.status,s.profile_photo_id,d.details AS contact,
  (SELECT jsonb_build_object('class_id',c.id,'grade',c.grade,'section',c.section,'session_name',ac.name,
  'academic_session_id',ac.id,'session_starts_on',ac.starts_on::text,'roll_number',e.roll_number,'class_teacher',te.full_name)
  FROM enrollments e JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id
@@ -29,7 +29,8 @@ const childSelect = `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_
  WHERE e.school_id=s.school_id AND e.student_id=s.id AND e.status='ACTIVE' AND c.retired_at IS NULL AND ac.retired_at IS NULL
  AND e.starts_on<=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=s.school_id))::date
  AND (e.ends_on IS NULL OR e.ends_on>=(now() AT TIME ZONE (SELECT timezone FROM schools WHERE id=s.school_id))::date)
- ORDER BY e.starts_on DESC,e.id LIMIT 1) AS enrollment FROM students s`;
+ ORDER BY e.starts_on DESC,e.id LIMIT 1) AS enrollment FROM students s
+ LEFT JOIN school_person_details d ON d.school_id=s.school_id AND d.student_id=s.id`;
 
 // The existing records remain the source of truth. This router only projects
 // parent-facing fields, with both a checked child ID and restrictive database RLS.

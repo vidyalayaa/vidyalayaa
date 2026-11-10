@@ -35,9 +35,11 @@ export async function* studentExportRows(tx: Tx, school: string, search: string,
     const rows: Record<string, any>[] = (
       await tx.query(
         `SELECT s.id,s.student_code,s.first_name,s.last_name,s.email::text,to_char(s.date_of_birth,'YYYY-MM-DD') AS date_of_birth,s.gender,s.status,
+        d.details->>'contact_phone' AS contact_phone,d.details->>'address' AS address,
         selected.academic_session,selected.class_grade,selected.class_section,selected.roll_number,selected.starts_on,selected.ends_on,selected.enrollment_status,
         COALESCE(family.guardians,'[]'::jsonb) AS guardians
        FROM students s JOIN schools sc ON sc.id=s.school_id
+       LEFT JOIN school_person_details d ON d.school_id=s.school_id AND d.student_id=s.id
        LEFT JOIN LATERAL(
          SELECT ac.name AS academic_session,c.grade AS class_grade,c.section AS class_section,e.roll_number,
            to_char(e.starts_on,'YYYY-MM-DD') AS starts_on,to_char(e.ends_on,'YYYY-MM-DD') AS ends_on,e.status AS enrollment_status

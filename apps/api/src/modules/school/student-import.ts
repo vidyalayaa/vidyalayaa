@@ -4,11 +4,13 @@ import {
   studentImportRowSchema,
   guardianImportFields,
   MAX_STUDENT_PARENTS,
+  studentContactSchema,
 } from '@vidyalayaa/contracts';
 import type { Actor } from '../../middleware/auth.js';
 import { audit, type Tx } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
 import { saveStudentAdmission } from './student-admissions.js';
+import { savePersonDetails } from './person-profile-details.js';
 
 async function admissionForRow(tx: Tx, a: Actor, input: Record<string, unknown>) {
   const row = studentImportRowSchema.parse(input) as Record<string, unknown>;
@@ -111,7 +113,16 @@ export async function importStudentAdmissions(
   for (let i = 0; i < rows.length; i++) {
     await tx.query('SAVEPOINT student_import_row');
     try {
-      await saveStudentAdmission(tx, a, await admissionForRow(tx, a, rows[i]));
+      const row = rows[i];
+      const saved = await saveStudentAdmission(tx, a, await admissionForRow(tx, a, row));
+      if (row.contact_phone || row.address)
+        await savePersonDetails(
+          tx,
+          a.context.schoolId,
+          'student',
+          saved.student.id,
+          studentContactSchema.parse({ contact_phone: row.contact_phone, address: row.address }),
+        );
     } catch (error) {
       await tx.query('ROLLBACK TO SAVEPOINT student_import_row');
       if (error instanceof z.ZodError)
@@ -129,7 +140,9 @@ export async function importStudentAdmissions(
           message:
             error instanceof ApiError
               ? error.message
-              : 'This row conflicts with existing student, parent or enrollment records.',
+              : error instanceof Error && error.message === 'PROFILE_CODE_DUPLICATE'
+                ? 'This admission number already exists in this school or import.'
+                : 'This row conflicts with existing student, parent or enrollment records.',
         });
     }
     await tx.query('RELEASE SAVEPOINT student_import_row');

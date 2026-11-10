@@ -95,6 +95,7 @@ export function IdleSessionWarning({
   return (
     <Dialog
       open={seconds !== null}
+      size="compact"
       onOpenChange={() => {}}
       dismissible={false}
       title="You’re about to be signed out"

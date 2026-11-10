@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { MAX_STUDENT_PARENTS } from './student-directory.js';
+import { studentContactSchema } from './person-profiles.js';
 
 export const studentImportFields = [
   'student_code',
   'first_name',
   'last_name',
   'email',
+  'contact_phone',
+  'address',
   'date_of_birth',
   'gender',
   'status',
@@ -65,6 +68,7 @@ export const studentImportRowSchema = z
     first_name: text,
     last_name: text.optional(),
     email: email.optional(),
+    ...studentContactSchema.shape,
     date_of_birth: date.optional(),
     gender: z.preprocess(
       upper,

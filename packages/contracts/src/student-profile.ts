@@ -11,6 +11,7 @@ export interface StudentProfileEnrollment {
   is_current: boolean;
 }
 export interface StudentProfile {
+  contact?: StudentContact;
   student: {
     student_code: string;
     first_name: string;
@@ -31,3 +32,4 @@ export interface StudentProfile {
     is_primary_contact: boolean;
   }[];
 }
+import type { StudentContact } from './person-profiles.js';

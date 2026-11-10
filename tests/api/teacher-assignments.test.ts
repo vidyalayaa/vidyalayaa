@@ -616,7 +616,9 @@ it('fails closed in SQL and HTTP when a teacher membership is suspended', async 
     [f.schoolA, f.teacher],
   );
   try {
-    expect((await call('get', '/teaching/classes')).status).toBe(404);
+    const revoked = await call('get', '/teaching/classes');
+    expect(revoked.status).toBe(401);
+    expect(revoked.body.error.code).toBe('SESSION_ENDED');
     const ctx = { schoolId: f.schoolA, userId: f.teacher, actorType: 'USER' as const };
     await transaction(pools.api, ctx, async (tx) => {
       for (const table of [

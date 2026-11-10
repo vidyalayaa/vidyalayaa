@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { StudentContact } from './person-profiles.js';
 export const parentAttendanceStatuses = [
   'PENDING',
   'PRESENT',
@@ -89,6 +90,8 @@ export interface ParentResultsResponse {
 export interface ParentChild {
   id: string;
   student_code: string;
+  profile_photo_id?: string | null;
+  contact?: StudentContact | null;
   first_name: string;
   last_name: string | null;
   date_of_birth: string | null;

@@ -11,6 +11,7 @@ export interface DirectoryClass extends Record<string, unknown> {
 export interface DirectoryStudent extends Record<string, unknown> {
   id: string;
   student_code: string;
+  profile_photo_id?: string | null;
   first_name: string;
   last_name: string | null;
   email: string | null;

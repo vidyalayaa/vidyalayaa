@@ -18,6 +18,7 @@ import { Dialog } from '../../components/ui/dialog';
 import ParentAttendance from './ParentAttendance';
 import ParentResults from './ParentResults';
 import SubjectMaterials, { type MaterialSubject } from '../materials/SubjectMaterials';
+import { PersonAvatar } from '../profiles/PersonAvatar';
 
 const paths: Record<string, ParentSection | 'home'> = {
   '': 'home',
@@ -237,10 +238,12 @@ function ChildDetails({ child }: { child: ParentChild }) {
     });
   const fields = {
     Name: `${child.first_name} ${child.last_name || ''}`,
-    'Student code': child.student_code,
+    'Admission number': child.student_code,
     'Date of birth': child.date_of_birth,
     Gender: label(child.gender),
     Email: child.email,
+    'Contact number': child.contact?.contact_phone,
+    Address: child.contact?.address,
     Status: label(child.status),
     Class: child.enrollment?.grade,
     Section: child.enrollment?.section,
@@ -250,6 +253,15 @@ function ChildDetails({ child }: { child: ParentChild }) {
   };
   return (
     <Panel title="Student details" subtitle="Official records are maintained by your school.">
+      <div className="px-5 pt-3">
+        <PersonAvatar
+          kind="student"
+          id={child.id}
+          photo={child.profile_photo_id}
+          name={[child.first_name, child.last_name].filter(Boolean).join(' ')}
+          className="size-20 text-2xl"
+        />
+      </div>
       <dl className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
         {Object.entries(fields).map(([key, value]) => (
           <div key={key}>

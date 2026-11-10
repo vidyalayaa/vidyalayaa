@@ -13,6 +13,8 @@ import StudentProfileDialog from '../resources/StudentProfileDialog';
 import { ResourceForm } from '../resources/ResourceScreen';
 import RecordImportDialog from '../resources/RecordImportDialog';
 import StudentAdmissionForm from './StudentAdmissionForm';
+import PhotoImportDialog from '../profiles/PhotoImportDialog';
+import { PersonAvatar } from '../profiles/PersonAvatar';
 
 interface ClassPage extends Page<DirectoryClass> {
   unassigned_count: number;
@@ -43,7 +45,8 @@ export default function StudentDirectory() {
     [profile, setProfile] = useState<string>(),
     [editing, setEditing] = useState<DirectoryStudent>(),
     [dirty, setDirty] = useState(false),
-    [importing, setImporting] = useState(false);
+    [importing, setImporting] = useState(false),
+    [importPhotos, setImportPhotos] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [exporting, setExporting] = useState(false),
     [exportError, setExportError] = useState('');
@@ -108,6 +111,11 @@ export default function StudentDirectory() {
             {isAdmin && (
               <Button variant="outline" disabled={exporting} onClick={exportCsv}>
                 {exporting ? 'Exporting…' : 'Export CSV'}
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="outline" onClick={() => setImportPhotos(true)}>
+                Import photo ZIP
               </Button>
             )}
             {canAdmit && (
@@ -296,6 +304,7 @@ export default function StudentDirectory() {
           />
         </Dialog>
       )}
+      {importPhotos && <PhotoImportDialog kind="student" close={() => setImportPhotos(false)} />}
       {importing && <RecordImportDialog resource="students" close={() => setImporting(false)} />}
     </>
   );
@@ -365,8 +374,17 @@ function Roster({
                   className="block w-full rounded-xl p-4 text-left transition-colors hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600"
                   onClick={() => profile(s.id)}
                 >
-                  <span className="block font-semibold">
-                    {s.first_name} {s.last_name}
+                  <span className="flex items-center gap-3 font-semibold">
+                    <PersonAvatar
+                      kind="student"
+                      id={s.id}
+                      photo={s.profile_photo_id}
+                      name={[s.first_name, s.last_name].filter(Boolean).join(' ')}
+                      decorative
+                    />
+                    <span className="min-w-0 break-words">
+                      {s.first_name} {s.last_name}
+                    </span>
                   </span>
                   <span className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <span>{s.student_code}</span>

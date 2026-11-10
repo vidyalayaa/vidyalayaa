@@ -131,7 +131,8 @@ it('prepares new-year classes, subject teachers, timetable and fee templates wit
             label: 'Tuition',
             amount,
             frequency: 'ANNUAL',
-            first_due_on: '2026-01-01',
+            // The following month stays inside the target year even when it starts mid-month.
+            first_due_on: '2026-02-01',
           },
         ],
       });

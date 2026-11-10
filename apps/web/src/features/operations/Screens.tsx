@@ -47,6 +47,9 @@ import { useRows } from '../../lib/use-records';
 import Pagination from '../../components/Pagination';
 import DeviceConfiguration from './DeviceConfiguration';
 import { useTeachingClasses } from '../../lib/use-teaching-classes';
+import { StaffProfileDialog } from '../profiles/StaffProfile';
+import StudentProfileDialog from '../resources/StudentProfileDialog';
+import { PersonAvatar } from '../profiles/PersonAvatar';
 function Pages({ query }: { query: ReturnType<typeof useRows> }) {
   return query.automatic ? (
     <Pagination
@@ -827,6 +830,9 @@ function MemberCategoryPanel({
   inviteOpen: boolean;
   closeInvite: () => void;
 }) {
+  const a = useAuth();
+  const [profileId, setProfileId] = useState<string>();
+  const [createStaff, setCreateStaff] = useState<string>();
   const [search, setSearch] = useState(''),
     [role, setRole] = useState(''),
     [status, setStatus] = useState(''),
@@ -858,7 +864,9 @@ function MemberCategoryPanel({
           </label>
           {category === 'staff' && (
             <div>
-              <label className="field-label" htmlFor="members-staff-role">Staff role</label>
+              <label className="field-label" htmlFor="members-staff-role">
+                Staff role
+              </label>
               <select
                 id="members-staff-role"
                 className="input"
@@ -875,7 +883,9 @@ function MemberCategoryPanel({
             </div>
           )}
           <div>
-            <label className="field-label" htmlFor="members-status">Membership status</label>
+            <label className="field-label" htmlFor="members-status">
+              Membership status
+            </label>
             <select
               id="members-status"
               className="input"
@@ -896,15 +906,55 @@ function MemberCategoryPanel({
             rows={query.data.data}
             columns={['full_name', 'email', 'role', 'status']}
             onView={setView}
-            actions={(row) =>
-              row.status === 'INVITED' ? (
-                <span className="text-xs text-stone-600">Awaiting acceptance</span>
-              ) : (
-                <Button size="sm" variant="outline" onClick={() => setEdit(row)}>
-                  Edit membership
-                </Button>
-              )
+            renderCell={(column, row) =>
+              column === 'full_name' && category !== 'parents' ? (
+                <span className="flex items-center gap-2">
+                  <PersonAvatar
+                    kind={category === 'staff' ? 'staff' : 'student'}
+                    id={row.profile_id as string | undefined}
+                    photo={row.profile_photo_id as string | null}
+                    name={String(row.full_name || '')}
+                    decorative
+                  />
+                  <span>{String(row.full_name || '')}</span>
+                </span>
+              ) : undefined
             }
+            actions={(row) => (
+              <>
+                {row.profile_id &&
+                  category !== 'parents' &&
+                  a.me?.school?.role === 'school_admin' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setProfileId(String(row.profile_id))}
+                    >
+                      Manage profile
+                    </Button>
+                  )}
+                {!row.profile_id &&
+                  category === 'staff' &&
+                  row.status === 'ACTIVE' &&
+                  a.me?.school?.role === 'school_admin' &&
+                  a.me.school.permissions.includes('teachers.write') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCreateStaff(String(row.id))}
+                    >
+                      Create or link profile
+                    </Button>
+                  )}
+                {row.status === 'INVITED' ? (
+                  <span className="text-xs text-stone-600">Awaiting acceptance</span>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => setEdit(row)}>
+                    Edit membership
+                  </Button>
+                )}
+              </>
+            )}
           />
         ) : query.isLoading || query.error ? (
           <Rows query={query} columns={['full_name', 'email', 'role', 'status']} />
@@ -922,6 +972,22 @@ function MemberCategoryPanel({
         </p>
       )}
       <MemberInvitations filters={filters.toString()} />
+      {profileId &&
+        (category === 'staff' ? (
+          <StaffProfileDialog id={profileId} close={() => setProfileId(undefined)} />
+        ) : (
+          <StudentProfileDialog studentId={profileId} close={() => setProfileId(undefined)} />
+        ))}
+      {createStaff && (
+        <ActionDialog
+          open
+          close={() => setCreateStaff(undefined)}
+          title="Create or link staff profile"
+          endpoint={`/profiles/staff/from-membership/${createStaff}`}
+          fields={[{ key: 'employee_id' }]}
+          onResult={(result) => setProfileId(String(result.id))}
+        />
+      )}
       {inviteOpen && (
         <InviteMemberDialog
           category={category}
