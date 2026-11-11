@@ -29,7 +29,7 @@ const eventFields = {
   start_date: calendarDate,
   end_date: calendarDate,
   audience: z.enum(['SCHOOL', 'CLASSES']),
-  class_ids: z.array(z.string().uuid()).max(1000).default([]),
+  class_ids: z.array(z.guid()).max(1000).default([]),
 };
 const validate = (
   v: { start_date: string; end_date: string; audience: string; class_ids: string[] },

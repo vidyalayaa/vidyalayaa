@@ -4,7 +4,7 @@ import { databaseConnectionOptions } from '../apps/api/src/lib/db.js';
 import { z } from 'zod';
 // Link an already verified Supabase identity. Never chooses an identity by untrusted email.
 const [command, user, school, role] = process.argv.slice(2),
-  uid = z.string().uuid().parse(user);
+  uid = z.guid().parse(user);
 const db = new pg.Client(
   databaseConnectionOptions(process.env.MIGRATION_DATABASE_URL || '', {
     DB_SSL: process.env.DB_SSL === 'false' ? 'false' : 'true',
@@ -22,7 +22,7 @@ try {
       [uid],
     );
   } else if (command === 'member') {
-    z.string().uuid().parse(school);
+    z.guid().parse(school);
     z.enum(['school_admin', 'principal', 'teacher', 'parent', 'student']).parse(role);
     await db.query(
       "INSERT INTO school_memberships(school_id,user_id,role_id,status) SELECT $1,$2,id,'ACTIVE' FROM roles WHERE code=$3 ON CONFLICT(school_id,user_id) DO UPDATE SET role_id=EXCLUDED.role_id,status='ACTIVE'",

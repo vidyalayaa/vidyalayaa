@@ -10,7 +10,7 @@ import { Router } from 'express';
 import type pg from 'pg';
 import { z } from 'zod';
 import { resourceSchemas, uuid } from '@vidyalayaa/contracts';
-import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
+import { asyncRoute, ApiError, notFound, validationIssues } from '../../lib/errors.js';
 import { permission } from '../../middleware/auth.js';
 import { transaction, audit } from '../../lib/db.js';
 import { paged } from '../../lib/pagination.js';
@@ -355,7 +355,7 @@ export function workflowsRouter(pool: pg.Pool) {
           .parse(req.params.resource),
         b = z
           .object({
-            rows: z.array(z.record(z.unknown())).min(1).max(500),
+            rows: z.array(z.record(z.string(), z.unknown())).min(1).max(500),
             validate_only: z.boolean().default(true),
           })
           .strict()
@@ -474,11 +474,7 @@ export function workflowsRouter(pool: pg.Pool) {
               await tx.query('ROLLBACK TO SAVEPOINT validate_import_row');
               if (e instanceof z.ZodError)
                 errors.push(
-                  ...e.issues.map((issue) => ({
-                    row: i + 1,
-                    path: issue.path,
-                    message: issue.message,
-                  })),
+                  ...validationIssues(e).map((issue) => ({ row: i + 1, ...issue })),
                 );
               else
                 errors.push({

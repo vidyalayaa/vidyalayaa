@@ -79,8 +79,8 @@ export function studentLearningRouter(pool: pg.Pool) {
     asyncRoute(async (req, res) => {
       const filters = z
         .object({
-          exam_id: z.string().uuid().optional(),
-          subject_id: z.string().uuid().optional(),
+          exam_id: z.guid().optional(),
+          subject_id: z.guid().optional(),
           page: z.coerce.number().int().min(1).max(100000).default(1),
           page_size: z.coerce.number().int().min(1).max(100).default(25),
         })

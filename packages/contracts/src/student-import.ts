@@ -90,7 +90,7 @@ export const studentImportRowSchema = z
 
 export const studentImportRequestSchema = z
   .object({
-    rows: z.array(z.record(z.unknown())).min(1).max(500),
+    rows: z.array(z.record(z.string(), z.unknown())).min(1).max(500),
     validate_only: z.boolean().default(true),
   })
   .strict();

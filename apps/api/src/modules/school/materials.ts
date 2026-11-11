@@ -25,8 +25,8 @@ export function subjectMaterialsRouter(pool: pg.Pool) {
         );
       const q = z
         .object({
-          class_id: z.string().uuid(),
-          subject_id: z.string().uuid(),
+          class_id: z.guid(),
+          subject_id: z.guid(),
           page: z.coerce.number().int().min(1).max(100000).default(1),
           page_size: z.coerce.number().int().min(1).max(100).default(25),
         })

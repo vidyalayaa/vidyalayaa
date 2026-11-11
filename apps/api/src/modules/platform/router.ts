@@ -437,8 +437,8 @@ export function platformRouter(
         b = z
           .object({
             name: z.string().trim().min(2).max(100),
-            features: z.record(z.boolean()),
-            limits: z.record(z.number().int().min(0).max(100000000)),
+            features: z.record(z.string(), z.boolean()),
+            limits: z.record(z.string(), z.number().int().min(0).max(100000000)),
             is_active: z.boolean(),
             reason: z.string().min(5).max(1000),
           })
@@ -503,7 +503,7 @@ export function platformRouter(
             ]),
             current_period_end: z.string().datetime(),
             grace_ends_at: z.string().datetime().nullable().optional(),
-            limit_overrides: z.record(z.number().int().min(0).max(100000000)).optional(),
+            limit_overrides: z.record(z.string(), z.number().int().min(0).max(100000000)).optional(),
             reason: z.string().min(5).max(1000),
           })
           .strict()

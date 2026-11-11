@@ -1,5 +1,5 @@
 import { z } from 'zod';
-const id = z.string().uuid(),
+const id = z.guid(),
   reason = z.string().trim().min(5).max(2000);
 export const securityPolicySchema = z
   .object({

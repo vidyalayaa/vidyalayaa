@@ -26,7 +26,7 @@ export const deviceTuningSchema = z
   })
   .strict()
   .partial();
-export const uuid = z.string().uuid();
+export const uuid = z.guid();
 export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const text = z.string().trim().min(1).max(500);
 const nullableText = z.string().max(10000).nullable().optional();
@@ -161,7 +161,7 @@ export const heartbeatSchema = z
             ts: z.string().datetime(),
             level: z.enum(['INFO', 'WARN', 'ERROR']),
             code: text,
-            detail: z.record(z.unknown()).optional(),
+            detail: z.record(z.string(), z.unknown()).optional(),
           })
           .strict(),
       )
@@ -183,7 +183,7 @@ export const otaSchema = z
     device_id: text,
     target_version: text,
     state: z.enum(['OFFERED', 'DOWNLOADING', 'VERIFYING', 'INSTALLED', 'FAILED', 'ROLLED_BACK']),
-    detail: z.record(z.unknown()),
+    detail: z.record(z.string(), z.unknown()),
     reported_at: z.string().datetime(),
   })
   .strict();

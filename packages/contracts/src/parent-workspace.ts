@@ -25,7 +25,7 @@ export const parentAttendanceFilterSchema = z.object({
 });
 export const parentResultsFilterSchema = parentAttendanceFilterSchema
   .omit({ status: true })
-  .extend({ exam_id: z.string().uuid().optional(), subject_id: z.string().uuid().optional() });
+  .extend({ exam_id: z.guid().optional(), subject_id: z.guid().optional() });
 export interface ParentAttendanceDay {
   id: string | null;
   attendance_date: string;

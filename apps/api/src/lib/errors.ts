@@ -1,6 +1,14 @@
 import { captureFailure } from './monitoring.js';
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { ZodError } from 'zod';
+
+export function validationIssues(error: ZodError) {
+  return error.issues.map(({ path, message }) => ({
+    path: path.map((key) => (typeof key === 'symbol' ? String(key) : key)),
+    message,
+  }));
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -25,7 +33,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         code: 'VALIDATION_ERROR',
         message: 'Check the supplied fields.',
         details: err.flatten(),
-        issues: err.issues.map((i) => ({ path: i.path, message: i.message })),
+        issues: validationIssues(err),
       },
       request_id,
       server_time: new Date().toISOString(),

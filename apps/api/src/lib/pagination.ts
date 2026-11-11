@@ -35,7 +35,7 @@ export async function cursorPage(
       after = z
         .object({
           at: z.string().datetime(),
-          id: idKind === 'uuid' ? z.string().uuid() : z.string().regex(/^[1-9][0-9]*$/),
+          id: idKind === 'uuid' ? z.guid() : z.string().regex(/^[1-9][0-9]*$/),
         })
         .strict()
         .parse(JSON.parse(Buffer.from(value, 'base64url').toString()));

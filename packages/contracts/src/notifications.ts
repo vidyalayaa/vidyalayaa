@@ -24,7 +24,7 @@ export const customNotificationSchema = z
     body: z.string().trim().min(1).max(1000),
     audience: z.enum(['ALL', 'ROLES', 'MEMBERS']),
     roles: z.array(z.enum(notificationRoles)).max(6).default([]),
-    user_ids: z.array(z.string().uuid()).max(5000).default([]),
+    user_ids: z.array(z.guid()).max(5000).default([]),
   })
   .strict()
   .superRefine((b, c) => {
@@ -53,7 +53,7 @@ export const notificationSettingsSchema = z
   .strict();
 export const platformNotificationSchema = z
   .object({
-    school_id: z.string().uuid(),
+    school_id: z.guid(),
     title: z.string().trim().min(1).max(120),
     body: z.string().trim().min(1).max(1000),
     scheduled_at: z.string().datetime({ offset: true }).nullable(),

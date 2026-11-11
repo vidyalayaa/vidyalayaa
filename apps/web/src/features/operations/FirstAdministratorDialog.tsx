@@ -21,7 +21,7 @@ export default function FirstAdministratorDialog({
 }) {
   const qc = useQueryClient();
   const [result, setResult] = useState<InvitationResult | null>(null);
-  const form = useForm<z.infer<typeof firstAdminSchema>>({
+  const form = useForm<z.input<typeof firstAdminSchema>, unknown, z.output<typeof firstAdminSchema>>({
     resolver: zodResolver(firstAdminSchema),
     defaultValues: {
       email: school.admin_onboarding?.email || '',
