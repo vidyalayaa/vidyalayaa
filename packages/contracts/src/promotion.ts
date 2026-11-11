@@ -1,5 +1,5 @@
 import { z } from 'zod';
-const id = z.string().uuid();
+const id = z.guid();
 const day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)

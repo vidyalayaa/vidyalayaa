@@ -66,65 +66,83 @@ import {
   schoolAssetSchema,
 } from '@vidyalayaa/contracts';
 // Generate from the same schemas used by Express and the browser. Do not edit JSON by hand.
-function json(schema: z.ZodTypeAny): Record<string, unknown> {
-  const d = schema._def;
-  switch (d.typeName) {
-    case 'ZodEffects':
-      return json(d.schema);
-    case 'ZodOptional':
+function json(schema: z.core.$ZodType): Record<string, unknown> {
+  const d = (schema as z.core.$ZodTypes)._zod.def;
+  const checks = (d.checks ?? []).map((check) => (check as z.core.$ZodChecks)._zod.def);
+  switch (d.type) {
+    case 'pipe':
+      return json(d.in._zod.def.type === 'transform' ? d.out : d.in);
+    case 'optional':
       return json(d.innerType);
-    case 'ZodNullable':
+    case 'nullable':
       return { anyOf: [json(d.innerType), { type: 'null' }] };
-    case 'ZodDefault':
-      return { ...json(d.innerType), default: d.defaultValue() };
-    case 'ZodObject': {
-      const shape = d.shape() as Record<string, z.ZodTypeAny>;
+    case 'default':
+    case 'prefault':
+      return { ...json(d.innerType), default: d.defaultValue };
+    case 'object': {
+      const shape = Object.entries(d.shape);
       return {
         type: 'object',
-        properties: Object.fromEntries(Object.entries(shape).map(([k, v]) => [k, json(v)])),
-        required: Object.entries(shape)
-          .filter(([, v]) => !v.isOptional())
-          .map(([k]) => k),
-        additionalProperties: d.unknownKeys !== 'strict',
+        properties: Object.fromEntries(shape.map(([key, value]) => [key, json(value)])),
+        required: shape
+          .filter(([, value]) => !(value as z.ZodType).isOptional())
+          .map(([key]) => key),
+        additionalProperties: d.catchall?._zod.def.type !== 'never',
       };
     }
-    case 'ZodString': {
-      const s: Record<string, unknown> = { type: 'string' };
-      for (const c of d.checks || []) {
-        if (c.kind === 'uuid') s.format = 'uuid';
-        if (c.kind === 'datetime') s.format = 'date-time';
-        if (c.kind === 'email') s.format = 'email';
-        if (c.kind === 'min') s.minLength = c.value;
-        if (c.kind === 'max') s.maxLength = c.value;
-        if (c.kind === 'regex') s.pattern = c.regex.source;
-      }
-      return s;
-    }
-    case 'ZodNumber': {
-      const s: Record<string, unknown> = {
-        type: d.checks.some((c: { kind: string }) => c.kind === 'int') ? 'integer' : 'number',
+    case 'string': {
+      const result: Record<string, unknown> = { type: 'string' };
+      const formats: Record<string, string> = {
+        guid: 'uuid',
+        uuid: 'uuid',
+        datetime: 'date-time',
+        email: 'email',
       };
-      for (const c of d.checks) {
-        if (c.kind === 'min') s[c.inclusive ? 'minimum' : 'exclusiveMinimum'] = c.value;
-        if (c.kind === 'max') s[c.inclusive ? 'maximum' : 'exclusiveMaximum'] = c.value;
+      const formatsAndChecks = 'check' in d ? [d as z.core.$ZodStringFormatDef, ...checks] : checks;
+      for (const check of formatsAndChecks) {
+        if (check.check === 'min_length') result.minLength = check.minimum;
+        if (check.check === 'max_length') result.maxLength = check.maximum;
+        if (check.check === 'string_format') {
+          if (formats[check.format]) result.format = formats[check.format];
+          if (check.format === 'regex' && 'pattern' in check && check.pattern instanceof RegExp)
+            result.pattern = check.pattern.source;
+        }
       }
-      return s;
+      return result;
     }
-    case 'ZodBoolean':
+    case 'number': {
+      const result: Record<string, unknown> = {
+        type: checks.some((check) => check.check === 'number_format' && check.format === 'safeint')
+          ? 'integer'
+          : 'number',
+      };
+      for (const check of checks) {
+        if (check.check === 'greater_than')
+          result[check.inclusive ? 'minimum' : 'exclusiveMinimum'] = check.value;
+        if (check.check === 'less_than')
+          result[check.inclusive ? 'maximum' : 'exclusiveMaximum'] = check.value;
+      }
+      return result;
+    }
+    case 'boolean':
       return { type: 'boolean' };
-    case 'ZodLiteral':
-      return { const: d.value };
-    case 'ZodEnum':
-      return { type: 'string', enum: d.values };
-    case 'ZodArray':
-      return {
-        type: 'array',
-        items: json(d.type),
-        ...(d.minLength ? { minItems: d.minLength.value } : {}),
-        ...(d.exactLength ? { minItems: d.exactLength.value, maxItems: d.exactLength.value } : {}),
-        ...(d.maxLength ? { maxItems: d.maxLength.value } : {}),
-      };
-    case 'ZodRecord':
+    case 'literal':
+      return { const: d.values[0] };
+    case 'enum':
+      return { type: 'string', enum: Object.values(d.entries) };
+    case 'array': {
+      const result: Record<string, unknown> = { type: 'array', items: json(d.element) };
+      for (const check of checks) {
+        if (check.check === 'min_length') result.minItems = check.minimum;
+        if (check.check === 'max_length') result.maxItems = check.maximum;
+        if (check.check === 'length_equals') {
+          result.minItems = check.length;
+          result.maxItems = check.length;
+        }
+      }
+      return result;
+    }
+    case 'record':
       return { type: 'object', additionalProperties: json(d.valueType) };
     default:
       return {};

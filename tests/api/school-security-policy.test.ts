@@ -36,7 +36,7 @@ async function login(uid: string, ip = '192.0.2.10'): Promise<Login> {
           session_id: sid,
           aal,
           exp: Math.floor(Date.now() / 1000) + 3600,
-          amr: [{ method: 'totp', timestamp: Math.floor(Date.now() / 1000) - (recent ? 1 : 3600) }],
+          amr: [{ method: 'totp', timestamp: Math.floor(Date.now() / 1000) - (recent ? 0 : 3600) }],
         }),
       ).toString('base64url') +
       '.verified',

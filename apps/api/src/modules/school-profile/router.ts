@@ -29,6 +29,20 @@ export function schoolProfileRouter(pool: pg.Pool, storage: SupabaseClient, cont
     platform ? uuid.parse(params.schoolId) : a.context.schoolId;
   async function writable(tx: Tx, a: Actor, sid: string, timings = false) {
     if (
+      platform &&
+      (
+        await tx.query(
+          "SELECT id FROM school_offboarding WHERE school_id=$1 AND permanent AND status IN ('CLOSED','PURGE_REQUESTED','PURGING')",
+          [sid],
+        )
+      ).rowCount
+    )
+      throw new ApiError(
+        409,
+        'SCHOOL_OFFBOARDED',
+        'This school profile is frozen for permanent deletion.',
+      );
+    if (
       !(await tx.query('SELECT app.school_profile_editor($1) AS allowed', [sid])).rows[0]?.allowed
     )
       throw new ApiError(

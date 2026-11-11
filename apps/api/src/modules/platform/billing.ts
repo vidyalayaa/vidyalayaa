@@ -42,7 +42,7 @@ export function billingRouter(pool: pg.Pool, secret?: string) {
       const b = z
         .object({
           id: z.string().min(8).max(200),
-          school_id: z.string().uuid(),
+          school_id: z.guid(),
           status: z.enum(['ACTIVE', 'PAST_DUE', 'CANCELLED']),
           current_period_end: z.string().datetime(),
         })

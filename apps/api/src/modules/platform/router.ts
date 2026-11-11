@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { platformAuditSnapshot } from './audit.js';
 import { schoolProfileRouter } from '../school-profile/router.js';
 import { platformNotificationsRouter } from './notifications.js';
+import { platformSchoolDeletionRouter, requireDeletionVerification } from './school-deletion.js';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -27,6 +28,7 @@ export function platformRouter(
 ) {
   const r = Router();
   r.use(platformOnly);
+  r.use(platformSchoolDeletionRouter(platform));
   r.use('/notifications', platformNotificationsRouter(platform));
   r.use('/schools/:schoolId/profile', schoolProfileRouter(platform, auth));
   r.get(
@@ -103,7 +105,7 @@ export function platformRouter(
         await platformTx(platform, res.locals.actor.id, (tx) =>
           paged(
             tx,
-            'SELECT o.*,s.name AS school_name FROM school_offboarding o JOIN schools s ON s.id=o.school_id ORDER BY o.created_at DESC,o.id',
+            `SELECT o.*,s.name AS school_name,s.timezone,EXISTS(SELECT FROM school_exports e WHERE e.school_id=o.school_id AND e.status='COMPLETED' AND e.snapshot_at>=o.closed_at) AS final_export_ready FROM school_offboarding o JOIN schools s ON s.id=o.school_id ORDER BY o.created_at DESC,o.id`,
             [],
             req.query,
           ),
@@ -152,11 +154,20 @@ export function platformRouter(
         .strict()
         .parse(req.body);
       await platformTx(platform, res.locals.actor.id, async (tx) => {
-        if (
-          !(await tx.query('SELECT id FROM school_offboarding WHERE id=$1 FOR UPDATE', [id]))
-            .rowCount
-        )
-          throw notFound();
+        const job = (
+          await tx.query('SELECT permanent FROM school_offboarding WHERE id=$1 FOR UPDATE', [id])
+        ).rows[0];
+        if (!job) throw notFound();
+        if (job.permanent) {
+          requireDeletionVerification(res.locals.actor);
+          await tx.query(
+            `UPDATE school_offboarding
+             SET delete_after=delete_after+greatest(interval '0',now()+interval '24 hours'-export_until),
+                 export_until=greatest(export_until,now()+interval '24 hours')
+             WHERE id=$1 AND status='APPROVED'`,
+            [id],
+          );
+        }
         await tx.query('SELECT app.close_approved_school($1)', [id]);
       });
       res.status(204).end();
@@ -175,6 +186,16 @@ export function platformRouter(
           .strict()
           .parse(req.body);
       await platformTx(platform, res.locals.actor.id, async (tx) => {
+        const job = (
+          await tx.query(
+            'SELECT permanent,irreversible_at FROM school_offboarding WHERE id=$1 FOR UPDATE',
+            [id],
+          )
+        ).rows[0];
+        if (!job) throw notFound();
+        if (job.permanent) requireDeletionVerification(res.locals.actor);
+        if (job.irreversible_at)
+          throw new ApiError(409, 'DELETION_IRREVERSIBLE', 'Permanent deletion has already begun.');
         const row = await tx.query(
           "UPDATE school_offboarding SET legal_hold=$2,reason=reason||E'\nLegal hold decision: '||$3 WHERE id=$1 AND policy_ref=$4 AND status NOT IN ('PURGED','CANCELLED') RETURNING id",
           [id, b.enabled, b.reason, b.policy_ref],
@@ -198,7 +219,7 @@ export function platformRouter(
           .parse(req.body);
       await platformTx(platform, res.locals.actor.id, async (tx) => {
         const row = await tx.query(
-          "UPDATE school_offboarding SET status='PURGE_REQUESTED',purge_requested_by=$2,reason=reason||E'\nPurge request: '||$4 WHERE id=$1 AND status='CLOSED' AND policy_ref=$3 AND legal_hold=false AND delete_after<=now() AND export_until<=now() RETURNING id",
+          "UPDATE school_offboarding SET status='PURGE_REQUESTED',purge_requested_by=$2,reason=reason||E'\nPurge request: '||$4 WHERE id=$1 AND NOT permanent AND status='CLOSED' AND policy_ref=$3 AND legal_hold=false AND delete_after<=now() AND export_until<=now() RETURNING id",
           [id, res.locals.actor.id, b.policy_ref, b.reason],
         );
         if (!row.rowCount)
@@ -416,8 +437,8 @@ export function platformRouter(
         b = z
           .object({
             name: z.string().trim().min(2).max(100),
-            features: z.record(z.boolean()),
-            limits: z.record(z.number().int().min(0).max(100000000)),
+            features: z.record(z.string(), z.boolean()),
+            limits: z.record(z.string(), z.number().int().min(0).max(100000000)),
             is_active: z.boolean(),
             reason: z.string().min(5).max(1000),
           })
@@ -482,7 +503,7 @@ export function platformRouter(
             ]),
             current_period_end: z.string().datetime(),
             grace_ends_at: z.string().datetime().nullable().optional(),
-            limit_overrides: z.record(z.number().int().min(0).max(100000000)).optional(),
+            limit_overrides: z.record(z.string(), z.number().int().min(0).max(100000000)).optional(),
             reason: z.string().min(5).max(1000),
           })
           .strict()

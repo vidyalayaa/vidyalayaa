@@ -8,7 +8,7 @@ import {
 } from '@vidyalayaa/contracts';
 import type { Actor } from '../../middleware/auth.js';
 import { audit, type Tx } from '../../lib/db.js';
-import { ApiError } from '../../lib/errors.js';
+import { ApiError, validationIssues } from '../../lib/errors.js';
 import { saveStudentAdmission } from './student-admissions.js';
 import { savePersonDetails } from './person-profile-details.js';
 
@@ -127,11 +127,7 @@ export async function importStudentAdmissions(
       await tx.query('ROLLBACK TO SAVEPOINT student_import_row');
       if (error instanceof z.ZodError)
         errors.push(
-          ...error.issues.map((issue) => ({
-            row: i + 1,
-            path: issue.path,
-            message: issue.message,
-          })),
+          ...validationIssues(error).map((issue) => ({ row: i + 1, ...issue })),
         );
       else
         errors.push({

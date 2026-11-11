@@ -8,13 +8,19 @@ import { portableDatabase, poolAdapters, fixture } from '../../helpers/database'
 import { createApp } from '../../../apps/api/src/app';
 import type { Config } from '../../../apps/api/src/lib/config';
 
-export function fixtureToken(id: string, aal = 'aal2', sid = id) {
+export function fixtureToken(id: string, aal = 'aal2', sid = id, verifiedAt?: number) {
   return [
     Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
     Buffer.from(
-      JSON.stringify({ sub: id, aal, session_id: sid, exp: Math.floor(Date.now() / 1000) + 3600 }),
+      JSON.stringify({
+        sub: id,
+        aal,
+        session_id: sid,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        amr: verifiedAt === undefined ? undefined : [{ method: 'totp', timestamp: verifiedAt }],
+      }),
     ).toString('base64url'),
-    'fixture-signature',
+    Buffer.from('fixture-signature').toString('base64url'),
   ].join('.');
 }
 export interface PlatformApp {
@@ -36,6 +42,7 @@ export interface PlatformApp {
   ) => Promise<{ status: number; body: any }>;
   url: string;
   registerIdentity: (id: string) => void;
+  enrollAuthenticator: (id: string) => Promise<string>;
 }
 
 // Only Auth and outbound email are simulated. The browser's REST traffic goes
@@ -119,6 +126,7 @@ export const test = base.extend<{}, { platformApp: PlatformApp }>({
           records.studentUser,
         ]);
         const objects = new Map<string, Buffer>();
+        const enrolled = new Map<string, string>();
         const auth = {
           storage: {
             from: () => ({
@@ -153,7 +161,16 @@ export const test = base.extend<{}, { platformApp: PlatformApp }>({
               }
               const user = known.has(id) ? { id } : null;
               return {
-                data: { user: user ? { ...user, factors: [] } : null },
+                data: {
+                  user: user
+                    ? {
+                        ...user,
+                        factors: enrolled.has(id)
+                          ? [{ id: enrolled.get(id), status: 'verified', factor_type: 'totp' }]
+                          : [],
+                      }
+                    : null,
+                },
                 error: user ? null : { status: 401 },
               };
             },
@@ -199,6 +216,16 @@ export const test = base.extend<{}, { platformApp: PlatformApp }>({
           url,
           registerIdentity: (id) => {
             known.add(id);
+          },
+          enrollAuthenticator: async (id) => {
+            const factor = randomUUID();
+            await db.query('UPDATE auth.users SET email_confirmed_at=now() WHERE id=$1', [id]);
+            await db.query(
+              "INSERT INTO auth.mfa_factors(id,user_id,factor_type,status) VALUES($1,$2,'totp','verified')",
+              [factor, id],
+            );
+            enrolled.set(id, factor);
+            return factor;
           },
           request: async (path, method = 'GET', body, user = root, school, aal = 'aal2') => {
             const response = await fetch(url + '/api/v1' + path, {

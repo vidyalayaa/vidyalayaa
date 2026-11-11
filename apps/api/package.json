@@ -18,14 +18,14 @@
     "firebase-admin": "^14.5.0",
     "helmet": "^8.1.0",
     "jose": "^6.1.0",
-    "multer": "^2.4.0",
+    "multer": "^2.5.0",
     "pg": "^8.16.3",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "read-excel-file": "9.3.14",
     "sharp": "0.35.5",
     "yauzl": "3.4.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

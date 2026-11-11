@@ -33,6 +33,16 @@ const fields: Record<string, string[]> = {
     'revoked_at',
   ],
   platform_staff: ['user_id', 'platform_role'],
+  school_deletion: [
+    'school_id',
+    'initiated_by',
+    'initiated_at',
+    'approved_by',
+    'approved_at',
+    'executed_by',
+    'executed_at',
+    'irreversible_at',
+  ],
   authentication: ['error_code', 'method', 'path'],
   firmware_releases: ['version', 'sha256', 'hardware_model', 'enabled', 'pipeline_ref'],
   device_ota_assignments: [

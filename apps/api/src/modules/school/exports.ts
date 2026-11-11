@@ -27,8 +27,8 @@ export function exportsRouter(pool: pg.Pool, storage: SupabaseClient, key: strin
           async (tx) => ({
             data: (
               await tx.query(
-                'SELECT id,policy_ref,reason,export_until,delete_after,legal_hold,status,school_approved_by,closed_at FROM school_offboarding WHERE school_id=$1 ORDER BY created_at DESC LIMIT 10',
-                [a.context.schoolId],
+                'SELECT id,policy_ref,reason,export_until,delete_after,legal_hold,status,school_approved_by,closed_at,permanent FROM school_offboarding WHERE school_id=$1 AND (NOT permanent OR $2) ORDER BY created_at DESC LIMIT 10',
+                [a.context.schoolId, a.active?.role === 'school_admin'],
               )
             ).rows,
           }),
@@ -48,7 +48,7 @@ export function exportsRouter(pool: pg.Pool, storage: SupabaseClient, key: strin
           .parse(req.body);
       await transaction(pool, a.context, async (tx) => {
         const row = await tx.query(
-          "UPDATE school_offboarding SET status=$3,school_approved_by=CASE WHEN $3='APPROVED' THEN $4::uuid ELSE NULL END WHERE school_id=$1 AND id=$2 AND status IN ('REQUESTED','APPROVED') AND policy_ref=$5 RETURNING id",
+          "UPDATE school_offboarding SET status=$3,school_approved_by=CASE WHEN $3='APPROVED' THEN $4::uuid ELSE NULL END WHERE school_id=$1 AND id=$2 AND NOT permanent AND status IN ('REQUESTED','APPROVED') AND policy_ref=$5 RETURNING id",
           [a.context.schoolId, id, b.approve ? 'APPROVED' : 'CANCELLED', a.id, b.policy_ref],
         );
         if (!row.rowCount) throw notFound();
@@ -71,6 +71,14 @@ export function exportsRouter(pool: pg.Pool, storage: SupabaseClient, key: strin
         b = exportRequestSchema.parse(req.body);
       const row = await transaction(pool, a.context, async (tx) => {
         await tx.query('SELECT id FROM schools WHERE id=$1 FOR UPDATE', [a.context.schoolId]);
+        const closed = await tx.query(
+          `SELECT id FROM school_offboarding WHERE school_id=$1
+           AND status IN ('CLOSED','PURGE_REQUESTED','PURGING','PURGED')
+           AND (irreversible_at IS NOT NULL OR export_until<=clock_timestamp())`,
+          [a.context.schoolId],
+        );
+        if (closed.rowCount)
+          throw new ApiError(403, 'SCHOOL_OFFBOARDED', 'The school export window has ended.');
         const pending = Number(
           (
             await tx.query(

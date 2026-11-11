@@ -14,7 +14,7 @@ export function bulkRouter(pool: pg.Pool) {
     permission('marks.write'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
-        examId = z.string().uuid().parse(req.query.exam_id);
+        examId = z.guid().parse(req.query.exam_id);
       res.json(
         await transaction(
           pool,

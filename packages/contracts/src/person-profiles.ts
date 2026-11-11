@@ -77,8 +77,8 @@ export const photoAssignmentsSchema = z
         z
           .object({
             index: z.number().int().nonnegative(),
-            person_id: z.string().uuid(),
-            expected_photo_id: z.string().uuid().nullable(),
+            person_id: z.guid(),
+            expected_photo_id: z.guid().nullable(),
             replace: z.boolean(),
           })
           .strict(),

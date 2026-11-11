@@ -3,6 +3,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { portableDatabase, poolAdapters, fixture } from '../helpers/database.js';
 import { generateSchoolExport } from '../../apps/worker/src/school-exports.js';
+import { transaction } from '../../apps/api/src/lib/db.js';
 const errors = vi.hoisted(() => [] as unknown[]);
 vi.mock('../../apps/api/src/lib/monitoring.js', () => ({
   captureFailure: (error: unknown) => errors.push(error),
@@ -28,6 +29,55 @@ it('exports a complete private school snapshot without foreign students or crede
     { management_name: 'Foreign private management' },
   ]);
   const files = new Map<string, Buffer>();
+  const studentPhoto = crypto.randomUUID(),
+    staffPhoto = crypto.randomUUID(),
+    foreignPhoto = crypto.randomUUID();
+  await db.query(
+    "INSERT INTO school_memberships(school_id,user_id,role_id) SELECT $1,$2,id FROM roles WHERE code='school_admin'",
+    [f.schoolB, f.admin],
+  );
+  const staff = await transaction(
+    pools.api,
+    { schoolId: f.schoolA, userId: f.admin },
+    async (tx) => {
+      await tx.query('UPDATE students SET profile_photo_id=$2 WHERE id=$1', [
+        f.student,
+        studentPhoto,
+      ]);
+      return (
+        await tx.query<{ id: string }>(
+          'UPDATE teachers SET profile_photo_id=$2 WHERE user_id=$1 RETURNING id',
+          [f.teacher, staffPhoto],
+        )
+      ).rows[0].id;
+    },
+  );
+  await transaction(pools.api, { schoolId: f.schoolB, userId: f.admin }, (tx) =>
+    tx.query('UPDATE students SET profile_photo_id=$2 WHERE id=$1', [
+      f.foreignStudent,
+      foreignPhoto,
+    ]),
+  );
+  await db.query(
+    'INSERT INTO school_person_details(school_id,student_id,details) VALUES($1,$2,$3),($4,$5,$6)',
+    [
+      f.schoolA,
+      f.student,
+      { address: 'Own student details' },
+      f.schoolB,
+      f.foreignStudent,
+      { address: 'Foreign student details' },
+    ],
+  );
+  const sourceFiles = new Map([
+    [`${f.schoolA}/profiles/student/${f.student}/${studentPhoto}.jpg`, 'Own student photo'],
+    [`${f.schoolA}/profiles/staff/${staff}/${staffPhoto}.jpg`, 'Own staff photo'],
+    [
+      `${f.schoolB}/profiles/student/${f.foreignStudent}/${foreignPhoto}.jpg`,
+      'Foreign student photo',
+    ],
+  ]);
+  const downloaded: string[] = [];
   const storage = {
     storage: {
       from: () => ({
@@ -35,7 +85,13 @@ it('exports a complete private school snapshot without foreign students or crede
           files.set(path, Buffer.from(b));
           return { error: null };
         },
-        download: async () => ({ error: { message: 'not expected' } }),
+        download: async (path: string) => {
+          downloaded.push(path);
+          const photo = sourceFiles.get(path);
+          return photo
+            ? { data: new Blob([photo], { type: 'image/jpeg' }), error: null }
+            : { error: { message: 'Unexpected source object' } };
+        },
         remove: async (paths: string[]) => {
           paths.forEach((p) => files.delete(p));
           return { error: null };
@@ -75,4 +131,11 @@ it('exports a complete private school snapshot without foreign students or crede
   expect(whole).toContain('Own school city');
   expect(whole).toContain('Own education trust');
   expect(whole).not.toContain('Foreign private management');
+  expect(whole).toContain('Own student details');
+  expect(whole).not.toContain('Foreign student details');
+  expect(whole).toContain('Own student photo');
+  expect(whole).toContain('Own staff photo');
+  expect(downloaded.sort()).toEqual(
+    [...sourceFiles.keys()].filter((path) => path.startsWith(f.schoolA + '/')).sort(),
+  );
 });
