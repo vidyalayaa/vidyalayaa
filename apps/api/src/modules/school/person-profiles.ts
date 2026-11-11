@@ -22,6 +22,7 @@ import {
 import { audit, transaction, type Tx } from '../../lib/db.js';
 import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
 import { paged } from '../../lib/pagination.js';
+import { personPhotoPath as pathFor } from '../../lib/person-photo-path.js';
 import type { Actor } from '../../middleware/auth.js';
 import { studentScope } from './resources.js';
 import { savePersonDetails } from './person-profile-details.js';
@@ -38,8 +39,6 @@ const tableFor = (kind: PersonKind) => (kind === 'student' ? 'students' : 'teach
 const permissionFor = (kind: PersonKind) => `${tableFor(kind)}.write`;
 const staffActor = (a: Actor) => staffRoles.some((role) => role === a.active?.role);
 const admin = (a: Actor) => a.active?.role === 'school_admin';
-const pathFor = (school: string, kind: PersonKind, id: string, photo: string) =>
-  `${school}/profiles/${kind}/${id}/${photo}.jpg`;
 const forbidden = () =>
   new ApiError(403, 'FORBIDDEN', 'Profile access is unavailable for this role.');
 const photoChanged = () =>

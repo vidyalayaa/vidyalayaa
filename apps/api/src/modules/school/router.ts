@@ -132,12 +132,14 @@ export function schoolAccess(pool: pg.Pool) {
       async (tx) =>
         (
           await tx.query(
-            "SELECT export_until FROM school_offboarding WHERE school_id=$1 AND status IN ('CLOSED','PURGE_REQUESTED','PURGING','PURGED') ORDER BY created_at DESC LIMIT 1",
+            "SELECT export_until,irreversible_at FROM school_offboarding WHERE school_id=$1 AND status IN ('CLOSED','PURGE_REQUESTED','PURGING','PURGED') ORDER BY created_at DESC LIMIT 1",
             [a.context.schoolId],
           )
         ).rows[0],
       true,
     );
+    if (window?.irreversible_at)
+      throw new ApiError(403, 'SCHOOL_OFFBOARDED', 'Permanent deletion has begun for this school.');
     const terminal = ['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(a.subscription_status || '');
     const administration =
       a.active!.role === 'school_admin' &&

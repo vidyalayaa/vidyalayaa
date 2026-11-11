@@ -19,6 +19,7 @@ import { Button } from '../../components/ui/button';
 import { PageHeading, Panel, DataTable, Loading, ErrorState, Empty } from '../../components/common';
 import { ActionDialog, type ActionField } from '../../components/ActionDialog';
 import { Dialog } from '../../components/ui/dialog';
+import { SchoolDeletionDialog } from './SchoolDeletion';
 const actions: Record<string, { endpoint: string; fields: ActionField[] }> = {
   organization: { endpoint: '/platform/organizations', fields: [{ key: 'name' }] },
   school: {
@@ -79,6 +80,7 @@ export default function Platform() {
     [campus, setCampus] = useState<Record<string, unknown> | null>(null),
     [closure, setClosure] = useState<Record<string, unknown> | null>(null),
     [closureAction, setClosureAction] = useState(''),
+    [deletionNotice, setDeletionNotice] = useState(''),
     [ticket, setTicket] = useState<Record<string, unknown> | null>(null),
     [result, setResult] = useState<Record<string, unknown> | null>(null),
     [selected, setSelected] = useState<Record<string, unknown> | null>(null),
@@ -101,6 +103,11 @@ export default function Platform() {
   return (
     <>
       {ticket && <SupportTicketResponse ticket={ticket} close={() => setTicket(null)} />}
+      {deletionNotice && (
+        <p className="notice" role="status">
+          {deletionNotice}
+        </p>
+      )}
       <PageHeading
         eyebrow="VIDYALAYAA PLATFORM"
         title="Every school. One clear view."
@@ -216,6 +223,16 @@ export default function Platform() {
                           >
                             Closure request
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              setClosure(row);
+                              setClosureAction('permanent-request');
+                            }}
+                          >
+                            Permanently delete school
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => setCampus(row)}>
                             Campus group
                           </Button>
@@ -279,7 +296,10 @@ export default function Platform() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={['PURGED', 'CANCELLED'].includes(String(row.status))}
+                                    disabled={
+                                      !!row.irreversible_at ||
+                                      ['PURGED', 'CANCELLED'].includes(String(row.status))
+                                    }
                                     onClick={() => {
                                       setClosure(row);
                                       setClosureAction('hold');
@@ -292,6 +312,7 @@ export default function Platform() {
                                     variant="outline"
                                     disabled={
                                       row.status !== 'CLOSED' ||
+                                      (!!row.permanent && !row.final_export_ready) ||
                                       !!row.legal_hold ||
                                       !(
                                         new Date(String(row.export_until)).getTime() <=
@@ -301,11 +322,24 @@ export default function Platform() {
                                     }
                                     onClick={() => {
                                       setClosure(row);
-                                      setClosureAction('purge');
+                                      setClosureAction(row.permanent ? 'execute' : 'purge');
                                     }}
                                   >
-                                    Request data deletion
+                                    {row.permanent
+                                      ? 'Review permanent deletion'
+                                      : 'Request data deletion'}
                                   </Button>
+                                  {!!row.permanent && (
+                                    <span className="text-xs text-stone-600">
+                                      {row.irreversible_at
+                                        ? 'Irreversible deletion started'
+                                        : row.status === 'REQUESTED'
+                                          ? 'Awaiting School Admin approval'
+                                          : row.status === 'CLOSED' && !row.final_export_ready
+                                            ? 'Awaiting final school export'
+                                            : 'Permanent deletion request'}
+                                    </span>
+                                  )}
                                 </div>
                               )
                             : tab === 'devices'
@@ -451,7 +485,42 @@ export default function Platform() {
           close={() => setOnboarding(null)}
         />
       )}
-      {closure && (
+      {closure && (closureAction === 'permanent-request' || !!closure.permanent) && (
+        <SchoolDeletionDialog
+          row={closure}
+          mode={
+            closureAction === 'permanent-request'
+              ? 'request'
+              : closureAction === 'execute'
+                ? 'execute'
+                : closureAction === 'hold'
+                  ? 'hold'
+                  : 'close'
+          }
+          close={() => setClosure(null)}
+          onSuccess={() => {
+            if (closureAction === 'permanent-request') {
+              setDeletionNotice(
+                'Approval request sent to the selected School Admin. Track it under School closure.',
+              );
+              navigate('/platform/offboarding');
+            } else if (closureAction === 'execute') {
+              setDeletionNotice(
+                'Permanent deletion queued. Check School closure for progress and Platform audit for completion.',
+              );
+            } else {
+              setDeletionNotice(
+                closureAction === 'hold'
+                  ? 'Legal hold updated.'
+                  : 'School closed. A School Admin can now create the final export.',
+              );
+            }
+            setClosure(null);
+            void qc.invalidateQueries({ predicate: (q) => q.queryKey.includes('platform') });
+          }}
+        />
+      )}
+      {closure && closureAction !== 'permanent-request' && !closure.permanent && (
         <ActionDialog
           open
           close={() => setClosure(null)}

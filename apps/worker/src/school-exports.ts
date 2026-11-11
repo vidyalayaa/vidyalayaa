@@ -6,12 +6,15 @@ import { join, resolve, dirname, basename } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { captureFailure } from '../../api/src/lib/monitoring.js';
 import { transaction } from '../../api/src/lib/db.js';
+import { personPhotoPath } from '../../api/src/lib/person-photo-path.js';
 
 const tables = [
   'school_profile_assets',
+  'school_person_details',
   'support_requests',
   'school_memberships',
   'academic_sessions',
+  'academic_promotions',
   'classes',
   'subjects',
   'students',
@@ -185,10 +188,15 @@ export async function generateSchoolExport(
               .join('');
             if (Date.now() - started > 900000) throw new Error('EXPORT_SNAPSHOT_DEADLINE');
             const page: Record<string, any>[] = (
-              await tx.query(
-                `SELECT t.*${feeDates} FROM ${table} t WHERE t.school_id=$1 AND ($2::${idType} IS NULL OR t.id>$2::${idType}) ORDER BY t.id LIMIT 500`,
-                [schoolId, cursor],
-              )
+              table === 'school_person_details'
+                ? await tx.query(
+                    'SELECT * FROM app.export_school_person_details($1,$2,$3) ORDER BY id',
+                    [job.id, lease, cursor],
+                  )
+                : await tx.query(
+                    `SELECT t.*${feeDates} FROM ${table} t WHERE t.school_id=$1 AND ($2::${idType} IS NULL OR t.id>$2::${idType}) ORDER BY t.id LIMIT 500`,
+                    [schoolId, cursor],
+                  )
             ).rows;
             if (!page.length) break;
             cursor = String(page.at(-1)!.id);
@@ -196,13 +204,26 @@ export async function generateSchoolExport(
             const records = page.map((row) =>
               Object.fromEntries(Object.entries(row).filter(([key]) => !secretFields.has(key))),
             );
-            for (const row of records)
+            for (const row of records) {
               if (
                 typeof row.storage_path === 'string' &&
                 row.storage_path.startsWith(`${schoolId}/`) &&
                 !row.storage_path.startsWith(`${schoolId}/exports/`)
               )
                 objects.add(row.storage_path);
+              if (
+                (table === 'students' || table === 'teachers') &&
+                typeof row.profile_photo_id === 'string'
+              )
+                objects.add(
+                  personPhotoPath(
+                    schoolId,
+                    table === 'students' ? 'student' : 'staff',
+                    String(row.id),
+                    row.profile_photo_id,
+                  ),
+                );
+            }
             const header = Object.keys(records[0]);
             const content =
               job.format === 'CSV'

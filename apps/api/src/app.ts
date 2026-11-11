@@ -21,6 +21,7 @@ import { securityPolicyRouter } from './modules/school/security-policy.js';
 import { deviceRouter, managementRouter } from './modules/devices/router.js';
 import { billingRouter } from './modules/platform/billing.js';
 import { platformRouter, supportApprovalRouter } from './modules/platform/router.js';
+import { schoolDeletionApprovalRouter } from './modules/platform/school-deletion.js';
 import { sharedRateLimit, auditDenied } from './middleware/security-events.js';
 import { recipientInvitationRouter } from './modules/identity/invitations.js';
 import { sessionsRouter } from './modules/identity/sessions.js';
@@ -183,6 +184,7 @@ export function createApp(config: Config, deps: Dependencies) {
   );
   app.use('/api/v1/platform', platformRouter(deps.platform, deps.api, deps.supabase, config));
   app.use('/api/v1', requireSchool, schoolAccess(deps.api));
+  app.use('/api/v1', schoolDeletionApprovalRouter(deps.api, config.TOKEN_ENCRYPTION_KEY));
   app.use('/api/v1/school/security', securityPolicyRouter(deps.api, requireWrite));
   app.use('/api/v1', exportsRouter(deps.api, deps.supabase, config.TOKEN_ENCRYPTION_KEY));
   app.use('/api/v1', workflowsRouter(deps.api));

@@ -39,6 +39,7 @@ import { isSchoolLeadership, schoolPath } from '../lib/portals';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/auth';
 import { display } from '../lib/utils';
+import { SchoolDeletionApproval } from '../features/operations/SchoolDeletion';
 const ParentWorkspace = lazy(() => import('../features/parents/ParentWorkspace'));
 const navigationFeatures: Record<string, string> = {
   '/r/assignments': 'assignments',
@@ -509,6 +510,7 @@ export default function Layout() {
             </div>
           )}
           <PushUpdates />
+          {!platformOnly && role === 'school_admin' && a.session && <SchoolDeletionApproval />}
           {role === 'parent' &&
           family &&
           !/\/(?:settings|school-information)(?:\/|$)/.test(location.pathname) ? (

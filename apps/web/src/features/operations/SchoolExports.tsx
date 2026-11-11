@@ -27,7 +27,7 @@ export function OffboardingApproval() {
         rows={q.data.data}
         columns={['policy_ref', 'status', 'export_until', 'delete_after', 'legal_hold']}
         actions={(r) =>
-          ['REQUESTED', 'APPROVED'].includes(String(r.status)) ? (
+          !r.permanent && ['REQUESTED', 'APPROVED'].includes(String(r.status)) ? (
             <Button variant="outline" size="sm" onClick={() => setSelected(r)}>
               Review decision
             </Button>
