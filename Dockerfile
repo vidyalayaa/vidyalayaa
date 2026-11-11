@@ -11,6 +11,8 @@ RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/packages/contracts ./packages/contracts
