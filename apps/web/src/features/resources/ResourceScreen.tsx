@@ -17,6 +17,7 @@ import { IssueCardDialog, BlockCardDialog } from './CardActionDialogs';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { ZodType } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { resourceSchemas, type Resource, type Page } from '@vidyalayaa/contracts';
 import {
@@ -674,9 +675,8 @@ export function ResourceForm({
         };
       }
     }
-    return zodResolver(resourceSchemas[resource])(transformed, context, options) as ReturnType<
-      Resolver<Record<string, unknown>>
-    >;
+    const schema: ZodType<Record<string, unknown>, typeof transformed> = resourceSchemas[resource];
+    return zodResolver(schema)(transformed, context, options);
   };
   const form = useForm<Record<string, unknown>>({ defaultValues: defaults, resolver });
   useUnsavedChanges(form.formState.isDirty || restored);
