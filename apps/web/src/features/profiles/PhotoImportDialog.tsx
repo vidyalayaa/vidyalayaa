@@ -36,7 +36,7 @@ function CandidateList({
       ),
   });
   return (
-    <div className="space-y-2 rounded-xl border border-line bg-white p-3">
+    <div className="space-y-2 rounded-xl border border-line bg-surface p-3">
       <label className="field-label block">
         {missing ? 'Find a profile without a photo' : 'Find a profile by name or ID'}
         <input

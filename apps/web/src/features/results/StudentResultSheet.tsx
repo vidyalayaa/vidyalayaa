@@ -38,7 +38,7 @@ export default function StudentResultSheet({
   const { exam, student, subjects, school_name, status, grade, recorded_maximum } = query.data;
   return (
     <article
-      className="student-result-sheet mb-6 rounded-2xl border border-line bg-white p-4 sm:p-6"
+      className="student-result-sheet mb-6 rounded-2xl border border-line bg-surface p-4 sm:p-6"
       aria-label="Student result"
     >
       <header className="flex flex-wrap items-start justify-between gap-4">

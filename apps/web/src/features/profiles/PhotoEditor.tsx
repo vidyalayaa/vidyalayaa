@@ -184,7 +184,7 @@ export default function PhotoEditor({
               <label className="field-label block" key={axis}>
                 {{ zoom: 'Zoom', x: 'Horizontal position', y: 'Vertical position' }[axis]}
                 <input
-                  className="mt-1 block w-full accent-lime-600"
+                  className="mt-1 block w-full accent-focus"
                   type="range"
                   min={axis === 'zoom' ? 1 : 0}
                   max={axis === 'zoom' ? 3 : 100}

@@ -15,7 +15,7 @@ import Timetable from '../timetable/Timetable';
 import UpcomingEvents from '../calendar/UpcomingEvents';
 import { schoolToday } from '../calendar/calendar-utils';
 import { Dialog } from '../../components/ui/dialog';
-import ParentAttendance from './ParentAttendance';
+import AttendanceCalendar from '../attendance/AttendanceCalendar';
 import ParentResults from './ParentResults';
 import SubjectMaterials, { type MaterialSubject } from '../materials/SubjectMaterials';
 import { PersonAvatar } from '../profiles/PersonAvatar';
@@ -101,7 +101,7 @@ export default function ParentWorkspace() {
   return (
     <>
       <section
-        className="mb-6 rounded-2xl border border-line bg-white p-5"
+        className="mb-6 rounded-2xl border border-line bg-surface p-5"
         aria-label="Selected child"
       >
         <label className="field-label" htmlFor="parent-child">
@@ -185,7 +185,7 @@ function ParentSectionView({
         description={`${child.first_name} ${child.last_name || ''} · Information shared by your school.`}
       />
       {section === 'attendance' ? (
-        <ParentAttendance child={child} base={base} />
+          <AttendanceCalendar key={child.id} base={`${base}/attendance/calendar`} personal />
       ) : section === 'results' ? (
         <ParentResults child={child} base={base} />
       ) : section === 'home' || section === 'students' ? (
@@ -211,7 +211,7 @@ function ParentSectionView({
             .map(([path, title]) => (
               <Link
                 key={path}
-                className="rounded-2xl border border-line bg-white p-5 font-semibold hover:bg-lime-50"
+                className="rounded-2xl border border-line bg-surface p-5 font-semibold hover:bg-lime-50"
                 to={schoolPath(path, 'parent') + '?child_id=' + child.id}
               >
                 {title} →
@@ -438,7 +438,7 @@ function ParentRecords({
             <button
               type="button"
               key={String(row.id)}
-              className="rounded-2xl border border-line bg-white p-5 text-left hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600"
+              className="rounded-2xl border border-line bg-surface p-5 text-left hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
               onClick={() =>
                 setMaterial({
                   classId: String(row.class_id),
@@ -463,7 +463,7 @@ function ParentRecords({
       ) : ['homework', 'announcements', 'notifications'].includes(section) ? (
         <div className="space-y-4">
           {rows.map((row) => (
-            <article key={String(row.id)} className="rounded-2xl border border-line bg-white p-5">
+            <article key={String(row.id)} className="rounded-2xl border border-line bg-surface p-5">
               <h2 className="font-semibold">
                 {String(row.title || label(String(row.kind || 'School update')))}
               </h2>
@@ -499,7 +499,7 @@ function ParentRecords({
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-line bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr>

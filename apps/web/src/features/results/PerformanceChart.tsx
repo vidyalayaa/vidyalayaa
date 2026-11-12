@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { chartTheme } from '../../lib/chart-theme';
 
 export default function PerformanceChart({
   title,
@@ -27,20 +28,26 @@ export default function PerformanceChart({
   const suffix = metric === 'percentage' ? '%' : '';
   const axes = (
     <>
-      <CartesianGrid vertical={false} stroke="#e7e5e4" strokeDasharray="4 4" />
+      <CartesianGrid vertical={false} stroke={chartTheme.grid} strokeDasharray="4 4" />
       <XAxis
         dataKey="name"
-        tick={{ fontSize: 11, fill: '#57534e' }}
+        stroke={chartTheme.grid}
+        tick={{ fontSize: 11, fill: chartTheme.label }}
         tickFormatter={(value: string) => (value.length > 15 ? value.slice(0, 14) + '…' : value)}
       />
       <YAxis
         width={42}
+        stroke={chartTheme.grid}
         domain={metric === 'percentage' ? [0, 100] : [0, 'auto']}
         unit={suffix}
         allowDecimals={false}
-        tick={{ fontSize: 11, fill: '#57534e' }}
+        tick={{ fontSize: 11, fill: chartTheme.label }}
       />
-      <Tooltip formatter={(value) => `${value}${suffix}`} />
+      <Tooltip
+        {...chartTheme.tooltip}
+        formatter={(value) => `${value}${suffix}`}
+        cursor={trend ? { stroke: chartTheme.grid } : { fill: 'var(--surface-hover)' }}
+      />
     </>
   );
   return (
@@ -53,9 +60,9 @@ export default function PerformanceChart({
               <Line
                 dataKey={metric}
                 name="Average"
-                stroke="#45651b"
+                stroke={chartTheme.primary}
                 strokeWidth={3}
-                dot={{ fill: '#a3d42f', r: 4 }}
+                dot={{ fill: chartTheme.primary, r: 4 }}
                 isAnimationActive={false}
               />
             </LineChart>
@@ -71,7 +78,7 @@ export default function PerformanceChart({
                       ? 'Average marks'
                       : 'Percentage'
                 }
-                fill="#82a925"
+                fill={chartTheme.primary}
                 radius={[5, 5, 0, 0]}
                 maxBarSize={55}
                 isAnimationActive={false}

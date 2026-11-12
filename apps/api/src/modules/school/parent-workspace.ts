@@ -19,6 +19,7 @@ import { calendarRouter } from './calendar.js';
 import { timetableRouter } from './timetable.js';
 import type { Actor } from '../../middleware/auth.js';
 import { subjectMaterialsRouter } from './materials.js';
+import { attendanceCalendarRouter } from './attendance-calendar.js';
 
 const childSelect = `SELECT s.id,s.student_code,s.first_name,s.last_name,s.date_of_birth::text,s.gender,s.email,s.status,s.profile_photo_id,d.details AS contact,
  (SELECT jsonb_build_object('class_id',c.id,'grade',c.grade,'section',c.section,'session_name',ac.name,
@@ -101,6 +102,7 @@ export function parentWorkspaceRouter(pool: pg.Pool) {
   child.use('/timetable', timetableRouter(pool, controls));
   child.use('/materials', subjectMaterialsRouter(pool));
   child.use('/homework', homeworkRouter(pool));
+  child.use('/attendance/calendar', attendanceCalendarRouter(pool));
   function range(a: Actor, filters: { from?: string; to?: string }, year = false) {
     const today = localParts(new Date(), a.active!.timezone).date;
     const from =

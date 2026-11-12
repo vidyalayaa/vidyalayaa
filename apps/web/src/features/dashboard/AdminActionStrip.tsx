@@ -80,14 +80,14 @@ export default function AdminActionStrip() {
 
           <div className="flex gap-2">
             {pendingCorrections > 0 && (
-              <Button size="sm" variant="outline" asChild className="bg-white text-xs">
+              <Button size="sm" variant="outline" asChild className="bg-surface text-xs">
                 <Link to="/corrections?status=REQUESTED&reviewable=1">
                   Review Corrections <ArrowRight size={13} />
                 </Link>
               </Button>
             )}
             {pendingGrants > 0 && (
-              <Button size="sm" variant="outline" asChild className="bg-white text-xs">
+              <Button size="sm" variant="outline" asChild className="bg-surface text-xs">
                 <Link to="/support">
                   Review Grants <ArrowRight size={13} />
                 </Link>
@@ -98,7 +98,7 @@ export default function AdminActionStrip() {
       )}
 
       {/* Leadership Quick Action Bar */}
-      <div className="rounded-3xl border border-stone-200 bg-white p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-3xl border border-stone-200 bg-surface p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
           <h3 className="text-sm font-bold text-stone-900">Leadership Quick Actions</h3>
           <p className="text-xs text-stone-500">Fast workflows for administrators and principals</p>

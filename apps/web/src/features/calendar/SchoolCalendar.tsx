@@ -29,7 +29,7 @@ import { allCalendarPages } from './calendar-api';
 
 function eventBackground(events: CalendarEvent[]) {
   const kinds = [...new Set(events.map((e) => e.kind))];
-  if (!kinds.length) return '#f1f5ee';
+  if (!kinds.length) return 'var(--surface-muted)';
   if (kinds.length === 1) return kindColors[kinds[0]];
   return `linear-gradient(135deg,${kinds.map((k, i) => `${kindColors[k]} ${(i / kinds.length) * 100}% ${((i + 1) / kinds.length) * 100}%`).join(',')})`;
 }
@@ -144,8 +144,8 @@ export default function SchoolCalendar({ basePath = '/calendar' }: { basePath?: 
         }}
         className={
           mode === 'year'
-            ? `h-3.5 w-3.5 rounded-[3px] border border-black/5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 ${selected === date ? 'ring-2 ring-stone-900' : date === today ? 'ring-2 ring-lime-600' : ''}`
-            : `flex min-h-20 min-w-0 flex-col items-stretch justify-start rounded-lg border p-1 text-left outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 sm:min-h-28 sm:p-2 ${selected === date ? 'border-stone-900 bg-lime-50' : 'border-stone-100 bg-white'}`
+            ? `h-3.5 w-3.5 rounded-[3px] border border-line outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 ${selected === date ? 'ring-2 ring-stone-900' : date === today ? 'ring-2 ring-focus' : ''}`
+            : `flex min-h-20 min-w-0 flex-col items-stretch justify-start rounded-lg border p-1 text-left outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 sm:min-h-28 sm:p-2 ${selected === date ? 'border-stone-900 bg-lime-50' : 'border-stone-100 bg-surface'}`
         }
         style={
           mode === 'year'
@@ -173,7 +173,10 @@ export default function SchoolCalendar({ basePath = '/calendar' }: { basePath?: 
               <span
                 key={e.id}
                 className="mt-1 hidden truncate rounded px-1 py-0.5 text-[10px] font-medium sm:block"
-                style={{ color: kindColors[e.kind], background: kindColors[e.kind] + '12' }}
+                style={{
+                  color: kindColors[e.kind],
+                  background: `color-mix(in srgb, ${kindColors[e.kind]} 12%, transparent)`,
+                }}
               >
                 {e.title}
               </span>
@@ -233,7 +236,7 @@ export default function SchoolCalendar({ basePath = '/calendar' }: { basePath?: 
       )}
       <section
         aria-label="School calendar"
-        className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 sm:p-6"
+        className="min-w-0 rounded-2xl border border-stone-200 bg-surface p-4 sm:p-6"
       >
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">

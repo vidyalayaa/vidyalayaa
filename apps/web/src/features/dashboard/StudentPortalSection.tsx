@@ -61,11 +61,11 @@ export default function StudentPortalSection() {
       </Button>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {/* Homework & Due Today */}
-        <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+        <div className="rounded-3xl border border-stone-200 bg-surface p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500">
-                <BookOpen size={14} className="text-lime-600" /> My Homework & Tasks
+                <BookOpen size={14} className="text-lime-700" /> My Homework & Tasks
               </span>
               <Badge>{assignments.length} Active</Badge>
             </div>
@@ -113,11 +113,11 @@ export default function StudentPortalSection() {
         </div>
 
         {/* Latest Results & Scores */}
-        <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+        <div className="rounded-3xl border border-stone-200 bg-surface p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500">
-                <Award size={14} className="text-lime-600" /> Recent Results & Marks
+                <Award size={14} className="text-lime-700" /> Recent Results & Marks
               </span>
               <Badge>{marks.length} Graded</Badge>
             </div>

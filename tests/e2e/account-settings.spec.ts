@@ -4,9 +4,15 @@ import { test } from './fixtures/auth-app';
 
 async function accountFixture(
   page: Page,
-  options: { password?: boolean; role?: string; signedIn?: boolean; mfa?: boolean } = {},
+  options: {
+    password?: boolean;
+    role?: string;
+    signedIn?: boolean;
+    mfa?: boolean;
+    id?: string;
+  } = {},
 ) {
-  const id = '00000000-0000-4000-8000-000000004001';
+  const id = options.id ?? '00000000-0000-4000-8000-000000004001';
   const school = '00000000-0000-4000-8000-000000004002';
   const factor = '00000000-0000-4000-8000-000000004003';
   const state = {
@@ -20,6 +26,8 @@ async function accountFixture(
     reauthentications: 0,
     wrongIdentity: false,
     requireNonce: false,
+    theme: 'system',
+    rejectTheme: false,
     aal: options.mfa ? 'aal1' : 'aal2',
     confirmed: new Set<string>(),
     used: new Set<string>(),
@@ -35,7 +43,7 @@ async function accountFixture(
       provider: 'google',
       providers: state.hasPassword ? ['google', 'email'] : ['google'],
     },
-    user_metadata: {},
+    user_metadata: { vidyalayaa_theme: state.theme },
     identities: [
       {
         id: 'google-identity',
@@ -75,6 +83,11 @@ async function accountFixture(
     if (path.endsWith('/user')) {
       if (route.request().method() === 'PUT') {
         expect(route.request().headers().authorization).toBe(`Bearer ${session().access_token}`);
+        if (body.data?.vidyalayaa_theme && state.rejectTheme)
+          return route.fulfill({
+            status: 503,
+            json: { message: 'Appearance update unavailable.' },
+          });
         if (
           body.password &&
           state.hasPassword &&
@@ -96,6 +109,7 @@ async function accountFixture(
         state.updates.push(body);
         if (body.email) state.pendingEmail = body.email;
         if (body.password) state.hasPassword = true;
+        if (body.data?.vidyalayaa_theme) state.theme = body.data.vidyalayaa_theme;
       }
       return route.fulfill({ json: user() });
     }
@@ -115,6 +129,7 @@ async function accountFixture(
       return route.fulfill({ json: {} });
     }
     if (path.endsWith('/token')) return route.fulfill({ json: session() });
+    if (path.endsWith('/logout')) return route.fulfill({ status: 204 });
     if (path.endsWith('/challenge'))
       return route.fulfill({
         json: { id: 'challenge-fixture', expires_at: Math.floor(Date.now() / 1000) + 60 },
@@ -190,6 +205,81 @@ async function accountFixture(
   });
   return state;
 }
+
+test('account theme saves, restores at first paint, and stays isolated on a shared browser', async ({
+  page,
+  authAppURL,
+}) => {
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  const first = await accountFixture(page, { signedIn: false });
+  const root = page.locator('html');
+  const nav = page.locator('.topbar').getByLabel('Theme');
+  const settings = page.getByRole('main').getByRole('combobox', { name: 'Theme', exact: true });
+
+  async function signIn() {
+    await page.goto(authAppURL + '/login?returnTo=/settings/account');
+    await page.getByLabel('Email address', { exact: true }).fill('account@example.test');
+    await page.getByLabel('Password', { exact: true }).fill('Fixture-password');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(settings).toBeVisible();
+  }
+
+  async function signOut() {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  }
+
+  await signIn();
+  await expect(settings).toHaveValue('system');
+  await nav.selectOption('dark');
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await expect(settings).toHaveValue('dark');
+  await expect(nav).toBeEnabled();
+  expect(first.theme).toBe('dark');
+  expect(first.updates).toMatchObject([{ data: { vidyalayaa_theme: 'dark' } }]);
+
+  first.rejectTheme = true;
+  await settings.selectOption('light');
+  await expect(page.getByRole('alert')).toContainText('appearance preference could not be saved');
+  await expect(settings).toHaveValue('dark');
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  first.rejectTheme = false;
+
+  // Stop the React entry once to check the server's document and paint stylesheet.
+  const entry = await page.locator('script[type="module"][src]').last().getAttribute('src');
+  await page.route(new URL(entry!, page.url()).href, (route) => route.abort(), { times: 1 });
+  await page.reload();
+  await expect(page.locator('#root')).toBeEmpty();
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+  await expect(root).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await page.reload();
+  await expect(settings).toHaveValue('dark');
+  await signOut();
+  await expect(root).toHaveAttribute('data-theme', 'light');
+
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('vidyalayaa.theme.')) localStorage.removeItem(key);
+    }
+  });
+  await signIn();
+  await expect(settings).toHaveValue('dark');
+  await signOut();
+
+  const second = await accountFixture(page, {
+    signedIn: false,
+    id: '00000000-0000-4000-8000-000000004009',
+  });
+  await signIn();
+  await expect(settings).toHaveValue('system');
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await settings.selectOption('light');
+  await expect(settings).toBeEnabled();
+  expect(second.theme).toBe('light');
+  expect(first.theme).toBe('dark');
+});
 
 for (const role of [
   'SUPER_ADMIN',

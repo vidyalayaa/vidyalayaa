@@ -176,7 +176,7 @@ export default function Academics() {
         <section
           id="academic-sessions"
           aria-label="Academic sessions"
-          className="mb-6 rounded-2xl border border-stone-200 bg-white p-5"
+          className="mb-6 rounded-2xl border border-stone-200 bg-surface p-5"
         >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Academic sessions</h2>
@@ -254,7 +254,7 @@ export default function Academics() {
           )}
         </section>
       )}
-      <div className="mb-6 flex flex-wrap gap-4 rounded-2xl border border-stone-200 bg-white p-4">
+      <div className="mb-6 flex flex-wrap gap-4 rounded-2xl border border-stone-200 bg-surface p-4">
         <label className="min-w-0 flex-1 text-sm">
           Find a class, section or Class Teacher
           <div className="search-input mt-2">
@@ -308,7 +308,7 @@ export default function Academics() {
               <section
                 key={`${first.academic_session_id}:${first.grade}`}
                 aria-label={`Class ${first.grade} · ${first.academic_session_label}`}
-                className="rounded-2xl border border-stone-200 bg-white"
+                className="rounded-2xl border border-stone-200 bg-surface"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 p-5">
                   <div className="flex items-center gap-3">
@@ -534,7 +534,7 @@ function ClassSection({
   }
   return (
     <details className="group/section" onToggle={(e) => setExpanded(e.currentTarget.open)}>
-      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
         <span className="sr-only">
           Class {c.grade} · {c.academic_session_label} ·{' '}
         </span>

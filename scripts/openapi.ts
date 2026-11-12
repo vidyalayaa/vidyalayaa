@@ -718,6 +718,37 @@ for (const child of ['entries', 'assignments'])
     },
   );
 operation('/attendance', 'get', 'Paginated daily attendance');
+for (const [base, family] of [
+  ['/attendance/calendar', false],
+  ['/parent/children/{childId}/attendance/calendar', true],
+] as const) {
+  const child = family
+    ? [{ name: 'childId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }]
+    : [];
+  const filters = [
+    ...child,
+    ...['academic_session_id', ...(!family ? ['class_id', 'student_id'] : [])].map((name) => ({
+      name, in: 'query', schema: { type: 'string', format: 'uuid' },
+    })),
+    ...(!family ? [{ name: 'grade', in: 'query', schema: { type: 'string' } }] : []),
+  ];
+  operation(base + '/options', 'get', 'Authorized attendance sessions and classes', undefined, 'UserJWT', { parameters: child });
+  operation(base, 'get', 'Daily working schedule and attendance counts for a period of up to 366 days', undefined, 'UserJWT', {
+    parameters: [...filters, ...['from', 'to'].map((name) => ({ name, in: 'query', required: true, schema: { type: 'string', format: 'date' } }))],
+  });
+  operation(base + '/day', 'get', 'Paginated authorized records for one calendar date', undefined, 'UserJWT', {
+    parameters: [
+      ...filters,
+      { name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+      { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'EXCUSED'] } },
+      ...['page', 'page_size'].map((name) => ({ name, in: 'query', schema: { type: 'integer', minimum: 1 } })),
+    ],
+  });
+  if (!family)
+    operation(base + '/students', 'get', 'Staff lookup of students within the attendance filters', undefined, 'UserJWT', {
+      parameters: [...filters.filter((p) => p.name !== 'student_id'), { name: 'search', in: 'query', schema: { type: 'string' } }],
+    });
+}
 operation('/attendance/manual', 'post', 'Manual classroom attendance', 'ManualAttendance');
 operation(
   '/attendance/bulk',

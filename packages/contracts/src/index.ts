@@ -639,6 +639,7 @@ export { bulkMarksSchema, singleMarkSchema } from './bulk.js';
 export * from './operations.js';
 export * from './academics.js';
 export * from './calendar.js';
+export * from './attendance-calendar.js';
 
 export interface InvitationCandidate {
   id: string;

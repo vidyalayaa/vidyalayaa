@@ -110,7 +110,7 @@ export default function ParentResults({ child, base }: { child: ParentChild; bas
               Charts use percentages to compare examinations with different maximum marks. Only
               published, recorded marks are included; missing marks are not treated as zero.
             </p>
-            <div className="max-h-[640px] overflow-auto rounded-2xl border border-line bg-white">
+            <div className="max-h-[640px] overflow-auto rounded-2xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">Published marks for {child.first_name}</caption>
                 <thead>

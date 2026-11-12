@@ -257,9 +257,19 @@ test('School Admin filters performance, drills into a result and prints the resu
   const stats = page.getByRole('table', { name: 'Class-wise statistics' });
   await expect(stats.getByRole('row')).toHaveCount(3);
   await expect(page.getByRole('heading', { name: 'Overall school toppers' })).toBeVisible();
-  await expect(
-    page.getByRole('img', { name: 'Performance distribution' }).locator('svg.recharts-surface'),
-  ).toBeVisible();
+  const distribution = page
+    .getByRole('img', { name: 'Performance distribution' })
+    .locator('svg.recharts-surface');
+  await expect(distribution).toBeVisible();
+  const tick = distribution.locator('.recharts-cartesian-axis-tick-value').first();
+  const root = page.locator('html');
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  const darkTick = await tick.evaluate((label) => getComputedStyle(label).fill);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await expect(tick).not.toHaveCSS('fill', darkTick);
+  await page.emulateMedia({ colorScheme: 'dark' });
   await stats.getByRole('button', { name: 'Class 8 · Section A', exact: true }).click();
   await expect(page.getByLabel('Section', { exact: true })).toHaveValue(s.f.classId);
   await expect(stats.getByRole('row')).toHaveCount(2);
@@ -276,6 +286,7 @@ test('School Admin filters performance, drills into a result and prints the resu
   await expect(result.getByRole('button', { name: 'Print / Save as PDF' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.emulateMedia({ media: 'print' });
+  await expect(root).toHaveCSS('color-scheme', 'light');
   await expect(result.getByRole('table', { name: 'Subject-wise marks' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Results views' })).toBeHidden();
 });

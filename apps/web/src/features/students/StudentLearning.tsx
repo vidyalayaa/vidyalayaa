@@ -43,7 +43,7 @@ export function StudentAcademics() {
           <section
             key={c.class_id}
             aria-label={`Class ${c.grade} · Section ${c.section}`}
-            className="mb-6 min-w-0 rounded-3xl border border-line bg-white p-5 sm:p-7"
+            className="mb-6 min-w-0 rounded-3xl border border-line bg-surface p-5 sm:p-7"
           >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-semibold">
@@ -75,7 +75,7 @@ export function StudentAcademics() {
                   <button
                     type="button"
                     key={s.id}
-                    className="min-w-0 rounded-2xl border border-line bg-stone-50 p-4 text-left transition-colors hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600"
+                    className="min-w-0 rounded-2xl border border-line bg-stone-50 p-4 text-left transition-colors hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                     onClick={() =>
                       setMaterial({
                         classId: c.class_id,
@@ -147,11 +147,11 @@ export function StudentResults() {
           </Button>
         }
       />
-      <p className="mb-5 rounded-2xl border border-line bg-white p-4 text-sm text-stone-600">
+      <p className="mb-5 rounded-2xl border border-line bg-surface p-4 text-sm text-stone-600">
         Only published examinations are visible. Marks saved for an open or locked examination
         appear after your school publishes it.
       </p>
-      <div className="mb-5 grid gap-4 rounded-2xl border border-line bg-white p-5 sm:grid-cols-2">
+      <div className="mb-5 grid gap-4 rounded-2xl border border-line bg-surface p-5 sm:grid-cols-2">
         <label className="text-sm">
           Examination
           <select
@@ -227,7 +227,7 @@ export function StudentResults() {
           <Suspense fallback={<Loading />}>
             <ResultCharts data={q.data} />
           </Suspense>
-          <div className="mt-5 overflow-x-auto rounded-2xl border border-line bg-white">
+          <div className="mt-5 overflow-x-auto rounded-2xl border border-line bg-surface">
             <table className="w-full text-left text-sm">
               <caption className="sr-only">My published marks</caption>
               <thead>

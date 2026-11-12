@@ -9,8 +9,9 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import { chartTheme } from '../../lib/chart-theme';
 import type { ParentResultsResponse } from '@vidyalayaa/contracts';
-const axis = { axisLine: false, tickLine: false, tick: { fontSize: 11, fill: '#57534e' } };
+const axis = { axisLine: false, tickLine: false, tick: { fontSize: 11, fill: chartTheme.label } };
 export default function ResultCharts({
   data,
 }: {
@@ -18,7 +19,7 @@ export default function ResultCharts({
 }) {
   return (
     <div className="grid min-w-0 gap-5 lg:grid-cols-2">
-      <section className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5">
+      <section className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5">
         <h2 className="font-semibold">Subject performance</h2>
         <p className="mt-1 text-xs text-stone-500">
           Percentage of the available marks earned in each subject
@@ -34,7 +35,7 @@ export default function ResultCharts({
               data={data.subject_chart}
               margin={{ left: 0, right: 10, bottom: 15 }}
             >
-              <CartesianGrid horizontal={false} stroke="#e7e5e4" strokeDasharray="4 4" />
+              <CartesianGrid horizontal={false} stroke={chartTheme.grid} strokeDasharray="4 4" />
               <XAxis {...axis} type="number" domain={[0, 100]} unit="%" />
               <YAxis
                 dataKey="name"
@@ -46,11 +47,15 @@ export default function ResultCharts({
                   String(v).length > 12 ? String(v).slice(0, 12) + '…' : String(v)
                 }
               />
-              <Tooltip formatter={(value) => `${value}%`} cursor={{ fill: '#f7fee7' }} />
+              <Tooltip
+                {...chartTheme.tooltip}
+                formatter={(value) => `${value}%`}
+                cursor={{ fill: 'var(--accent-soft)' }}
+              />
               <Bar
                 dataKey="percentage"
                 name="Result"
-                fill="#a3d42f"
+                fill={chartTheme.primary}
                 radius={[0, 6, 6, 0]}
                 maxBarSize={64}
                 isAnimationActive={false}
@@ -59,7 +64,7 @@ export default function ResultCharts({
           </ResponsiveContainer>
         </div>
       </section>
-      <section className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5">
+      <section className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5">
         <h2 className="font-semibold">Examination progress</h2>
         <p className="mt-1 text-xs text-stone-500">Published examinations in date order</p>
         <div
@@ -69,7 +74,7 @@ export default function ResultCharts({
         >
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart data={data.exam_chart} margin={{ left: 0, right: 15, bottom: 15 }}>
-              <CartesianGrid vertical={false} stroke="#e7e5e4" strokeDasharray="4 4" />
+              <CartesianGrid vertical={false} stroke={chartTheme.grid} strokeDasharray="4 4" />
               <XAxis
                 dataKey="name"
                 {...axis}
@@ -78,14 +83,18 @@ export default function ResultCharts({
                 }
               />
               <YAxis {...axis} domain={[0, 100]} unit="%" width={45} />
-              <Tooltip formatter={(value) => `${value}%`} />
+              <Tooltip
+                {...chartTheme.tooltip}
+                formatter={(value) => `${value}%`}
+                cursor={{ stroke: chartTheme.grid }}
+              />
               <Line
                 type="monotone"
                 dataKey="percentage"
                 name="Result"
-                stroke="#181c14"
+                stroke={chartTheme.primary}
                 strokeWidth={3}
-                dot={{ r: 5, fill: '#bef264', stroke: '#181c14' }}
+                dot={{ r: 5, fill: chartTheme.primary, stroke: chartTheme.primary }}
                 activeDot={{ r: 6 }}
                 isAnimationActive={false}
               />

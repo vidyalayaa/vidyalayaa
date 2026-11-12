@@ -66,7 +66,7 @@ export default function HomeworkDiary({ basePath = '/homework' }: { basePath?: s
           ) : undefined
         }
       />
-      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-white p-5">
+      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-surface p-5">
         <Button
           variant="outline"
           aria-label="Previous date"
@@ -120,7 +120,7 @@ export default function HomeworkDiary({ basePath = '/homework' }: { basePath?: s
       )}
       <div className="grid items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside
-          className="rounded-2xl border border-line bg-white p-5"
+          className="rounded-2xl border border-line bg-surface p-5"
           aria-label="Homework calendar"
         >
           <div className="mb-4 flex items-center justify-between">
@@ -167,7 +167,7 @@ export default function HomeworkDiary({ basePath = '/homework' }: { basePath?: s
                   aria-label={`${date}, ${count} homework`}
                   aria-pressed={day === date}
                   onClick={() => select(date)}
-                  className={`relative min-h-10 rounded-lg text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600 ${day === date ? 'bg-ink text-white' : count ? 'bg-lime-100 text-ink' : 'hover:bg-stone-100'} ${date === today ? 'ring-1 ring-lime-600' : ''}`}
+                  className={`relative min-h-10 rounded-lg text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${day === date ? 'bg-action text-on-action' : count ? 'bg-lime-100 text-ink' : 'hover:bg-stone-100'} ${date === today ? 'ring-1 ring-focus' : ''}`}
                 >
                   {i + 1}
                   {count > 0 && (
@@ -208,7 +208,7 @@ export default function HomeworkDiary({ basePath = '/homework' }: { basePath?: s
                     {rows.map((row) => (
                       <article
                         key={row.id}
-                        className="rounded-2xl border border-line bg-white p-5 sm:p-6"
+                        className="rounded-2xl border border-line bg-surface p-5 sm:p-6"
                       >
                         <div className="flex flex-wrap justify-between gap-3">
                           <div>

@@ -66,7 +66,7 @@ export default function AttendanceRuleBuilder({
   };
 
   return (
-    <div className="space-y-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-xs">
+    <div className="space-y-6 rounded-2xl border border-stone-200 bg-surface p-5 shadow-xs">
       {/* Visual Timeline Bar */}
       <div className="rounded-xl bg-stone-50 p-4 border border-stone-100">
         <div className="flex items-center justify-between text-xs font-semibold text-stone-600 mb-2">
@@ -76,7 +76,7 @@ export default function AttendanceRuleBuilder({
           </span>
           <span className="text-[11px] text-stone-400 font-mono">Cutoff: {rule.absent_cutoff}</span>
         </div>
-        <div className="flex h-7 w-full overflow-hidden rounded-lg font-mono text-[10px] font-semibold text-white shadow-inner">
+        <div className="flex h-7 w-full overflow-hidden rounded-lg font-mono text-[10px] font-semibold shadow-inner">
           <div
             className="flex items-center justify-center bg-stone-300 px-2 text-stone-700"
             style={{ flex: 1.5 }}
@@ -85,21 +85,21 @@ export default function AttendanceRuleBuilder({
             Open {rule.arrival.earliest_accept}
           </div>
           <div
-            className="flex items-center justify-center bg-green-500 px-2"
+            className="flex items-center justify-center bg-green-50 px-2 text-green-900"
             style={{ flex: 2 }}
             title={`On-time arrival: ${rule.arrival.on_time_start} - ${rule.arrival.on_time_end}`}
           >
             On-time ({rule.arrival.on_time_start}–{rule.arrival.on_time_end})
           </div>
           <div
-            className="flex items-center justify-center bg-amber-500 px-2"
+            className="flex items-center justify-center bg-amber-50 px-2 text-amber-900"
             style={{ flex: 2 }}
             title={`Late window: up to ${rule.arrival.late_end}`}
           >
             Late (–{rule.arrival.late_end})
           </div>
           <div
-            className="flex items-center justify-center bg-blue-500 px-2"
+            className="flex items-center justify-center bg-blue-50 px-2 text-blue-900"
             style={{ flex: 2 }}
             title={`Departure: ${rule.departure.normal.start} - ${rule.departure.normal.end}`}
           >
@@ -301,7 +301,7 @@ export default function AttendanceRuleBuilder({
                 type="checkbox"
                 checked={rule.notify[kind]}
                 onChange={() => toggleNotify(kind)}
-                className="rounded border-stone-300 text-lime-600 focus:ring-lime-500"
+                className="rounded border-stone-300 text-lime-700 focus:ring-lime-500"
               />
               <span className="capitalize">{kind} Alerts</span>
             </label>

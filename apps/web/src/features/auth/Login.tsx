@@ -22,6 +22,7 @@ import {
 } from '../../lib/auth';
 import { safeReturnTo } from '../../lib/auth-return';
 import { Button } from '../../components/ui/button';
+import { ThemeSelect } from '../../components/ThemeSelect';
 export default function Login() {
   const navigate = useNavigate(),
     [params] = useSearchParams(),
@@ -69,12 +70,12 @@ export default function Login() {
             FOR THE PEOPLE WHO MAKE A SCHOOL
           </span>
           <h1>
-            Less scattered.
+            Less scattered.{' '}
             <br />
             More connected.
           </h1>
           <p>
-            A thoughtful home for your school’s everyday.
+            A thoughtful home for your school's everyday.{' '}
             <br />
             Students, staff, and families. Together.
           </p>
@@ -102,9 +103,12 @@ export default function Login() {
         </div>
       </section>
       <section className="login-form-area">
-        <Link to="/" className="login-back">
-          Back to workspace <ArrowUpRight size={14} />
-        </Link>
+        <div className="login-tools">
+          <Link to="/" className="login-back">
+            Back to workspace <ArrowUpRight size={14} />
+          </Link>
+          <ThemeSelect compact />
+        </div>
         <div className="login-form-box">
           <span className="eyebrow">YOUR SCHOOL, IN SYNC</span>
           <h2>

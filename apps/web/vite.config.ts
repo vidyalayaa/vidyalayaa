@@ -1,6 +1,27 @@
 import { defineConfig, type Plugin } from 'vite';
 import { createServer, connect, type Server, type Socket } from 'node:net';
 import react from '@vitejs/plugin-react';
+
+function themeBootstrap(): Plugin {
+  let authUrl: string;
+  return {
+    name: 'theme-bootstrap',
+    configResolved(config) {
+      const fixtureUrl = config.define?.['import.meta.env.VITE_SUPABASE_URL'];
+      authUrl = fixtureUrl ? JSON.parse(fixtureUrl as string) : config.env.VITE_SUPABASE_URL || '';
+    },
+    transformIndexHtml() {
+      return [
+        {
+          tag: 'script',
+          attrs: { src: '/theme-start.js', 'data-auth-url': authUrl },
+          injectTo: 'head-prepend',
+        },
+      ];
+    },
+  };
+}
+
 // Serve both loopback families without exposing the development server to the LAN.
 function loopbackAliases(): Plugin {
   return {
@@ -37,7 +58,7 @@ function loopbackAliases(): Plugin {
   };
 }
 export default defineConfig({
-  plugins: [react(), loopbackAliases()],
+  plugins: [react(), loopbackAliases(), themeBootstrap()],
   // Use fresh dependency URLs for browsers that cached the old optimized React graph.
   cacheDir: 'node_modules/.vite-vidyalayaa',
   resolve: { dedupe: ['react', 'react-dom'] },

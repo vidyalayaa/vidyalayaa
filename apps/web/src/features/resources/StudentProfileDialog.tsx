@@ -178,7 +178,7 @@ export default function StudentProfileDialog({
       ) : d ? (
         <div className="space-y-6">
           {/* Header Summary Banner */}
-          <div className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-stone-50 via-white to-stone-50/50 p-5 shadow-sm">
+          <div className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-stone-50 via-surface to-stone-50/50 p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <PersonAvatar
@@ -257,7 +257,7 @@ export default function StudentProfileDialog({
 
             {/* Quick Metrics Bar */}
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl bg-white p-3 border border-stone-100 shadow-xs">
+              <div className="rounded-xl bg-surface p-3 border border-stone-100 shadow-xs">
                 <span className="text-xs font-medium text-stone-500">30-Day Attendance</span>
                 <div className="mt-1 flex items-baseline gap-2">
                   <span className="text-lg font-bold text-stone-900">
@@ -269,7 +269,7 @@ export default function StudentProfileDialog({
                 </div>
               </div>
 
-              <div className="rounded-xl bg-white p-3 border border-stone-100 shadow-xs">
+              <div className="rounded-xl bg-surface p-3 border border-stone-100 shadow-xs">
                 <span className="text-xs font-medium text-stone-500">Today's Status</span>
                 <div className="mt-1">
                   <Badge>
@@ -278,7 +278,7 @@ export default function StudentProfileDialog({
                 </div>
               </div>
 
-              <div className="rounded-xl bg-white p-3 border border-stone-100 shadow-xs">
+              <div className="rounded-xl bg-surface p-3 border border-stone-100 shadow-xs">
                 <span className="text-xs font-medium text-stone-500">Active NFC Card</span>
                 <div className="mt-1">
                   {d.card ? (
@@ -296,7 +296,7 @@ export default function StudentProfileDialog({
                 </div>
               </div>
 
-              <div className="rounded-xl bg-white p-3 border border-stone-100 shadow-xs">
+              <div className="rounded-xl bg-surface p-3 border border-stone-100 shadow-xs">
                 <span className="text-xs font-medium text-stone-500">Outstanding Fees</span>
                 <div className="mt-1">
                   <span
@@ -402,7 +402,7 @@ export default function StudentProfileDialog({
                     {d.parents.map((p) => (
                       <div
                         key={p.id}
-                        className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-xs"
+                        className="rounded-xl border border-stone-200/90 bg-surface p-4 shadow-xs"
                       >
                         <div className="flex items-center justify-between">
                           <h4 className="font-semibold text-stone-900">{p.full_name}</h4>
@@ -570,7 +570,7 @@ export default function StudentProfileDialog({
               </div>
 
               {d.attendance.today && (
-                <div className="rounded-xl border border-stone-200 bg-white p-4">
+                <div className="rounded-xl border border-stone-200 bg-surface p-4">
                   <h4 className="font-semibold text-stone-900 text-sm">
                     Today's Recorded Movement
                   </h4>

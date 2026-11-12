@@ -81,7 +81,7 @@ export default function AcademicYears() {
         <YearHistory key={a.school} workspace={q.data} />
       ) : (
         <>
-          <div className="mb-6 rounded-2xl border border-line bg-white p-5">
+          <div className="mb-6 rounded-2xl border border-line bg-surface p-5">
             <h2 className="text-lg font-semibold">
               Prepare → Map classes & students → Review & activate
             </h2>
@@ -164,7 +164,7 @@ function PrepareYear({
     );
   return (
     <form
-      className="space-y-6 rounded-2xl border border-line bg-white p-5 sm:p-7"
+      className="space-y-6 rounded-2xl border border-line bg-surface p-5 sm:p-7"
       onSubmit={async (e) => {
         e.preventDefault();
         if (busy.current) return;
@@ -292,7 +292,7 @@ function PrepareYear({
         <label className="flex items-start gap-3 text-sm">
           <input
             type="checkbox"
-            className="mt-1 accent-lime-600"
+            className="mt-1 accent-focus"
             checked={teaching}
             onChange={(e) => {
               setTeaching(e.target.checked);
@@ -304,7 +304,7 @@ function PrepareYear({
         <label className="flex items-start gap-3 text-sm">
           <input
             type="checkbox"
-            className="mt-1 accent-lime-600"
+            className="mt-1 accent-focus"
             checked={timetable}
             disabled={!teaching || !timetableAvailable}
             onChange={(e) => setTimetable(e.target.checked)}
@@ -314,7 +314,7 @@ function PrepareYear({
         <label className="flex items-start gap-3 text-sm">
           <input
             type="checkbox"
-            className="mt-1 accent-lime-600"
+            className="mt-1 accent-focus"
             checked={fees}
             onChange={(e) => setFees(e.target.checked)}
           />
@@ -506,7 +506,7 @@ function PlanForm({
   }
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-line bg-white p-5 sm:p-7">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
         <h2 className="text-xl font-semibold">3. Map classes & sections</h2>
         <p className="mt-2 text-sm leading-7 text-stone-600">
           {source.name} → {target.name}. Students receive the destination class’s subjects,
@@ -644,7 +644,7 @@ function PlanForm({
           })}
         </div>
       </section>
-      <section className="rounded-2xl border border-line bg-white p-5 sm:p-7">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
         <h2 className="text-xl font-semibold">4. Review student exceptions</h2>
         <p className="mt-2 text-sm leading-7 text-stone-600">
           Students use their class outcome unless you add an exception. Give a reason for individual
@@ -677,7 +677,7 @@ function PlanForm({
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      className="accent-lime-600"
+                      className="accent-focus"
                       aria-label={`Override ${s.student_code}`}
                       checked={!!ex}
                       disabled={pending}
@@ -778,12 +778,12 @@ function PlanForm({
           </div>
         </div>
       </section>
-      <section className="rounded-2xl border border-line bg-white p-5 sm:p-7">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
         <h2 className="text-xl font-semibold">5. Fees & final preview</h2>
         <label className="my-5 flex items-start gap-3 text-sm">
           <input
             type="checkbox"
-            className="mt-1 accent-lime-600"
+            className="mt-1 accent-focus"
             checked={plan.generate_fees}
             disabled={pending}
             onChange={(e) => change({ ...plan, generate_fees: e.target.checked })}
@@ -808,7 +808,7 @@ function PlanForm({
       )}
       {preview && (
         <section
-          className="space-y-5 rounded-2xl border border-line bg-white p-5 sm:p-7"
+          className="space-y-5 rounded-2xl border border-line bg-surface p-5 sm:p-7"
           aria-label="Promotion preview"
         >
           <h2 className="text-xl font-semibold">6. Review & confirm activation</h2>

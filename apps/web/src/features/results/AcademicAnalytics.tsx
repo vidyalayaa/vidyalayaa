@@ -60,7 +60,7 @@ export default function AcademicAnalytics({
     <>
       <section
         aria-label="Academic analytics filters"
-        className="mb-6 grid gap-4 rounded-2xl border border-line bg-white p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4"
+        className="mb-6 grid gap-4 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4"
       >
         <ResultFilter
           label="Academic session"
@@ -205,7 +205,7 @@ function AnalyticsOverview({
           },
         ].map(({ title, value, detail, Icon }) => (
           <section
-            className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5"
+            className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5"
             key={title}
           >
             <span className="inline-flex rounded-xl bg-lime-100 p-2 text-lime-950">
@@ -217,7 +217,7 @@ function AnalyticsOverview({
           </section>
         ))}
       </div>
-      <section className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+      <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
         <h2 className="font-semibold">Class-wise statistics</h2>
         <p className="mt-1 text-sm text-stone-600">
           Appeared counts students with recorded scores.{' '}
@@ -306,7 +306,7 @@ function AnalyticsOverview({
           trend
         />
       </div>
-      <section className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+      <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
         <h2 className="font-semibold">Overall school toppers</h2>
         {filtered && (
           <p className="mt-1 text-sm text-stone-600">
@@ -321,7 +321,7 @@ function AnalyticsOverview({
           {data.classes.map((item) => (
             <section
               key={item.exam_id}
-              className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5"
+              className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5"
             >
               <h3 className="font-semibold">{classroom(item)}</h3>
               <Button size="sm" variant="outline" className="mt-2" onClick={() => openResult(item)}>
@@ -403,7 +403,7 @@ function ChartPanel({
   trend?: boolean;
 }) {
   return (
-    <section className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5">
+    <section className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5">
       <h2 className="font-semibold">{title}</h2>
       <p className="mt-1 text-sm text-stone-600">{detail}</p>
       <Suspense fallback={<Loading />}>

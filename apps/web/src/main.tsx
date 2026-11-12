@@ -14,6 +14,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resourceNames, type Resource } from '@vidyalayaa/contracts';
 import { AuthProvider, configured, useAuth, HttpError } from './lib/auth';
+import { ThemeProvider } from './lib/theme';
 import Layout from './components/Layout';
 import { Loading, ErrorState, Empty } from './components/common';
 import AuthenticatorSetup from './features/auth/AuthenticatorSetup';
@@ -110,7 +111,7 @@ function Guard() {
     );
   if (a.error instanceof HttpError && a.error.code === 'SCHOOL_LOGIN_DISABLED')
     return (
-      <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-white p-8">
+      <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-surface p-8">
         <h1 className="text-xl font-semibold">School sign-in paused</h1>
         <p className="my-4">{a.error.message}</p>
         <div className="flex flex-wrap gap-4">
@@ -128,7 +129,7 @@ function Guard() {
   if (a.error) return <ErrorState error={a.error} retry={a.refetch} />;
   if (a.me?.security_mfa_required)
     return (
-      <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-white p-8">
+      <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-surface p-8">
         <h1 className="text-xl font-semibold">Secure your account</h1>
         <p className="my-4">
           Your role requires an authenticator. Enroll and verify it to continue.
@@ -489,6 +490,7 @@ import SplashScreen from './components/SplashScreen';
 
 function App() {
   const [showSplash, setShowSplash] = React.useState(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
     if (sessionStorage.getItem('vidyalayaa_splash_shown')) return false;
     sessionStorage.setItem('vidyalayaa_splash_shown', '1');
     return true;
@@ -496,13 +498,15 @@ function App() {
   const hideSplash = React.useCallback(() => setShowSplash(false), []);
   return (
     <React.StrictMode>
-      {showSplash && <SplashScreen onFinished={hideSplash} />}
       <Boundary>
         <QueryClientProvider client={client}>
           <AuthProvider>
-            <Suspense fallback={<Loading />}>
-              <RouterProvider router={router} />
-            </Suspense>
+            <ThemeProvider>
+              {showSplash && <SplashScreen onFinished={hideSplash} />}
+              <Suspense fallback={<Loading />}>
+                <RouterProvider router={router} />
+              </Suspense>
+            </ThemeProvider>
           </AuthProvider>
         </QueryClientProvider>
       </Boundary>

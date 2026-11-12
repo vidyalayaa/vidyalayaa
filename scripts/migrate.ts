@@ -5,7 +5,9 @@ import { readFile, readdir } from 'node:fs/promises';
 import {
   canonicalMigration,
   matchesMigrationDigest,
+  matchesPermanentSchoolDeletionDraft,
   migrationDigest,
+  permanentSchoolDeletionUpgrade,
 } from './lib/migration-checksums.js';
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url)
@@ -33,16 +35,30 @@ try {
     await client.query(
       'CREATE SCHEMA IF NOT EXISTS app; CREATE TABLE IF NOT EXISTS app.schema_migrations(version text PRIMARY KEY,sha256 text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())',
     );
-    for (const file of (await readdir('db/migrations')).filter((x) => x.endsWith('.sql')).sort()) {
+    const migrations = (await readdir('db/migrations')).filter((x) => x.endsWith('.sql')).sort();
+    const { repair, repairDigest } = permanentSchoolDeletionUpgrade;
+    for (const [index, file] of migrations.entries()) {
       const source = await readFile(`db/migrations/${file}`, 'utf8'),
         sql = canonicalMigration(source),
-        sha = migrationDigest(sql),
-        old = await client.query('SELECT sha256 FROM app.schema_migrations WHERE version=$1', [
-          file,
-        ]);
+        sha = migrationDigest(sql);
+      if (file === repair && sha !== repairDigest)
+        throw new Error(`School deletion upgrade checksum changed: ${file}`);
+      const old = await client.query('SELECT sha256 FROM app.schema_migrations WHERE version=$1', [
+        file,
+      ]);
       if (old.rowCount) {
-        if (!matchesMigrationDigest(source, old.rows[0].sha256))
-          throw new Error(`Applied migration checksum changed: ${file}`);
+        const recorded = old.rows[0].sha256;
+        if (!matchesMigrationDigest(source, recorded)) {
+          if (
+            !matchesPermanentSchoolDeletionDraft(file, sha, recorded) ||
+            migrations[index + 1] !== repair
+          ) {
+            throw new Error(
+              `Applied migration checksum changed: ${file}\nRecorded SHA-256: ${recorded}\nCheckout SHA-256 (LF): ${sha}`,
+            );
+          }
+          console.info(`Verified an earlier version of ${file}. Checking ${repair} next.`);
+        }
         continue;
       }
       await client.query('BEGIN');

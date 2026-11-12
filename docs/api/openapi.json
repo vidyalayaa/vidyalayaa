@@ -3570,8 +3570,8 @@
               ],
               "additionalProperties": false
             },
-            "maxItems": 1,
-            "minItems": 1
+            "minItems": 1,
+            "maxItems": 1
           }
         },
         "required": [
@@ -12812,6 +12812,586 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/calendar/options": {
+      "get": {
+        "summary": "Authorized attendance sessions and classes",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/calendar": {
+      "get": {
+        "summary": "Daily working schedule and attendance counts for a period of up to 366 days",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/calendar/day": {
+      "get": {
+        "summary": "Paginated authorized records for one calendar date",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "PRESENT",
+                "ABSENT",
+                "LATE",
+                "HALF_DAY",
+                "EXCUSED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/attendance/calendar/students": {
+      "get": {
+        "summary": "Staff lookup of students within the attendance filters",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/parent/children/{childId}/attendance/calendar/options": {
+      "get": {
+        "summary": "Authorized attendance sessions and classes",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "childId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/parent/children/{childId}/attendance/calendar": {
+      "get": {
+        "summary": "Daily working schedule and attendance counts for a period of up to 366 days",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "childId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/parent/children/{childId}/attendance/calendar/day": {
+      "get": {
+        "summary": "Paginated authorized records for one calendar date",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "childId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "PRESENT",
+                "ABSENT",
+                "LATE",
+                "HALF_DAY",
+                "EXCUSED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         ],

@@ -138,7 +138,7 @@ export default function SchoolResults() {
         <>
           <section
             aria-label="Student result filters"
-            className="mb-6 grid gap-4 rounded-2xl border border-line bg-white p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-5"
+            className="mb-6 grid gap-4 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-5"
           >
             <ResultFilter
               label="Academic session"

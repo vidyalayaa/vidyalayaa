@@ -15,6 +15,7 @@ import {
 } from '../../lib/auth';
 import { PageHeading, Panel, Loading, ErrorState } from '../../components/common';
 import { Button } from '../../components/ui/button';
+import { AppearanceSettings } from '../../components/ThemeSelect';
 
 export default function AccountSettings() {
   const auth = useAuth();
@@ -74,6 +75,7 @@ export default function AccountSettings() {
           </Button>
         }
       />
+      <AppearanceSettings className="mb-6" />
       {state.isLoading ? (
         <Loading />
       ) : state.error ? (

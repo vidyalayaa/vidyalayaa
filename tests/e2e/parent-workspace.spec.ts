@@ -42,13 +42,22 @@ test('parents switch children across every section and cannot open another famil
     page.getByRole('heading', { name: 'School-wide announcement', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('Staff private announcement', { exact: true })).toHaveCount(0);
+  const attendanceDate = (
+    await platformApp.db.query<{ date: string }>(
+      'SELECT attendance_date::text AS date FROM daily_attendance WHERE id=$1',
+      [s.days[s.sibling]],
+    )
+  ).rows[0].date;
   await page.goto(authAppURL + '/parent/attendance');
-  await expect(page.getByRole('button', { name: 'Request correction', exact: true })).toBeVisible();
   await expect(
     page.getByRole('button', { name: /Mark attendance|Class register|Manual/i }),
   ).toHaveCount(0);
+  await page.getByLabel('From date', { exact: true }).fill(attendanceDate);
+  await page.getByLabel('To date', { exact: true }).fill(attendanceDate);
+  await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
+  await page.locator(`[data-date="${attendanceDate}"]`).click();
   await page.getByRole('button', { name: 'Request correction', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('dialog', { name: /Request attendance correction/ });
   await dialog.locator('textarea').fill('Please review the arrival time for this child.');
   await dialog.getByRole('button', { name: /Save|Submit/i }).click();
   await expect(dialog).toHaveCount(0);

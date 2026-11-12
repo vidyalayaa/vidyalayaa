@@ -137,7 +137,7 @@ export default function StudentDirectory() {
           {exportError}
         </p>
       )}
-      <div className="mb-6 flex flex-wrap gap-4 rounded-2xl border border-stone-200 bg-white p-4">
+      <div className="mb-6 flex flex-wrap gap-4 rounded-2xl border border-stone-200 bg-surface p-4">
         <label className="min-w-0 flex-1 basis-full text-sm sm:basis-0">
           Find a student
           <input
@@ -199,9 +199,9 @@ export default function StudentDirectory() {
                       [c.academic_session_id + ':' + c.grade]: open,
                     }));
                   }}
-                  className="group rounded-2xl border border-stone-200 bg-white"
+                  className="group rounded-2xl border border-stone-200 bg-surface"
                 >
-                  <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
                     <span className="rounded-xl bg-lime-100 p-3">
                       <GraduationCap size={22} />
                     </span>
@@ -248,9 +248,9 @@ export default function StudentDirectory() {
                 const open = e.currentTarget.open;
                 setExpanded((old) => ({ ...old, unassigned: open }));
               }}
-              className="rounded-2xl border border-stone-200 bg-white"
+              className="rounded-2xl border border-stone-200 bg-surface"
             >
-              <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600">
+              <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
                 <Users size={22} />
                 <div className="flex-1">
                   <h2 className="font-semibold">Not currently enrolled</h2>
@@ -371,7 +371,7 @@ function Roster({
                 aria-label={`Student ${s.student_code}`}
               >
                 <button
-                  className="block w-full rounded-xl p-4 text-left transition-colors hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600"
+                  className="block w-full rounded-xl p-4 text-left transition-colors hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                   onClick={() => profile(s.id)}
                 >
                   <span className="flex items-center gap-3 font-semibold">

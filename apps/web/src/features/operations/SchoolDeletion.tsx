@@ -326,16 +326,21 @@ export function SchoolDeletionApproval() {
     <Panel
       title="Permanent deletion approval"
       subtitle={`This request expires ${date(request.approval_expires_at)}.`}
+      className="[&>.panel-heading]:flex-wrap [&>.panel-heading]:py-4"
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          className="ml-auto shrink-0"
+          onClick={() => {
+            setError('');
+            setOpen(true);
+          }}
+        >
+          Review deletion request
+        </Button>
+      }
     >
-      <Button
-        variant="outline"
-        onClick={() => {
-          setError('');
-          setOpen(true);
-        }}
-      >
-        Review deletion request
-      </Button>
       <Dialog
         open={open}
         title="Approve permanent school deletion?"

@@ -132,6 +132,7 @@ export default function AuthenticatorSetup() {
         <div className="mt-5">
           <img
             alt="Scan this QR code with your authenticator app"
+            className="bg-paper"
             src={enrollment.qrCode}
             width={180}
             height={180}

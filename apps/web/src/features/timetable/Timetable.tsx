@@ -92,7 +92,7 @@ export default function Timetable({ basePath = '/timetable' }: { basePath?: stri
       />
       {teacher && (
         <div
-          className="mb-5 flex w-fit gap-1 rounded-xl border border-line bg-white p-1"
+          className="mb-5 flex w-fit gap-1 rounded-xl border border-line bg-surface p-1"
           role="tablist"
           aria-label="Timetable views"
         >
@@ -154,7 +154,7 @@ export default function Timetable({ basePath = '/timetable' }: { basePath?: stri
         role={teacher ? 'tabpanel' : undefined}
         aria-labelledby={teacher ? `timetable-tab-${view}` : undefined}
       >
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-5">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-stone-200 bg-surface p-5">
           {!mine && (
             <div className="w-full sm:max-w-md">
               <label className="field-label" htmlFor="timetable-class">
@@ -245,7 +245,7 @@ export default function Timetable({ basePath = '/timetable' }: { basePath?: stri
             ) : (
               <section
                 aria-label={mine ? 'Weekly teacher timetable' : 'Weekly class timetable'}
-                className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 sm:p-6"
+                className="min-w-0 rounded-2xl border border-stone-200 bg-surface p-4 sm:p-6"
               >
                 <h2 className="mb-4 flex flex-wrap items-center gap-2 text-lg font-semibold">
                   <CalendarDays size={20} />
@@ -295,7 +295,7 @@ export default function Timetable({ basePath = '/timetable' }: { basePath?: stri
                         <tr key={row.key} className={row.kind === 'break' ? 'bg-lime-50/60' : ''}>
                           <th
                             scope="row"
-                            className="sticky left-0 z-10 border-b border-stone-200 bg-white p-3 text-left align-top"
+                            className="sticky left-0 z-10 border-b border-stone-200 bg-surface p-3 text-left align-top"
                           >
                             <span className="block font-semibold">{row.label}</span>
                             <span className="mt-1 block text-xs font-normal text-stone-600">

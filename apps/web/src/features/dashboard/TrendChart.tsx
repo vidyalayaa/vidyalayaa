@@ -1,4 +1,5 @@
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { chartTheme } from '../../lib/chart-theme';
 export default function TrendChart({
   data,
 }: {
@@ -9,7 +10,7 @@ export default function TrendChart({
       <div className="h-60" role="img" aria-label="Attendance totals over the last seven days">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} barGap={4}>
-            <CartesianGrid vertical={false} stroke="#e9ebe5" strokeDasharray="4 4" />
+            <CartesianGrid vertical={false} stroke={chartTheme.grid} strokeDasharray="4 4" />
             <XAxis
               dataKey="date"
               axisLine={false}
@@ -17,21 +18,21 @@ export default function TrendChart({
               tickFormatter={(d) =>
                 new Date(`${d}T12:00:00`).toLocaleDateString('en', { weekday: 'short' })
               }
-              tick={{ fontSize: 12, fill: '#777' }}
+              tick={{ fontSize: 12, fill: chartTheme.label }}
             />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#777' }} />
-            <Tooltip cursor={{ fill: '#f6f7f3' }} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: chartTheme.label }} />
+            <Tooltip {...chartTheme.tooltip} cursor={{ fill: 'var(--surface-hover)' }} />
             <Bar
               dataKey="present"
               name="Present"
-              fill="#b9e95b"
+              fill={chartTheme.primary}
               radius={[5, 5, 0, 0]}
               maxBarSize={22}
             />
             <Bar
               dataKey="total"
               name="Enrolled records"
-              fill="#e7ebdf"
+              fill={chartTheme.secondary}
               radius={[5, 5, 0, 0]}
               maxBarSize={22}
             />

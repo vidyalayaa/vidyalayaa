@@ -3,6 +3,7 @@ import { homeworkRouter, scheduleHomework } from './homework.js';
 import { promotionRouter } from './promotion.js';
 import { schoolProfileRouter } from '../school-profile/router.js';
 import { parentWorkspaceRouter } from './parent-workspace.js';
+import { attendanceCalendarRouter } from './attendance-calendar.js';
 import { studentProfileRouter } from './student-profile.js';
 import { personProfilesRouter } from './person-profiles.js';
 import { subjectMaterialsRouter } from './materials.js';
@@ -195,6 +196,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   const router = Router();
   router.use('/school-profile', schoolProfileRouter(pool, storage, { requireWrite }));
   router.use('/parent', parentWorkspaceRouter(pool));
+  router.use('/attendance/calendar', attendanceCalendarRouter(pool));
   router.use('/student', studentProfileRouter(pool));
   router.use(
     '/profiles',
