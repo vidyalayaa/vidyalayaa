@@ -17,6 +17,7 @@ import { api } from '../../lib/auth';
 import { label, display } from '../../lib/utils';
 import { schoolPath } from '../../lib/portals';
 import { Loading, ErrorState } from '../../components/common';
+import { AppearanceSettings } from '../../components/ThemeSelect';
 export default function Settings() {
   const a = useAuth(),
     [error, setError] = useState(''),
@@ -149,6 +150,7 @@ export default function Settings() {
           <AuthenticatorSetup />
         </Panel>
       </div>
+      <AppearanceSettings className="mb-6" />
       {a.me?.school?.permissions.includes('school.manage') && <SecurityPolicy />}
       {a.me?.school?.role === 'parent' && <NotificationPrivacy />}
       <FamilyProfile />

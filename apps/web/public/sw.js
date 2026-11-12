@@ -1,6 +1,6 @@
 /* Vidyalayaa Service Worker - PWA & Push Notifications */
 const CACHE_NAME = 'vidyalayaa-pwa-v1';
-const PRECACHE_URLS = ['/', '/index.html', '/favicon.ico', '/manifest.json'];
+const PRECACHE_URLS = ['/', '/index.html', '/theme-start.js', '/favicon.ico', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

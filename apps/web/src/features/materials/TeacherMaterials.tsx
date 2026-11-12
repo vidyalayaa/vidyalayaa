@@ -54,7 +54,7 @@ export default function TeacherMaterials() {
             <button
               type="button"
               key={s.id}
-              className="rounded-2xl border border-line bg-white p-5 text-left hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-600"
+              className="rounded-2xl border border-line bg-surface p-5 text-left hover:border-lime-500 hover:bg-lime-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
               onClick={() =>
                 setSubject({
                   classId: selected.id,

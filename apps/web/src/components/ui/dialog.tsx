@@ -24,9 +24,9 @@ export function Dialog({
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>}
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-sm" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-scrim/55 backdrop-blur-sm" />
         <DialogPrimitive.Content
-          className={`dialog-content fixed left-1/2 top-1/2 z-50 flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${size === 'wide' ? 'lg:max-w-5xl xl:max-w-6xl' : ''}`}
+          className={`dialog-content fixed left-1/2 top-1/2 z-50 flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-raised shadow-2xl ${size === 'wide' ? 'lg:max-w-5xl xl:max-w-6xl' : ''}`}
           onEscapeKeyDown={dismissible ? undefined : (event) => event.preventDefault()}
           onInteractOutside={dismissible ? undefined : (event) => event.preventDefault()}
         >

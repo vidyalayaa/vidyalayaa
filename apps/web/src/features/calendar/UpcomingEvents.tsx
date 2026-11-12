@@ -20,7 +20,7 @@ export default function UpcomingEvents({ basePath = '/calendar' }: { basePath?: 
   return (
     <section
       aria-label="Upcoming school events"
-      className="mb-7 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6"
+      className="mb-7 rounded-2xl border border-stone-200 bg-surface p-5 sm:p-6"
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">

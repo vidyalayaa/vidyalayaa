@@ -1,4 +1,5 @@
 import PushUpdates from '../features/notifications/PushUpdates';
+import { ThemeSelect } from './ThemeSelect';
 import { OwnProfileAvatar } from '../features/profiles/PersonAvatar';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
@@ -467,6 +468,7 @@ export default function Layout() {
                 <kbd>↵</kbd>
               </form>
             )}
+            <ThemeSelect compact />
             <Link
               to={
                 platformOnly
@@ -578,7 +580,7 @@ export default function Layout() {
                 <p className="truncate text-xs text-stone-500">{a.me?.email}</p>
               </div>
               {a.me?.school?.school_name && (
-                <span className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-medium text-stone-600 shadow-sm">
+                <span className="rounded-lg border border-stone-200 bg-surface px-2 py-1 text-xs font-medium text-stone-600 shadow-sm">
                   {a.me.school.school_name}
                 </span>
               )}

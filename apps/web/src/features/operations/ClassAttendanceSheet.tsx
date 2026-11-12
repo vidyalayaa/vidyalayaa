@@ -248,7 +248,7 @@ export default function ClassAttendanceSheet({
                           disabled={save.isPending}
                           aria-pressed={statuses[s.student_id] === status}
                           aria-label={status.replaceAll('_', ' ')}
-                          className={`rounded px-2 py-1 font-semibold ${statuses[s.student_id] === status ? 'bg-lime-300 text-black' : 'bg-stone-100 text-stone-700'}`}
+                          className={`rounded px-2 py-1 font-semibold ${statuses[s.student_id] === status ? 'bg-lime-300 text-ink' : 'bg-stone-100 text-stone-700'}`}
                           onClick={() =>
                             setStatuses((prior) => ({ ...prior, [s.student_id]: status }))
                           }

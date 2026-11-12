@@ -6,6 +6,53 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem('vidyalayaa_splash_shown', '1'));
 });
 
+test('public theme follows system changes and applies immediately to sign-in and recovery', async ({
+  page,
+  authAppURL,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.goto(authAppURL + '/explore');
+  const root = page.locator('html');
+  const selector = page.getByRole('combobox', { name: 'Theme' });
+  const logo = page.locator('.explore-brand .brand-symbol').first();
+  await expect(selector).toHaveValue('system');
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await expect(root).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await expect(logo).toHaveCSS('background-color', 'rgb(199, 245, 91)');
+  const viewport = page.viewportSize()!;
+  for (const width of [320, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: viewport.height });
+    const bounds = (await selector.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+  }
+  await page.setViewportSize(viewport);
+  expect((await new AxeBuilder({ page }).withRules('color-contrast').analyze()).violations).toEqual(
+    [],
+  );
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await expect(logo).toHaveCSS('background-color', 'rgb(199, 245, 91)');
+  await selector.focus();
+  await expect(selector).toBeFocused();
+  await selector.selectOption('dark');
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+
+  await page.goto(authAppURL + '/login');
+  await expect(selector).toHaveValue('dark');
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+  await expect(page.locator('.login-page')).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await expect(page.locator('.login-story')).toHaveCSS('background-color', 'rgb(199, 245, 91)');
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await expect(page.getByRole('button', { name: 'Send recovery link' })).toBeVisible();
+  expect((await new AxeBuilder({ page }).withRules('color-contrast').analyze()).violations).toEqual(
+    [],
+  );
+  await selector.selectOption('light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(root).toHaveAttribute('data-theme', 'light');
+});
+
 async function newAccount(page: Page) {
   const user = {
     id: '00000000-0000-4000-8000-000000009501',

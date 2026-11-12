@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Compass, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { ThemeSelect } from '../../components/ThemeSelect';
 import PendingInvitations from '../auth/PendingInvitations';
 import { ExploreBrand } from './Explore';
 import './explore.css';
@@ -27,15 +28,18 @@ export default function SchoolWelcome() {
     <div className="school-welcome">
       <header className="explore-container school-welcome-header">
         <ExploreBrand />
-        <button
-          className="explore-button explore-button-light"
-          type="button"
-          disabled={pending}
-          onClick={signOut}
-        >
-          <LogOut size={16} />
-          {pending ? 'Signing out…' : 'Sign out'}
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeSelect compact />
+          <button
+            className="explore-button explore-button-light"
+            type="button"
+            disabled={pending}
+            onClick={signOut}
+          >
+            <LogOut size={16} />
+            {pending ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
       </header>
       <main className="school-welcome-main">
         <div className="school-welcome-symbol" aria-hidden="true">

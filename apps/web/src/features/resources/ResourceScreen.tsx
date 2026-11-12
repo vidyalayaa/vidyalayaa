@@ -782,7 +782,7 @@ export function ResourceForm({
             ) : f.type === 'checkbox' ? (
               <input
                 id={f.key}
-                className="size-5 accent-lime-600"
+                className="size-5 accent-focus"
                 type="checkbox"
                 {...form.register(f.key)}
               />

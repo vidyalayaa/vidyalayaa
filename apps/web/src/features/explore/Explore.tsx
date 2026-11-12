@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { ThemeSelect } from '../../components/ThemeSelect';
 import './explore.css';
 
 const roles = [
@@ -180,20 +181,23 @@ export default function Explore() {
             <a href="#people">For your people</a>
             <a href="#getting-started">Getting started</a>
           </nav>
-          <Link className="explore-button explore-button-dark explore-header-cta" to={entryPath}>
-            {entryLabel}
-            <ArrowUpRight size={16} />
-          </Link>
-          <button
-            className="explore-menu-button"
-            type="button"
-            aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
-            aria-expanded={menuOpen}
-            aria-controls="explore-mobile-nav"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            {menuOpen ? <X /> : <Menu />}
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeSelect compact />
+            <Link className="explore-button explore-button-dark explore-header-cta" to={entryPath}>
+              {entryLabel}
+              <ArrowUpRight size={16} />
+            </Link>
+            <button
+              className="explore-menu-button"
+              type="button"
+              aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={menuOpen}
+              aria-controls="explore-mobile-nav"
+              onClick={() => setMenuOpen(!menuOpen)}
+            >
+              {menuOpen ? <X /> : <Menu />}
+            </button>
+          </div>
         </div>
         {menuOpen && (
           <nav

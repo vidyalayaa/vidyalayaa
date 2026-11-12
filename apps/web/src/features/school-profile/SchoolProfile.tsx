@@ -83,7 +83,7 @@ export default function SchoolProfile() {
           </>
         }
       />
-      <div className="mb-7 overflow-hidden rounded-3xl border border-line bg-white">
+      <div className="mb-7 overflow-hidden rounded-3xl border border-line bg-surface">
         <div className="h-3 bg-lime-300" />
         <div className="flex flex-wrap items-center gap-5 p-6 sm:p-8">
           {logo ? (
@@ -126,7 +126,7 @@ export default function SchoolProfile() {
             aria-label="School profile completion"
             value={p.completion.percent}
             max={100}
-            className="h-2 w-full accent-lime-600"
+            className="h-2 w-full accent-focus"
           />
           <p className="mt-3 text-sm text-stone-600">
             {p.completion.complete} of {p.completion.total} required details completed. Save your
@@ -163,7 +163,7 @@ export default function SchoolProfile() {
       ) : (
         <div className="space-y-6">
           <section
-            className="rounded-2xl border border-line bg-white p-5 sm:p-7"
+            className="rounded-2xl border border-line bg-surface p-5 sm:p-7"
             aria-label="School contacts"
           >
             <h2 className="mb-5 text-xl font-semibold">Stay connected</h2>
@@ -182,7 +182,7 @@ export default function SchoolProfile() {
             <section
               key={g.id}
               id={g.id}
-              className="rounded-2xl border border-line bg-white p-5 sm:p-7"
+              className="rounded-2xl border border-line bg-surface p-5 sm:p-7"
             >
               <h2 className="mb-5 text-xl font-semibold">{g.title}</h2>
               <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -242,7 +242,7 @@ export default function SchoolProfile() {
       )}
       <section
         aria-label="School timings"
-        className="mt-6 rounded-2xl border border-line bg-white p-5 sm:p-7"
+        className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-7"
       >
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 text-xl font-semibold">
@@ -294,7 +294,7 @@ export default function SchoolProfile() {
         />
       )}
       {!editing && (
-        <section className="mt-6 rounded-2xl border border-line bg-white p-5 sm:p-7">
+        <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-7">
           <h2 className="mb-5 text-xl font-semibold">School images & policy documents</h2>
           {!!images.length && (
             <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -319,7 +319,7 @@ export default function SchoolProfile() {
           />
         </section>
       )}
-      <section className="mt-6 rounded-2xl border border-line bg-white p-5 sm:p-7">
+      <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-7">
         <h2 className="mb-5 text-xl font-semibold">School announcements</h2>
         {p.announcements.length ? (
           p.announcements.map((n) => (
@@ -477,7 +477,7 @@ function ProfileForm({
         checklist. Use official school contacts in sections visible to families.
       </p>
       <fieldset disabled={save.isPending} className="min-w-0 space-y-6">
-        <section className="rounded-2xl border border-line bg-white p-5 sm:p-7">
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
           <h2 className="mb-5 text-xl font-semibold">School account details</h2>
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="text-sm">
@@ -526,7 +526,7 @@ function ProfileForm({
           </div>
         </section>
         {profileGroups.map((g) => (
-          <section key={g.id} className="rounded-2xl border border-line bg-white p-5 sm:p-7">
+          <section key={g.id} className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
             <h2 className="text-xl font-semibold">{g.title}</h2>
             <p className="mb-5 mt-2 text-sm text-stone-500">{g.description}</p>
             <div className="grid gap-5 sm:grid-cols-2">
@@ -647,7 +647,7 @@ function ProfileForm({
               ))}
             </div>
             {p.can_delegate && (
-              <label className="mt-6 flex items-start gap-3 rounded-xl border border-line bg-white p-4 text-sm">
+              <label className="mt-6 flex items-start gap-3 rounded-xl border border-line bg-surface p-4 text-sm">
                 <input
                   type="checkbox"
                   className="mt-1"
@@ -669,7 +669,7 @@ function ProfileForm({
           </section>
         )}
       </fieldset>
-      <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-line bg-white/95 p-4 shadow-lg backdrop-blur">
+      <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-line bg-raised/95 p-4 shadow-lg backdrop-blur">
         {error && (
           <p role="alert" className="field-error basis-full">
             {error}
@@ -846,7 +846,7 @@ function ProfileFiles({
             Choose file
             <input
               key={fileKey}
-              className="mt-2 block w-full min-w-0 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2"
+              className="mt-2 block w-full min-w-0 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2"
               type="file"
               accept={kind === 'POLICY' ? 'application/pdf' : 'image/png,image/jpeg,image/webp'}
               required

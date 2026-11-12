@@ -46,7 +46,7 @@ export default function TeacherPortalSection() {
   if (!classes.length) return null;
 
   return (
-    <div className="mb-8 rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
+    <div className="mb-8 rounded-3xl border border-stone-200 bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-5">
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-100 px-3 py-1 text-xs font-semibold text-lime-800">
@@ -96,7 +96,7 @@ export default function TeacherPortalSection() {
                   <span className="text-sm font-bold text-stone-900">
                     Grade {cls.grade} - Section {cls.section || 'A'}
                   </span>
-                  <span className="flex size-8 items-center justify-center rounded-xl bg-white text-stone-700 shadow-xs border border-stone-200 text-xs font-semibold">
+                  <span className="flex size-8 items-center justify-center rounded-xl bg-surface text-stone-700 shadow-xs border border-stone-200 text-xs font-semibold">
                     {cls.grade}
                     {cls.section || 'A'}
                   </span>

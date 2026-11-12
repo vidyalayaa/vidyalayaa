@@ -52,7 +52,7 @@ export function FeeTotals({ rows }: { rows: FeeSummary[] }) {
             ['Remaining balance', r.outstanding],
             ['Overdue', r.overdue],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div key={label} className="rounded-2xl border border-stone-200 bg-surface p-4">
               <p className="text-xs text-stone-500">{label}</p>
               <p className="mt-2 break-words text-lg font-semibold">
                 {feeAmount(value, r.currency)}
@@ -363,7 +363,7 @@ export default function Fees() {
       )}
       <section
         aria-label="Fee selection"
-        className="mb-6 grid gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:grid-cols-2 xl:grid-cols-4"
+        className="mb-6 grid gap-4 rounded-2xl border border-stone-200 bg-surface p-5 sm:grid-cols-2 xl:grid-cols-4"
       >
         <label className="text-sm">
           Academic year
@@ -541,7 +541,7 @@ export default function Fees() {
                 </div>
                 <FeeTotals rows={statement.data.summary} />
                 <section
-                  className="rounded-2xl border border-stone-200 bg-white p-5"
+                  className="rounded-2xl border border-stone-200 bg-surface p-5"
                   aria-label="Upcoming fee installments"
                 >
                   <h3 className="font-semibold">Upcoming installments</h3>
@@ -625,7 +625,7 @@ export default function Fees() {
                   {statement.data.transport.map((t) => (
                     <div
                       key={String(t.id)}
-                      className="flex flex-wrap justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4 text-sm"
+                      className="flex flex-wrap justify-between gap-3 rounded-xl border border-stone-200 bg-surface p-4 text-sm"
                     >
                       <div>
                         <strong>{String(t.route_name)}</strong>
@@ -661,7 +661,7 @@ export default function Fees() {
                       {statement.data.payments.map((p) => (
                         <article
                           key={p.id}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4 text-sm"
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-surface p-4 text-sm"
                         >
                           <div className="min-w-0">
                             <strong className="block break-all">{p.receipt_no}</strong>
@@ -748,7 +748,7 @@ export default function Fees() {
                     {latest.items.map((i) => (
                       <article
                         key={i.id}
-                        className="rounded-xl border border-stone-200 bg-white p-4 text-sm"
+                        className="rounded-xl border border-stone-200 bg-surface p-4 text-sm"
                       >
                         <h3 className="font-semibold">
                           {i.label} ·{' '}
@@ -832,7 +832,7 @@ export default function Fees() {
             routes.data?.data.map((r) => (
               <article
                 key={r.id}
-                className="flex flex-wrap justify-between gap-3 rounded-xl border border-stone-200 bg-white p-5"
+                className="flex flex-wrap justify-between gap-3 rounded-xl border border-stone-200 bg-surface p-5"
               >
                 <div>
                   <h3 className="font-semibold">{r.name}</h3>
@@ -949,7 +949,7 @@ export default function Fees() {
                   {report.data.records.data.map((f) => (
                     <button
                       key={f.id}
-                      className="flex w-full flex-wrap justify-between gap-2 rounded-xl border border-stone-200 bg-white p-4 text-left text-sm hover:bg-lime-50"
+                      className="flex w-full flex-wrap justify-between gap-2 rounded-xl border border-stone-200 bg-surface p-4 text-left text-sm hover:bg-lime-50"
                       onClick={() => {
                         setStudentId(f.student_id);
                         setTab('students');

@@ -137,7 +137,7 @@ export default function ParentPortalSection() {
                 onClick={() => setSelectedChildId(child.id)}
                 className={`flex items-center gap-2.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
                   isSelected
-                    ? 'bg-white text-stone-900 shadow-sm border border-stone-300 ring-2 ring-lime-500/20'
+                    ? 'bg-surface text-stone-900 shadow-sm border border-stone-300 ring-2 ring-lime-500/20'
                     : 'text-stone-600 hover:bg-stone-200/60 hover:text-stone-900'
                 }`}
               >
@@ -159,13 +159,13 @@ export default function ParentPortalSection() {
       ) : o ? (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {/* Digital Campus ID Card */}
-          <div className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-900 to-stone-800 p-6 text-white shadow-xl flex flex-col justify-between min-h-64">
+          <div className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-inverse to-inverse-raised p-6 text-inverse-ink shadow-xl flex flex-col justify-between min-h-64">
             <div className="relative z-10 flex items-start justify-between">
               <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-400/20 px-2.5 py-0.5 text-xs font-semibold text-lime-300 border border-lime-400/30">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-semibold text-accent border border-accent/30">
                   <Sparkles size={11} /> DIGITAL STUDENT PASS
                 </span>
-                <h3 className="mt-3 flex items-center gap-2 text-xl font-bold tracking-tight text-white">
+                <h3 className="mt-3 flex items-center gap-2 text-xl font-bold tracking-tight text-inverse-ink">
                   <PersonAvatar
                     kind="student"
                     id={o.student.id}
@@ -177,22 +177,22 @@ export default function ParentPortalSection() {
                     {o.student.first_name} {o.student.last_name}
                   </span>
                 </h3>
-                <p className="text-xs text-stone-300 font-mono mt-0.5">
+                <p className="text-xs text-inverse-muted font-mono mt-0.5">
                   ID: {o.student.student_code} ·{' '}
                   {o.enrollment?.grade
                     ? `Class ${o.enrollment.grade} ${o.enrollment.section || ''}`
                     : 'Enrolled'}
                 </p>
               </div>
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-white font-bold text-lg border border-white/10">
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-inverse-ink/10 text-inverse-ink font-bold text-lg border border-inverse-ink/10">
                 {o.student.first_name[0]}
                 {o.student.last_name?.[0]}
               </span>
             </div>
 
-            <div className="relative z-10 my-4 space-y-2 rounded-2xl bg-white/5 p-4 border border-white/10 text-xs">
+            <div className="relative z-10 my-4 space-y-2 rounded-2xl bg-inverse-ink/5 p-4 border border-inverse-ink/10 text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-stone-400">Campus Status</span>
+                <span className="text-inverse-muted">Campus Status</span>
                 <Badge>
                   {o.attendance.today?.movement_status === 'ON_CAMPUS'
                     ? '🟢 ON CAMPUS'
@@ -200,9 +200,9 @@ export default function ParentPortalSection() {
                 </Badge>
               </div>
               {o.attendance.today?.first_arrival_at && (
-                <div className="flex justify-between items-center text-stone-300">
-                  <span className="text-stone-400">Arrived at</span>
-                  <span className="font-semibold text-white">
+                <div className="flex justify-between items-center text-inverse-muted">
+                  <span className="text-inverse-muted">Arrived at</span>
+                  <span className="font-semibold text-inverse-ink">
                     {new Date(o.attendance.today.first_arrival_at).toLocaleTimeString('en-IN', {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -211,20 +211,22 @@ export default function ParentPortalSection() {
                   </span>
                 </div>
               )}
-              <div className="flex justify-between items-center text-stone-300">
-                <span className="text-stone-400">Smart NFC Card</span>
-                <span className="font-mono text-lime-300 font-semibold">
+              <div className="flex justify-between items-center text-inverse-muted">
+                <span className="text-inverse-muted">Smart NFC Card</span>
+                <span className="font-mono text-accent font-semibold">
                   {o.card?.card_uid ? `●●●● ${o.card.card_uid.slice(-4)}` : 'Card not linked'}
                 </span>
               </div>
             </div>
 
-            <div className="relative z-10 flex items-center justify-between pt-2 border-t border-white/10">
-              <span className="text-xs text-stone-400 font-mono">{a.me?.school?.school_name}</span>
+            <div className="relative z-10 flex items-center justify-between pt-2 border-t border-inverse-ink/10">
+              <span className="text-xs text-inverse-muted font-mono">
+                {a.me?.school?.school_name}
+              </span>
               <Button
                 size="sm"
                 variant="outline"
-                className="bg-white/10 text-white hover:bg-white/20 border-white/20 text-xs"
+                className="bg-inverse-ink/10 text-inverse-ink hover:bg-inverse-ink/20 border-inverse-ink/20 text-xs"
                 onClick={() => setProfileOpen(true)}
               >
                 Full Profile <ExternalLink size={13} className="ml-1" />
@@ -233,7 +235,7 @@ export default function ParentPortalSection() {
           </div>
 
           {/* 30-Day Attendance Card */}
-          <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+          <div className="rounded-3xl border border-stone-200 bg-surface p-6 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
@@ -258,7 +260,7 @@ export default function ParentPortalSection() {
               </div>
 
               <div className="mt-5 grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded-xl bg-green-50 p-2.5 border border-green-100">
+                <div className="rounded-xl bg-green-50 p-2.5 border border-green-200">
                   <p className="font-bold text-green-800 text-base">
                     {o.attendance.summary.present}
                   </p>
@@ -281,7 +283,7 @@ export default function ParentPortalSection() {
           </div>
 
           {/* Fee Balance & Direct Payment Card */}
-          <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+          <div className="rounded-3xl border border-stone-200 bg-surface p-6 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">

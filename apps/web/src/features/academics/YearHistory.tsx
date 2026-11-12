@@ -42,7 +42,7 @@ export default function YearHistory({ workspace }: { workspace: PromotionWorkspa
   });
   return (
     <section aria-label="Academic-year records" className="space-y-5">
-      <div className="rounded-2xl border border-line bg-white p-5">
+      <div className="rounded-2xl border border-line bg-surface p-5">
         <h2 className="text-xl font-semibold">View another academic year</h2>
         <p className="mt-2 text-sm leading-6 text-stone-600">
           Browse saved records without changing the active year, students or fees. This view is
@@ -120,7 +120,7 @@ export default function YearHistory({ workspace }: { workspace: PromotionWorkspa
             {!q.data.data.length ? (
               <Empty title="No records in this selection" />
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-line bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
                 <table className="w-full text-left text-sm">
                   <caption className="sr-only">
                     {q.data.session.name} {section} records

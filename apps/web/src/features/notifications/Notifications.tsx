@@ -33,7 +33,7 @@ interface Notice {
   full_name?: string;
   email?: string;
 }
-const input = 'w-full rounded-xl border border-line bg-white px-3 py-3 text-sm';
+const input = 'w-full rounded-xl border border-line bg-surface px-3 py-3 text-sm';
 export default function Notifications() {
   const a = useAuth();
   return <SchoolNotifications key={a.school} />;
@@ -125,7 +125,7 @@ function SchoolNotifications() {
             : 'Updates from your school, all in one place.'
         }
       />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-white p-5">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-5">
         <div className="flex items-start gap-3">
           <Bell size={22} />
           <div>

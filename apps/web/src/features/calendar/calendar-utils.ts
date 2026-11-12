@@ -1,13 +1,13 @@
 import type { CalendarEvent, CalendarKind, CalendarClass } from '@vidyalayaa/contracts';
 export const kindColors: Record<CalendarKind, string> = {
-  HOLIDAY: '#4d7c0f',
-  SCHOOL_EVENT: '#0369a1',
-  EXAM_DAY: '#7c3aed',
-  ACTIVITY: '#c2410c',
-  ANNOUNCEMENT: '#be185d',
-  OTHER: '#475569',
-  WEEKEND_OVERRIDE: '#0f766e',
-  SHORT_DAY: '#b45309',
+  HOLIDAY: 'var(--accent-ink)',
+  SCHOOL_EVENT: 'var(--info-ink)',
+  EXAM_DAY: 'var(--violet-ink)',
+  ACTIVITY: 'var(--danger-ink)',
+  ANNOUNCEMENT: 'var(--pink-ink)',
+  OTHER: 'var(--muted)',
+  WEEKEND_OVERRIDE: 'var(--teal-ink)',
+  SHORT_DAY: 'var(--warning-ink)',
 };
 export const months = Array.from({ length: 12 }, (_, month) =>
   new Intl.DateTimeFormat('en', { month: 'long', timeZone: 'UTC' }).format(

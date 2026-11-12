@@ -11,7 +11,7 @@ export function Metric({
   detail: string;
 }) {
   return (
-    <article className="min-w-0 rounded-2xl border border-line bg-white p-4 sm:p-5">
+    <article className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5">
       <p className="text-xs font-medium text-stone-600">{title}</p>
       <p className="mt-2 break-words text-2xl font-bold text-stone-900">{value}</p>
       <p className="mt-2 text-xs text-stone-500">{detail}</p>
@@ -54,7 +54,7 @@ export function DateFilters({
     .slice(0, 10);
   return (
     <section
-      className="mb-5 rounded-2xl border border-line bg-white p-4 sm:p-5"
+      className="mb-5 rounded-2xl border border-line bg-surface p-4 sm:p-5"
       aria-label="Date and record filters"
     >
       <form

@@ -107,7 +107,7 @@ function StaffProfileContent({ id }: { id?: string }) {
         </Suspense>
       )}
       {canEdit && editing === 'details' && (
-        <div className="rounded-2xl border border-line bg-white p-4">
+        <div className="rounded-2xl border border-line bg-surface p-4">
           <PersonDetailsForm
             kind="staff"
             id={staff.id}
@@ -122,7 +122,7 @@ function StaffProfileContent({ id }: { id?: string }) {
             <PhotoEditor kind="staff" id={staff.id} photo={staff.photo_id} />
           </div>
         )}
-        <section className="rounded-2xl border border-line bg-white p-5">
+        <section className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="mb-4 font-semibold">Professional information</h3>
           <ProfileFields
             fields={[
@@ -137,7 +137,7 @@ function StaffProfileContent({ id }: { id?: string }) {
             ]}
           />
         </section>
-        <section className="rounded-2xl border border-line bg-white p-5">
+        <section className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="mb-4 font-semibold">Contact and emergency information</h3>
           <ProfileFields
             fields={[
@@ -153,7 +153,7 @@ function StaffProfileContent({ id }: { id?: string }) {
         </section>
       </div>
       {staff.staff_role === 'teacher' && (
-        <section className="rounded-2xl border border-line bg-white p-5">
+        <section className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="mb-3 font-semibold">Assigned classes and subjects</h3>
           {staff.assignments.length ? (
             <ul className="divide-y divide-line">

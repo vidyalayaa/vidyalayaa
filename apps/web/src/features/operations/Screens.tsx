@@ -1,6 +1,8 @@
 import InviteMemberDialog from '../auth/InviteMemberDialog';
 import SupportRequests from './SupportRequests';
 import ClassAttendanceSheet from './ClassAttendanceSheet';
+import AttendanceCalendar from '../attendance/AttendanceCalendar';
+import { schoolToday } from '../calendar/calendar-utils';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -92,31 +94,40 @@ export function Attendance() {
     [batchOpen, setBatchOpen] = useState(false),
     [correction, setCorrection] = useState<Record<string, unknown> | null>(null);
   const teacher = a.me?.school?.role === 'teacher';
+  const student = a.me?.school?.role === 'student';
   const canManage = (id?: unknown) =>
     !teacher || !!teaching.data?.data.some((c) => c.is_class_teacher && (!id || c.id === id));
   const manualAllowed =
-    a.me?.school?.permissions.includes('attendance.manual_write') && canManage(classId);
+    a.me?.school?.permissions.includes('attendance.manual_write') &&
+    canManage(classId) &&
+    date <= schoolToday(a.me?.school?.timezone);
   return (
     <>
       <PageHeading
         title="Every school day counts."
         description="Arrivals, departures, and everything in between."
         actions={
-          <>
-            <Button variant="outline" asChild>
-              <Link to={schoolPath('/corrections', a.me?.school?.role)}>
-                Corrections <ArrowUpRight size={15} />
-              </Link>
-            </Button>
-            <Button variant="outline" disabled={!manualAllowed} onClick={() => setBatchOpen(true)}>
-              <Users size={16} />
-              Class Register
-            </Button>
-            <Button variant="lime" disabled={!manualAllowed} onClick={() => setAction('manual')}>
-              <Plus size={16} />
-              Mark attendance
-            </Button>
-          </>
+          !student && (
+            <>
+              <Button variant="outline" asChild>
+                <Link to={schoolPath('/corrections', a.me?.school?.role)}>
+                  Corrections <ArrowUpRight size={15} />
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!manualAllowed}
+                onClick={() => setBatchOpen(true)}
+              >
+                <Users size={16} />
+                Class Register
+              </Button>
+              <Button variant="lime" disabled={!manualAllowed} onClick={() => setAction('manual')}>
+                <Plus size={16} />
+                Mark attendance
+              </Button>
+            </>
+          )
         }
       />
       {teacher && (
@@ -126,92 +137,112 @@ export function Attendance() {
         </p>
       )}
       <AttendanceTabs active="daily" />
-      <Panel
-        title="Daily register"
-        subtitle="Attendance and movement are recorded separately."
-        action={
-          <input
-            aria-label="Attendance date"
-            className="input w-auto"
-            type="date"
-            value={date}
-            onChange={(e) => {
-              setDate(e.target.value);
-              setPage(1);
-            }}
-          />
-        }
-      >
-        <div className="table-toolbar">
-          <div className="w-full max-w-sm">
-            <label className="field-label" htmlFor="attendance-class">
-              Class
-            </label>
-            <RecordSelect
-              name="class_id"
-              id="attendance-class"
-              endpoint="/resources/classes"
-              value={classId}
-              onChange={(v) => {
-                setClassId(v);
+      <AttendanceCalendar
+        personal={student}
+        canCorrect={canManage}
+        onRegister={
+          !student
+            ? (day, section) => {
+                setDate(day);
+                setClassId(section);
                 setPage(1);
-              }}
-              optional
-              label="class"
-            />
-          </div>
-        </div>
-        {query.data?.data.length ? (
-          <DataTable
-            rows={query.data.data}
-            columns={[
-              'student_code',
-              'first_name',
-              'last_name',
-              'attendance_status',
-              'movement_status',
-              'first_arrival_at',
-              'last_departure_at',
-              'needs_review',
-            ]}
-            actions={
-              a.me?.school?.permissions.includes('attendance.correct_request')
-                ? (row) =>
-                    canManage(row.class_id) ? (
-                      <Button size="sm" variant="outline" onClick={() => setCorrection(row)}>
-                        Request correction
-                      </Button>
-                    ) : null
-                : undefined
+                requestAnimationFrame(() => {
+                  document.getElementById('daily-attendance-register')?.focus();
+                });
+              }
+            : undefined
+        }
+      />
+      {!student && (
+        <section id="daily-attendance-register" tabIndex={-1} aria-label="Daily register">
+          <Panel
+            title="Daily register"
+            subtitle="Attendance and movement are recorded separately."
+            action={
+              <input
+                aria-label="Attendance date"
+                className="input w-auto"
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setPage(1);
+                }}
+              />
             }
-          />
-        ) : (
-          <Rows query={query} columns={['student_code', 'attendance_status']} />
-        )}
-        <div className="pagination">
-          <span>
-            Page {page} · {query.data?.total || 0} records
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!query.data || page * query.data.page_size >= query.data.total}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      </Panel>
+          >
+            <div className="table-toolbar">
+              <div className="w-full max-w-sm">
+                <label className="field-label" htmlFor="attendance-class">
+                  Class
+                </label>
+                <RecordSelect
+                  name="class_id"
+                  id="attendance-class"
+                  endpoint="/resources/classes"
+                  value={classId}
+                  onChange={(v) => {
+                    setClassId(v);
+                    setPage(1);
+                  }}
+                  optional
+                  label="class"
+                />
+              </div>
+            </div>
+            {query.data?.data.length ? (
+              <DataTable
+                rows={query.data.data}
+                columns={[
+                  'student_code',
+                  'first_name',
+                  'last_name',
+                  'attendance_status',
+                  'movement_status',
+                  'first_arrival_at',
+                  'last_departure_at',
+                  'needs_review',
+                ]}
+                actions={
+                  a.me?.school?.permissions.includes('attendance.correct_request')
+                    ? (row) =>
+                        canManage(row.class_id) ? (
+                          <Button size="sm" variant="outline" onClick={() => setCorrection(row)}>
+                            Request correction
+                          </Button>
+                        ) : null
+                    : undefined
+                }
+              />
+            ) : (
+              <Rows query={query} columns={['student_code', 'attendance_status']} />
+            )}
+            <div className="pagination">
+              <span>
+                Page {page} · {query.data?.total || 0} records
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!query.data || page * query.data.page_size >= query.data.total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </Panel>
+        </section>
+      )}
       <ActionDialog
         open={action === 'manual'}
         close={() => setAction('')}
@@ -801,7 +832,7 @@ export function Members() {
               setCategory(tab);
               document.getElementById(`members-tab-${tab}`)?.focus();
             }}
-            className={`flex items-center gap-2 rounded-xl border border-line px-4 py-2 text-sm font-semibold ${category === value ? 'bg-lime-300 text-stone-950' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
+            className={`flex items-center gap-2 rounded-xl border border-line px-4 py-2 text-sm font-semibold ${category === value ? 'bg-lime-300 text-stone-950' : 'bg-surface text-stone-600 hover:bg-stone-50'}`}
           >
             {memberCategoryLabels[value]}
             <Badge>{counts.data?.[value] ?? '—'}</Badge>

@@ -45,7 +45,7 @@ function Section({
   return (
     <section
       aria-label={title}
-      className="min-w-0 rounded-3xl border border-line bg-white p-5 sm:p-7"
+      className="min-w-0 rounded-3xl border border-line bg-surface p-5 sm:p-7"
     >
       <h2 className="mb-6 flex items-center gap-2 text-lg font-semibold">
         {icon}
@@ -230,7 +230,7 @@ export default function StudentProfile() {
       </div>
       <section
         aria-label="Profile corrections"
-        className="mt-6 flex flex-wrap items-start gap-3 rounded-2xl border border-line bg-white p-5"
+        className="mt-6 flex flex-wrap items-start gap-3 rounded-2xl border border-line bg-surface p-5"
       >
         <ShieldCheck className="shrink-0 text-lime-800" size={22} />
         <div className="min-w-0 flex-1">

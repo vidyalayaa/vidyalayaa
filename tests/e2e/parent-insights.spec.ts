@@ -57,31 +57,23 @@ test('shows daily attendance summaries, absence corrections and normalized publi
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   const metric = (title: string) =>
     page.locator('article').filter({ has: page.getByText(title, { exact: true }) });
-  await expect(metric('Total school days')).toContainText('5');
-  await expect(metric('Absent days')).toContainText('1');
-  await expect(metric('Attendance percentage')).toContainText('66.7%');
-  await expect(
-    page
-      .getByRole('row')
-      .filter({ has: page.getByRole('cell', { name: '2026-10-02', exact: true }) }),
-  ).toContainText(/holiday/i);
-  await expect(
-    page
-      .getByRole('row')
-      .filter({ has: page.getByRole('cell', { name: '2026-10-04', exact: true }) }),
-  ).toContainText(/not recorded/i);
+  const selected = page.getByRole('region', { name: 'Selected period' });
+  await expect(selected.locator('dl > div').filter({ hasText: 'Working days' })).toContainText('5');
+  await expect(selected.locator('dl > div').filter({ hasText: 'Absent' })).toContainText('1');
+  await expect(selected).toContainText('66.7%');
+  await expect(page.locator('[data-date="2026-10-02"]')).toHaveAccessibleName(/holiday/i);
+  await expect(page.locator('[data-date="2026-10-04"]')).toHaveAccessibleName(/unmarked/i);
   await page
     .getByRole('combobox', { name: 'Attendance status', exact: true })
     .selectOption('ABSENT');
-  await expect(page.getByRole('row')).toHaveCount(2);
-  await expect(metric('Total school days')).toContainText('5');
+  await expect(page.locator('[data-date="2026-10-01"]')).toHaveAttribute('data-dimmed', '');
+  await expect(selected.locator('dl > div').filter({ hasText: 'Working days' })).toContainText('5');
+  await page.locator('[data-date="2026-10-05"]').click();
   await page.getByRole('button', { name: 'Request correction', exact: true }).click();
-  await page.getByRole('dialog').locator('textarea').fill('Please check this absence.');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: /Save|Submit/ })
-    .click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const correction = page.getByRole('dialog', { name: /Request attendance correction/ });
+  await correction.locator('textarea').fill('Please check this absence.');
+  await correction.getByRole('button', { name: /Save|Submit/ }).click();
+  await expect(correction).toHaveCount(0);
   const day = (
     await db.query<{ attendance_status: string }>(
       "SELECT attendance_status FROM daily_attendance WHERE school_id=$1 AND student_id=$2 AND attendance_date='2026-10-05'",
