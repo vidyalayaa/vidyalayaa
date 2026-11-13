@@ -15,11 +15,12 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Config } from '../../lib/config.js';
 import { inviteMember, invitationError } from '../identity/invitations.js';
-import { platformTx, transaction, audit } from '../../lib/db.js';
+import { platformTx, transaction, audit, lockSchoolLifecycle } from '../../lib/db.js';
 import { platformOnly, permission } from '../../middleware/auth.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import { secret, hash } from '../../lib/crypto.js';
 import { paged } from '../../lib/pagination.js';
+import { academicFilters, cohortData } from '../school/academic-intelligence.js';
 export function platformRouter(
   platform: pg.Pool,
   api: pg.Pool,
@@ -155,11 +156,12 @@ export function platformRouter(
         .parse(req.body);
       await platformTx(platform, res.locals.actor.id, async (tx) => {
         const job = (
-          await tx.query('SELECT permanent FROM school_offboarding WHERE id=$1 FOR UPDATE', [id])
+          await tx.query('SELECT permanent,school_id FROM school_offboarding WHERE id=$1', [id])
         ).rows[0];
         if (!job) throw notFound();
         if (job.permanent) {
           requireDeletionVerification(res.locals.actor);
+          await lockSchoolLifecycle(tx, job.school_id, true);
           await tx.query(
             `UPDATE school_offboarding
              SET delete_after=delete_after+greatest(interval '0',now()+interval '24 hours'-export_until),
@@ -503,7 +505,9 @@ export function platformRouter(
             ]),
             current_period_end: z.string().datetime(),
             grace_ends_at: z.string().datetime().nullable().optional(),
-            limit_overrides: z.record(z.string(), z.number().int().min(0).max(100000000)).optional(),
+            limit_overrides: z
+              .record(z.string(), z.number().int().min(0).max(100000000))
+              .optional(),
             reason: z.string().min(5).max(1000),
           })
           .strict()
@@ -770,6 +774,51 @@ export function platformRouter(
               ).rows[0],
           ),
         );
+    }),
+  );
+  r.get(
+    '/support-grants/:id/academic-intelligence',
+    asyncRoute(async (req, res) => {
+      const actor = res.locals.actor;
+      const grantId = uuid.parse(req.params.id);
+      const filters = academicFilters.omit({ student_id: true }).parse(req.query);
+      const grant = await platformTx(
+        platform,
+        actor.id,
+        async (tx) =>
+          (
+            await tx.query<{ school_id: string }>(
+              `SELECT school_id FROM support_access_grants WHERE id=$1 AND staff_user_id=$2
+           AND approved_by IS NOT NULL AND starts_at<=now() AND expires_at>now()
+           AND revoked_at IS NULL AND scope ? 'marks'`,
+              [grantId, actor.id],
+            )
+          ).rows[0],
+      );
+      if (!grant) throw notFound();
+      const school = grant.school_id;
+      const result = await transaction(
+        api,
+        { schoolId: school, userId: actor.id, actorType: 'SUPPORT' },
+        async (tx) => {
+          const live = await tx.query(
+            `SELECT id FROM support_access_grants WHERE school_id=$1 AND id=$2 AND staff_user_id=$3
+           AND approved_by IS NOT NULL AND starts_at<=now() AND expires_at>now()
+           AND revoked_at IS NULL AND scope ? 'marks' FOR SHARE`,
+            [school, grantId, actor.id],
+          );
+          if (!live.rowCount) throw notFound();
+          const data = await cohortData(tx, school, filters);
+          await tx.query(
+            `INSERT INTO audit_logs(school_id,actor_type,actor_id,support_grant_id,action,entity_type,entity_id)
+           VALUES($1,'SUPPORT',$2,$3,'support.read','academic_analytics',$1)`,
+            [school, actor.id, grantId],
+          );
+          return { ...data, standings: [] };
+        },
+      );
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.json(result);
     }),
   );
   r.get(

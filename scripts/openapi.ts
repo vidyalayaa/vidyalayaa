@@ -209,6 +209,34 @@ const schemas = {
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
   ResultPolicy: resultPolicySchema,
+  AcademicResultSelection: z
+    .object({ student_id: z.guid().optional(), exam_id: z.guid().optional() })
+    .strict(),
+  AcademicAssistantQuestion: z
+    .object({
+      student_id: z.guid().optional(),
+      exam_id: z.guid().optional(),
+      question: z.string().min(3).max(500),
+    })
+    .strict(),
+  AcademicStudyProgress: z
+    .object({
+      plan_id: z.string().regex(/^[0-9a-f]{64}$/),
+      task: z.number().int().min(0).max(20),
+      completed: z.boolean(),
+    })
+    .strict(),
+  AcademicSharing: z.object({ share_class_averages: z.boolean() }).strict(),
+  AcademicCohortFilters: z
+    .object({
+      session_id: z.guid().optional(),
+      exam_id: z.guid().optional(),
+      class_id: z.guid().optional(),
+      grade: z.string().min(1).max(500).optional(),
+      subject_id: z.guid().optional(),
+      student_id: z.guid().optional(),
+    })
+    .strict(),
   SingleMark: singleMarkSchema,
   FirstSchoolAdministrator: firstAdminSchema,
   DeviceTuning: deviceTuningSchema,
@@ -1483,6 +1511,78 @@ operation(
   },
 );
 operation('/results/policy', 'get', 'School Admin and Principal grading policy');
+const academicParameters = (names: string[]) => [
+  resultSchoolHeader,
+  ...names.map((name) => resultIdParameter(name, 'query', false)),
+];
+operation(
+  '/academic-intelligence/selection',
+  'get',
+  'Authorized published result filters',
+  undefined,
+  'UserJWT',
+  { parameters: academicParameters(['student_id']) },
+);
+operation(
+  '/academic-intelligence/performance',
+  'get',
+  'Published report card and comparable academic history',
+  undefined,
+  'UserJWT',
+  { parameters: academicParameters(['student_id', 'exam_id']) },
+);
+operation(
+  '/academic-intelligence/cohort',
+  'get',
+  'School or teaching-assignment academic analytics',
+  undefined,
+  'UserJWT',
+  {
+    parameters: [
+      ...academicParameters(['session_id', 'exam_id', 'class_id', 'subject_id', 'student_id']),
+      { name: 'grade', in: 'query', schema: { type: 'string' } },
+    ],
+  },
+);
+operation(
+  '/academic-intelligence/guidance',
+  'post',
+  'Generate or retrieve personalized academic advice',
+  'AcademicResultSelection',
+);
+operation(
+  '/academic-intelligence/assistant',
+  'post',
+  'Ask about a student’s authorized academic results',
+  'AcademicAssistantQuestion',
+);
+operation(
+  '/academic-intelligence/cohort/insights',
+  'post',
+  'Generate insights from scoped academic aggregates',
+  'AcademicCohortFilters',
+);
+operation(
+  '/academic-intelligence/progress',
+  'put',
+  'Update own study plan activity progress',
+  'AcademicStudyProgress',
+);
+operation('/academic-intelligence/sharing', 'get', 'Read school class average sharing policy');
+operation(
+  '/academic-intelligence/sharing',
+  'put',
+  'Update school class average sharing policy',
+  'AcademicSharing',
+);
+operation(
+  '/platform/support-grants/{id}/academic-intelligence',
+  'get',
+  'Read school-level academic aggregates with an approved marks grant',
+  undefined,
+  'UserJWT',
+  { parameters: [resultIdParameter('id', 'path')] },
+);
 operation(
   '/results/policy',
   'put',

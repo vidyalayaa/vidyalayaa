@@ -15,7 +15,7 @@ import {
   type SchoolProfile,
   type SchoolProfileAsset,
 } from '@vidyalayaa/contracts';
-import { transaction, type Tx } from '../../lib/db.js';
+import { lockSchoolStorageWrite, transaction, type Tx } from '../../lib/db.js';
 import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
 import type { Actor } from '../../middleware/auth.js';
 import { resourceScope } from '../school/resources.js';
@@ -296,17 +296,9 @@ export function schoolProfileRouter(pool: pg.Pool, storage: SupabaseClient, cont
                 ? 'webp'
                 : 'pdf',
         path = `${sid}/profile/${id}.${ext}`;
-      const uploaded = await storage.storage
-        .from('school-documents')
-        .upload(path, bytes, { contentType: type, upsert: false });
-      if (uploaded.error)
-        throw new ApiError(
-          503,
-          'STORAGE_UNAVAILABLE',
-          'The file could not be stored. Check the school document storage configuration.',
-        );
       try {
         const result = await transaction(pool, context(a), async (tx) => {
+          await lockSchoolStorageWrite(tx, sid);
           await writable(tx, a, sid);
           await school(tx, sid, true);
           const count = (
@@ -325,6 +317,15 @@ export function schoolProfileRouter(pool: pg.Pool, storage: SupabaseClient, cont
             await tx.query(
               "UPDATE school_profile_assets SET retired_at=now() WHERE school_id=$1 AND kind='LOGO' AND retired_at IS NULL",
               [sid],
+            );
+          const uploaded = await storage.storage
+            .from('school-documents')
+            .upload(path, bytes, { contentType: type, upsert: false });
+          if (uploaded.error)
+            throw new ApiError(
+              503,
+              'STORAGE_UNAVAILABLE',
+              'The file could not be stored. Check the school document storage configuration.',
             );
           const asset = (
             await tx.query(

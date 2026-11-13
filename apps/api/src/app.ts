@@ -155,6 +155,19 @@ export function createApp(config: Config, deps: Dependencies) {
         (_req, res) => 'bulk:' + res.locals.actor.id,
       ),
     );
+    app.use(
+      [
+        '/api/v1/academic-intelligence/guidance',
+        '/api/v1/academic-intelligence/assistant',
+        '/api/v1/academic-intelligence/cohort/insights',
+      ],
+      sharedRateLimit(
+        deps.api,
+        config.TOKEN_ENCRYPTION_KEY,
+        8,
+        (_req, res) => 'academic-ai:' + res.locals.actor.id,
+      ),
+    );
   }
   app.get(
     '/api/v1/me',

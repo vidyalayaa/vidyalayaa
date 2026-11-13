@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { captureFailure } from '../../api/src/lib/monitoring.js';
-import { transaction } from '../../api/src/lib/db.js';
+import { lockSchoolStorageWrite, transaction } from '../../api/src/lib/db.js';
 import { personPhotoPath } from '../../api/src/lib/person-photo-path.js';
 
 const tables = [
@@ -116,24 +116,25 @@ export async function generateSchoolExport(
     prefix = `${schoolId}/exports/${job.id}/${lease}`;
   try {
     const upload = async (name: string, buffer: Buffer, type: string, rows?: number) => {
-      const own = await transaction(pool, ctx, (tx) =>
-        tx.query(
+      const path = `${prefix}/${name}`;
+      await transaction(pool, ctx, async (tx) => {
+        await lockSchoolStorageWrite(tx, schoolId, true);
+        const own = await tx.query(
           "UPDATE school_exports SET locked_until=now()+interval '5 minutes' WHERE id=$1 AND lease_token=$2 AND status='PROCESSING' RETURNING id",
           [job.id, lease],
-        ),
-      );
-      if (!own.rowCount) throw new Error('EXPORT_LEASE_LOST');
-      const path = `${prefix}/${name}`,
-        result = await storage.storage
+        );
+        if (!own.rowCount) throw new Error('EXPORT_LEASE_LOST');
+        const result = await storage.storage
           .from('school-documents')
           .upload(path, buffer, { contentType: type, upsert: false });
-      if (result.error) throw new Error('EXPORT_STORAGE_UNAVAILABLE');
-      manifest.push({
-        name,
-        path,
-        sha256: createHash('sha256').update(buffer).digest('hex'),
-        bytes: buffer.length,
-        ...(rows === undefined ? {} : { rows }),
+        if (result.error) throw new Error('EXPORT_STORAGE_UNAVAILABLE');
+        manifest.push({
+          name,
+          path,
+          sha256: createHash('sha256').update(buffer).digest('hex'),
+          bytes: buffer.length,
+          ...(rows === undefined ? {} : { rows }),
+        });
       });
     };
     const snapshot = await transaction(

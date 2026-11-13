@@ -39,6 +39,12 @@ const StudentResults = lazy(() =>
 );
 const SchoolCalendar = lazy(() => import('./features/calendar/SchoolCalendar'));
 const SchoolResults = lazy(() => import('./features/results/SchoolResults'));
+const AcademicStudentResults = lazy(() =>
+  import('./features/results/AcademicStudentView').then((module) => ({
+    default: module.AcademicStudentResults,
+  })),
+);
+const AcademicDashboard = lazy(() => import('./features/results/AcademicDashboard'));
 const HomeworkDiary = lazy(() => import('./features/homework/HomeworkDiary'));
 const AcademicYears = lazy(() => import('./features/academics/AcademicYears'));
 const Timetable = lazy(() => import('./features/timetable/Timetable'));
@@ -109,6 +115,12 @@ function Guard() {
         replace
       />
     );
+  if (
+    a.error instanceof HttpError &&
+    a.error.code === 'SCHOOL_CONTEXT_UNAVAILABLE' &&
+    a.requestSchool
+  )
+    return location.pathname === '/' ? <Loading /> : <Navigate to="/" replace />;
   if (a.error instanceof HttpError && a.error.code === 'SCHOOL_LOGIN_DISABLED')
     return (
       <div className="mx-auto mt-16 max-w-xl rounded-2xl border bg-surface p-8">
@@ -235,7 +247,8 @@ function ResourcePage() {
   if (a.me?.school?.role === 'student') {
     if (['classes', 'academic_sessions', 'subjects'].includes(name))
       return <StudentAcademics key={a.school} />;
-    if (['marks', 'exams'].includes(name)) return <StudentResults key={a.school} />;
+    if (name === 'marks') return <AcademicStudentResults key={a.school} />;
+    if (name === 'exams') return <StudentResults key={a.school} />;
   }
   if (isSchoolLeadership(role) && name === 'marks') return <SchoolResults key={a.school} />;
   if (name === 'timetable_entries') return <Timetable key={a.school} />;
@@ -302,6 +315,14 @@ function schoolRoutes() {
     <>
       <Route index element={<Dashboard />} />
       <Route path="profile" element={<OwnSchoolProfile />} />
+      <Route
+        path="academic-intelligence"
+        element={
+          <Permission code="marks.read">
+            <AcademicDashboard />
+          </Permission>
+        }
+      />
       <Route
         path="materials"
         element={

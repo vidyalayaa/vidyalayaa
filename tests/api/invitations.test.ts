@@ -138,11 +138,22 @@ beforeAll(async () => {
               error: { message: 'Fixture email provider unavailable' },
             };
           mailed++;
-          const found = await db.query<{ id: string }>('SELECT id FROM auth.users WHERE email=$1', [
-            email,
-          ]);
-          const id = found.rows[0]?.id || (await identity(email, false));
-          return { data: { user: { id, email } }, error: null };
+          const role = (await db.query<{ role: string }>('SELECT current_user AS role')).rows[0]
+            .role;
+          // The fixture uses one connection for both the API and Auth provider.
+          await db.exec('SET LOCAL ROLE NONE');
+          try {
+            const found = await db.query<{ id: string }>(
+              'SELECT id FROM auth.users WHERE email=$1',
+              [email],
+            );
+            const id = found.rows[0]?.id || (await identity(email, false));
+            return { data: { user: { id, email } }, error: null };
+          } finally {
+            await db.exec(
+              role === 'app_platform' ? 'SET LOCAL ROLE app_platform' : 'SET LOCAL ROLE app_api',
+            );
+          }
         },
       },
     },

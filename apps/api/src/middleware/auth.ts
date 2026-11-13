@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import type pg from 'pg';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Me, Membership, Role, SchoolSecurityPolicy } from '@vidyalayaa/contracts';
-import { ApiError, asyncRoute, notFound } from '../lib/errors.js';
+import { ApiError, asyncRoute } from '../lib/errors.js';
 import { transaction, type TenantContext } from '../lib/db.js';
 import { equalHash } from '../lib/crypto.js';
 export interface Actor extends Me {
@@ -142,7 +142,12 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
         'SCHOOL_LOGIN_DISABLED',
         'Your school has paused sign-in for this account role.',
       );
-    if (selected && !active) throw notFound();
+    if (selected && !active)
+      throw new ApiError(
+        404,
+        'SCHOOL_CONTEXT_UNAVAILABLE',
+        'This school is unavailable. Choose a school you still have access to.',
+      );
     if (workspaceAdmitted)
       await pool.query('SELECT app.record_privileged_login($1,$2)', [me.id, sessionId]);
     res.locals.actor = {

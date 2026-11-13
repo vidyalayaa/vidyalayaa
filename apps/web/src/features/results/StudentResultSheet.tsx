@@ -35,7 +35,58 @@ export default function StudentResultSheet({
   if (query.isLoading) return <Loading />;
   if (query.error) return <ErrorState error={query.error} retry={() => query.refetch()} />;
   if (!query.data) return <Empty title="Result unavailable" />;
-  const { exam, student, subjects, school_name, status, grade, recorded_maximum } = query.data;
+  return <ResultReport result={query.data} />;
+}
+
+export function ResultReport({
+  result,
+  scoped = false,
+}: {
+  result: StudentExamResult;
+  scoped?: boolean;
+}) {
+  const { exam, student, subjects, school_name, status, grade, recorded_maximum } = result;
+  function download() {
+    const rows = [
+      ['School', school_name],
+      ['Session', exam.session_name],
+      ['Exam', exam.name],
+      ['Student', student.name],
+      ['Student code', student.student_code],
+      ['Obtained', student.obtained],
+      ['Maximum', student.maximum],
+      ['Percentage', student.percentage],
+      ['Grade', grade],
+      ['Result', statuses[status]],
+      ['Class rank', positionLabel(student.class_position)],
+      ['School position', positionLabel(student.school_position)],
+      ['Subject', 'Obtained', 'Maximum', 'Percentage', 'Grade'],
+      ...subjects.map((subject) => [
+        subject.name,
+        subject.score,
+        subject.maximum,
+        subject.percentage,
+        subject.grade,
+      ]),
+    ];
+    const csv = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const value = String(cell ?? '');
+            const safe = /^[\s]*[=+\-@]/.test(value) ? "'" + value : value;
+            return '"' + safe.replace(/"/g, '""') + '"';
+          })
+          .join(','),
+      )
+      .join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'examination-result.csv';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   return (
     <article
       className="student-result-sheet mb-6 rounded-2xl border border-line bg-surface p-4 sm:p-6"
@@ -54,9 +105,14 @@ export default function StudentResultSheet({
             {exam.name} <Badge>{exam.status}</Badge>
           </p>
         </div>
-        <Button variant="outline" className="result-print-hidden" onClick={() => window.print()}>
-          <Printer size={16} /> Print / Save as PDF
-        </Button>
+        <div className="result-print-hidden flex flex-wrap gap-2">
+          <Button variant="outline" onClick={download}>
+            Download CSV
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer size={16} /> Print / Save as PDF
+          </Button>
+        </div>
       </header>
       <dl className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {[
@@ -68,7 +124,16 @@ export default function StudentResultSheet({
           ['School position', positionLabel(student.school_position)],
         ].map(([label, value]) => (
           <div className="rounded-xl bg-stone-50 p-3" key={label}>
-            <dt className="text-xs text-stone-600">{label}</dt>
+            <dt
+              className="text-xs text-stone-600"
+              title={
+                label === 'Percentage'
+                  ? 'Obtained marks divided by the maximum for recorded subjects.'
+                  : undefined
+              }
+            >
+              {label}
+            </dt>
             <dd className="mt-1 font-semibold">{value}</dd>
           </div>
         ))}
@@ -119,8 +184,9 @@ export default function StudentResultSheet({
         </div>
       )}
       <p className="mt-4 text-xs text-stone-600">
-        Ranks use complete published results and include ties. Grades and pass status use the
-        school’s configured policy.
+        {scoped
+          ? 'This view includes the marks available to your teaching assignment.'
+          : "Ranks use complete published results and include ties. Grades and pass status use the school's configured policy."}
       </p>
     </article>
   );
