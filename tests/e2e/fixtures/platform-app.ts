@@ -130,6 +130,7 @@ export const test = base.extend<{}, { platformApp: PlatformApp }>({
         const auth = {
           storage: {
             from: () => ({
+              list: async () => ({ data: [], error: null }),
               createSignedUploadUrl: async (path: string) => ({
                 data: { path, token: 'fixture-upload-token' },
                 error: null,

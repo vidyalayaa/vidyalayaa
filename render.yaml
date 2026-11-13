@@ -27,6 +27,10 @@ services:
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
         sync: false
+      - key: ACADEMIC_AI_CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: ACADEMIC_AI_CLOUDFLARE_TOKEN
+        sync: false
       - key: DB_SSL
         value: 'true'
       - key: TRUST_PROXY_HOPS

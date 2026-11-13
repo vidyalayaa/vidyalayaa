@@ -19,7 +19,7 @@ import {
   type PhotoImportResult,
   type PhotoPreview,
 } from '@vidyalayaa/contracts';
-import { audit, transaction, type Tx } from '../../lib/db.js';
+import { audit, lockSchoolStorageWrite, transaction, type Tx } from '../../lib/db.js';
 import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
 import { paged } from '../../lib/pagination.js';
 import { personPhotoPath as pathFor } from '../../lib/person-photo-path.js';
@@ -149,18 +149,23 @@ export function personProfilesRouter(
         pool,
         a.context,
         async (tx) => {
+          await lockSchoolStorageWrite(tx, school);
           await requireWrite(tx, a);
           if ((await photoRef(tx, a, kind, id)).photo_id !== expected) throw photoChanged();
+          const stored = await bucket().upload(path, bytes, {
+            contentType: 'image/jpeg',
+            upsert: false,
+            cacheControl: '0',
+          });
+          if (stored.error)
+            throw new ApiError(
+              503,
+              'STORAGE_UNAVAILABLE',
+              'The photo could not be stored. Try again.',
+            );
         },
         true,
       );
-      const stored = await bucket().upload(path, bytes, {
-        contentType: 'image/jpeg',
-        upsert: false,
-        cacheControl: '0',
-      });
-      if (stored.error)
-        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'The photo could not be stored. Try again.');
     }
     try {
       await transaction(pool, a.context, async (tx) => {

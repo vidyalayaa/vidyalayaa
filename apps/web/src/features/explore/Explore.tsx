@@ -12,10 +12,14 @@ import {
   GraduationCap,
   HeartHandshake,
   Layers3,
+  Lightbulb,
+  ListChecks,
   Menu,
+  MessagesSquare,
   Radio,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   Users,
   Wallet,
   X,
@@ -48,17 +52,31 @@ const roles = [
     label: 'See the school beyond the paperwork.',
     description:
       'Follow attendance, academic records, and school updates with a clear view of the day.',
-    tools: ['School overview', 'Attendance insights', 'Academic records & reports'],
+    tools: [
+      'School overview',
+      'Attendance insights',
+      'Academic records & reports',
+      'AI insights across classes & subjects',
+    ],
     Icon: GraduationCap,
     focus: 'The bigger picture',
-    steps: ['Review school attendance', 'Follow academic progress', 'Stay close to school updates'],
+    steps: [
+      'Review school attendance',
+      'Follow academic progress with AI insights',
+      'Stay close to school updates',
+    ],
   },
   {
     name: 'Teacher',
     label: 'More room for what you do best.',
     description:
       'Find your assigned classes, share homework, and follow student progress in one place.',
-    tools: ['Assigned classes & students', 'Homework & subject tests', 'Timetable & attendance'],
+    tools: [
+      'Assigned classes & students',
+      'Homework & subject tests',
+      'Timetable & attendance',
+      'AI class performance insights',
+    ],
     Icon: BookOpen,
     focus: 'Your teaching day',
     steps: ['Check your weekly timetable', 'Share class homework', 'Record subject test marks'],
@@ -72,6 +90,7 @@ const roles = [
       'Your children’s attendance',
       'Homework & published results',
       'Fees, events & school updates',
+      'AI guidance on your child’s results',
     ],
     Icon: HeartHandshake,
     focus: 'A stronger school–home connection',
@@ -85,14 +104,88 @@ const roles = [
     name: 'Student',
     label: 'Your school day, all together.',
     description: 'Know what is next, keep up with your class, and see your own learning records.',
-    tools: ['Your class timetable', 'Homework & published results', 'School calendar & updates'],
+    tools: [
+      'Your class timetable',
+      'Homework & published results',
+      'School calendar & updates',
+      'AI study plan & academic assistant',
+    ],
     Icon: GraduationCap,
     focus: 'Ready for the school day',
-    steps: ['See your next class', 'Check your homework', 'View your published results'],
+    steps: ['See your next class', 'Check your homework', 'Follow your weekly AI study plan'],
   },
 ];
 
+const aiFeatures = [
+  {
+    Icon: TrendingUp,
+    tag: 'PERFORMANCE ANALYSIS',
+    name: 'See what the results are saying.',
+    text: 'Subject-by-subject strengths, priorities, and changes since earlier exams, explained in plain language.',
+  },
+  {
+    Icon: Lightbulb,
+    tag: 'RECOMMENDATIONS',
+    name: 'Know where to focus next.',
+    text: 'Realistic short- and long-term goals, with optional guidance built only from published results.',
+  },
+  {
+    Icon: ListChecks,
+    tag: 'WEEKLY STUDY PLAN',
+    name: 'A week of study, already planned.',
+    text: 'Bite-sized daily activities across subjects. Students tick each one off as they go.',
+  },
+  {
+    Icon: MessagesSquare,
+    tag: 'AI ACADEMIC ASSISTANT',
+    name: 'Ask about your results.',
+    text: '“Which subject needs more attention?” “Am I improving?” Get a short, clear answer.',
+  },
+];
+
+const aiPlan = [
+  ['Mon', 'English', 30, 'Read a short passage and summarize it', true],
+  ['Tue', 'Maths', 25, 'Practise ten mixed problems', true],
+  ['Wed', 'Computer', 20, 'Revise key terms with flashcards', false],
+  ['Thu', 'English', 30, 'Write one paragraph and self-check', false],
+] as const;
+
+// Keep these factual: 4 learner tools + staff insights; plans span Mon–Sun;
+// AI reaches students, parents, teachers, principals, and school admins.
+const aiStats = [
+  ['5', 'AI tools built in'],
+  ['7-day', 'personal study plans'],
+  ['5', 'school roles with AI'],
+  ['0', 'student names shared with the AI'],
+] as const;
+
+const aiFlow = [
+  ['Results are published', 'Teachers publish exam marks exactly as they do today.'],
+  [
+    'AI reads the numbers',
+    'Only marks and percentages are analysed. Never names or personal details.',
+  ],
+  [
+    'Everyone gets next steps',
+    'Analysis, goals, a weekly plan, and answers, right in the workspace.',
+  ],
+] as const;
+
+const aiTrust = [
+  'Uses published results only',
+  'Never changes official marks, grades, or ranks',
+  'Student names and typed questions are not sent to the AI',
+  'Guidance is optional and flags when evidence is thin',
+];
+
 const features = [
+  {
+    Icon: Sparkles,
+    name: 'Results, explained by AI.',
+    text: 'Performance analysis, focused recommendations, weekly study plans, and an academic assistant, built from published results.',
+    tag: 'AI GUIDANCE',
+    className: 'explore-feature-ai',
+  },
   {
     Icon: ClipboardCheck,
     name: 'Attendance, with a clear trail.',
@@ -146,7 +239,7 @@ export default function Explore() {
 
   useEffect(() => {
     const title = document.title;
-    document.title = 'Explore Vidyalayaa | Your school, in sync.';
+    document.title = 'Explore Vidyalayaa | The AI-powered school platform';
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries)
@@ -171,14 +264,20 @@ export default function Explore() {
       </a>
       <header className="explore-header">
         <div className="explore-announcement">
-          <span className="explore-live-dot" /> A connected school. A calmer day.{' '}
-          <Sparkles size={13} />
+          <span className="explore-live-dot" /> A connected school. A calmer day.
+          <a className="explore-announcement-link" href="#ai">
+            <Sparkles size={13} /> New: AI study plans & result insights
+            <ArrowRight size={12} />
+          </a>
         </div>
         <div className="explore-container explore-header-inner">
           <ExploreBrand />
           <nav className="explore-desktop-nav" aria-label="Explore navigation">
-            <a href="#features">The platform</a>
+            <a className="explore-nav-ai" href="#ai">
+              <Sparkles size={13} /> AI guidance
+            </a>
             <a href="#people">For your people</a>
+            <a href="#features">The platform</a>
             <a href="#getting-started">Getting started</a>
           </nav>
           <div className="flex items-center gap-2">
@@ -206,8 +305,9 @@ export default function Explore() {
             aria-label="Mobile explore navigation"
           >
             {[
-              ['#features', 'The platform'],
+              ['#ai', 'AI guidance'],
               ['#people', 'For your people'],
+              ['#features', 'The platform'],
               ['#getting-started', 'Getting started'],
             ].map(([href, name]) => (
               <a key={href} href={href} onClick={() => setMenuOpen(false)}>
@@ -226,36 +326,37 @@ export default function Explore() {
       <main id="explore-main" tabIndex={-1}>
         <section className="explore-hero explore-container" aria-labelledby="explore-title">
           <div className="explore-hero-copy">
-            <p className="explore-eyebrow">
-              <span /> YOUR SCHOOL, IN SYNC
+            <p className="explore-ai-badge">
+              <Sparkles size={14} /> THE AI-POWERED SCHOOL PLATFORM
             </p>
             <h1 id="explore-title">
               School life.
               <br />
-              Less scattered.
+              Connected.
               <br />
-              <span>More connected.</span>
+              <span className="explore-ai-gradient">Smarter with AI.</span>
             </h1>
             <p className="explore-intro">
-              One thoughtful home for the people, learning, and little details that make a school.
+              One home for your school’s people, learning, and everyday details, with built-in AI
+              that turns published results into clear analysis and a weekly study plan.
             </p>
             <div className="explore-hero-actions">
-              <a className="explore-button explore-button-lime" href="#people">
-                Find your place
+              <a className="explore-button explore-button-lime" href="#ai">
+                <Sparkles size={17} />
+                See the AI in action
                 <ArrowRight size={18} />
               </a>
-              <a className="explore-text-link" href="#features">
-                Explore the platform
+              <a className="explore-text-link" href="#people">
+                Find your place
                 <ArrowDown size={16} />
               </a>
             </div>
             <p className="explore-hero-note">
-              <ShieldCheck size={15} /> Made for schools. Designed around people.
+              <ShieldCheck size={15} /> AI guidance built in. School records kept behind sign-in.
             </p>
           </div>
           <div className="explore-hero-art" aria-label="Illustration of a connected school day">
-            <div className="explore-orbit explore-orbit-one" />
-            <div className="explore-orbit explore-orbit-two" />
+            <div className="explore-orbit" aria-hidden="true" />
             <span className="explore-art-spark" aria-hidden="true">
               ✳
             </span>
@@ -303,6 +404,16 @@ export default function Explore() {
                 </div>
                 <Check size={17} />
               </div>
+              <div className="explore-day-row explore-day-row-ai">
+                <span className="explore-icon-tile explore-icon-ai">
+                  <Sparkles size={20} />
+                </span>
+                <div>
+                  <strong>Know what to study next.</strong>
+                  <p>AI analysis & weekly study plans</p>
+                </div>
+                <Check size={17} />
+              </div>
               <div className="explore-card-footer">
                 <span className="explore-avatar-stack" aria-hidden="true">
                   <i>
@@ -316,6 +427,15 @@ export default function Explore() {
                   </i>
                 </span>
                 <span>Different roles. A shared school day.</span>
+              </div>
+            </div>
+            <div className="explore-floating-note explore-floating-ai">
+              <span>
+                <Sparkles size={19} />
+              </span>
+              <div>
+                <strong>Your AI study plan is ready.</strong>
+                <small>7 activities this week</small>
               </div>
             </div>
             <div className="explore-floating-note">
@@ -333,6 +453,7 @@ export default function Explore() {
         <div className="explore-values">
           <div className="explore-container">
             {[
+              { Icon: Sparkles, text: 'AI guidance, built in' },
               { Icon: Users, text: 'People, connected' },
               { Icon: BookOpen, text: 'Learning, organized' },
               { Icon: CalendarDays, text: 'Everyday, simplified' },
@@ -347,6 +468,129 @@ export default function Explore() {
             })}
           </div>
         </div>
+
+        <section id="ai" className="explore-ai-band" aria-labelledby="explore-ai-title">
+          <div className="explore-container explore-section" data-reveal>
+            <div className="explore-ai-intro">
+              <p className="explore-ai-badge">
+                <Sparkles size={14} /> ACADEMIC INTELLIGENCE
+              </p>
+              <h2 id="explore-ai-title">
+                Your school’s AI.
+                <br />
+                <span className="explore-ai-gradient">Built right in.</span>
+              </h2>
+              <p>
+                Published results become clear analysis, focused recommendations, a weekly study
+                plan, and answers to everyday questions, for learners, families, and teachers alike.
+              </p>
+            </div>
+
+            <dl className="explore-ai-stats">
+              {aiStats.map(([value, label]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <ol className="explore-ai-flow">
+              {aiFlow.map(([title, text], i) => (
+                <li key={title}>
+                  <span>0{i + 1}</span>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </li>
+              ))}
+            </ol>
+
+            <div className="explore-ai-layout">
+              <div className="explore-ai-grid">
+                {aiFeatures.map(({ Icon, tag, name, text }) => (
+                  <article key={tag} className="explore-ai-card">
+                    <div className="explore-feature-top">
+                      <span className="explore-icon-tile">
+                        <Icon size={20} />
+                      </span>
+                      <span>{tag}</span>
+                    </div>
+                    <h3>{name}</h3>
+                    <p>{text}</p>
+                  </article>
+                ))}
+                <article className="explore-ai-card explore-ai-card-staff">
+                  <div className="explore-feature-top">
+                    <span className="explore-icon-tile explore-icon-lilac">
+                      <Users size={20} />
+                    </span>
+                    <span>FOR SCHOOL STAFF</span>
+                  </div>
+                  <h3>Spot trends across the school.</h3>
+                  <p>
+                    School Admins, Principals, and Teachers get AI summaries of class, subject, and
+                    session performance to plan academic support where it matters most.
+                  </p>
+                </article>
+              </div>
+
+              <figure className="explore-ai-preview">
+                <div className="explore-preview-top">
+                  <span>MY AI STUDY PLAN</span>
+                  <Sparkles size={18} />
+                </div>
+                <h4>This week, a little at a time.</h4>
+                <div className="explore-ai-progress" aria-hidden="true">
+                  <span style={{ width: '50%' }} />
+                </div>
+                <p className="explore-ai-progress-label">2 of 4 activities done</p>
+                <ul className="explore-ai-plan">
+                  {aiPlan.map(([day, subject, minutes, activity, done]) => (
+                    <li key={day} className={done ? 'explore-ai-done' : ''}>
+                      <span className="explore-ai-check" aria-hidden="true">
+                        {done && <Check size={12} strokeWidth={3} />}
+                      </span>
+                      <div>
+                        <strong>
+                          <span className="sr-only">{done ? 'Done: ' : 'To do: '}</span>
+                          {activity}
+                        </strong>
+                        <small>
+                          {day} · {subject} · {minutes} min
+                        </small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="explore-ai-chat">
+                  <p className="explore-ai-question">Which subject needs more attention?</p>
+                  <p className="explore-ai-answer">
+                    <Sparkles size={13} />
+                    English is your current priority at 55%. Short daily reading practice is a good
+                    place to start.
+                  </p>
+                </div>
+                <figcaption className="explore-preview-caption">
+                  Illustrative preview · Sample data, not a real student.
+                </figcaption>
+              </figure>
+            </div>
+            <div className="explore-ai-trust">
+              <ShieldCheck size={26} />
+              <div>
+                <h3>AI that knows its limits.</h3>
+                <ul>
+                  {aiTrust.map((item) => (
+                    <li key={item}>
+                      <Check size={14} />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section
           id="people"
@@ -463,6 +707,15 @@ export default function Explore() {
                       ))}
                     </div>
                   )}
+                  {tag === 'AI GUIDANCE' && (
+                    <a
+                      className="explore-button explore-button-lime explore-feature-ai-link"
+                      href="#ai"
+                    >
+                      See the AI in action
+                      <ArrowUpRight size={16} />
+                    </a>
+                  )}
                   {tag === 'SCHOOL OPERATIONS' && (
                     <div className="explore-operations-tags" aria-hidden="true">
                       <span>School calendar</span>
@@ -561,6 +814,10 @@ export default function Explore() {
                 'Your school assigns your role and access. Selecting a role in this preview only explains its features; it does not change your account or grant access.',
               ],
               [
+                'How does the AI use school data?',
+                'AI guidance works only from published marks and percentages. Student names and personal details are never sent. Questions typed into the assistant are matched to academic topics; the text itself is not sent. The AI never changes official marks, grades, or ranks, and class averages appear only when your school chooses to share them.',
+              ],
+              [
                 'How can my school get started?',
                 'Contact the Vidyalayaa team using the email link below to discuss school onboarding. Existing school members should contact their own School Admin for invitations and account access.',
               ],
@@ -588,7 +845,7 @@ export default function Explore() {
               <br />
               school together.
             </h2>
-            <p>For the people who make a school, every day.</p>
+            <p>For the people who make a school, every day. With AI guidance built in.</p>
           </div>
           <div className="explore-cta-actions">
             <a

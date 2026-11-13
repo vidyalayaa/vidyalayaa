@@ -3526,6 +3526,110 @@
         ],
         "additionalProperties": false
       },
+      "AcademicResultSelection": {
+        "type": "object",
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "exam_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "AcademicAssistantQuestion": {
+        "type": "object",
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "exam_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "additionalProperties": false
+      },
+      "AcademicStudyProgress": {
+        "type": "object",
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "task": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "completed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "plan_id",
+          "task",
+          "completed"
+        ],
+        "additionalProperties": false
+      },
+      "AcademicSharing": {
+        "type": "object",
+        "properties": {
+          "share_class_averages": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "share_class_averages"
+        ],
+        "additionalProperties": false
+      },
+      "AcademicCohortFilters": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "exam_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "grade": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "student_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
       "SingleMark": {
         "type": "object",
         "properties": {
@@ -18999,6 +19103,612 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/selection": {
+      "get": {
+        "summary": "Authorized published result filters",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/performance": {
+      "get": {
+        "summary": "Published report card and comparable academic history",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "exam_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/cohort": {
+      "get": {
+        "summary": "School or teaching-assignment academic analytics",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "exam_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/guidance": {
+      "post": {
+        "summary": "Generate or retrieve personalized academic advice",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicResultSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/assistant": {
+      "post": {
+        "summary": "Ask about a student’s authorized academic results",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicAssistantQuestion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/cohort/insights": {
+      "post": {
+        "summary": "Generate insights from scoped academic aggregates",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicCohortFilters"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/progress": {
+      "put": {
+        "summary": "Update own study plan activity progress",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicStudyProgress"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/academic-intelligence/sharing": {
+      "get": {
+        "summary": "Read school class average sharing policy",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update school class average sharing policy",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcademicSharing"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/platform/support-grants/{id}/academic-intelligence": {
+      "get": {
+        "summary": "Read school-level academic aggregates with an approved marks grant",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."

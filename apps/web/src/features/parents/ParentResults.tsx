@@ -5,8 +5,30 @@ import { api, useAuth } from '../../lib/auth';
 import { Loading, ErrorState, Empty } from '../../components/common';
 import { DateFilters, Metric } from './ParentInsightsControls';
 import { schoolToday } from '../calendar/calendar-utils';
+import AcademicStudentView from '../results/AcademicStudentView';
+import { Button } from '../../components/ui/button';
 const ResultCharts = lazy(() => import('./ResultCharts'));
 export default function ParentResults({ child, base }: { child: ParentChild; base: string }) {
+  const [history, setHistory] = useState(false);
+  return (
+    <>
+      <Button
+        className="result-print-hidden mb-4"
+        variant="outline"
+        onClick={() => setHistory(!history)}
+      >
+        {history ? 'Open report cards and AI analysis' : 'Browse marks by date and subject'}
+      </Button>
+      {history ? (
+        <ParentResultsHistory key={child.id} child={child} base={base} />
+      ) : (
+        <AcademicStudentView key={child.id} student={child.id} />
+      )}
+    </>
+  );
+}
+
+function ParentResultsHistory({ child, base }: { child: ParentChild; base: string }) {
   const a = useAuth(),
     today = schoolToday(a.me?.school?.timezone);
   const [range, setRange] = useState({

@@ -3,7 +3,7 @@ import type pg from 'pg';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { uuid, type InvitationResult, type Role } from '@vidyalayaa/contracts';
 import { z } from 'zod';
-import { transaction, type TenantContext } from '../../lib/db.js';
+import { lockSchoolLifecycle, transaction, type TenantContext } from '../../lib/db.js';
 import { ApiError, asyncRoute } from '../../lib/errors.js';
 
 export function invitationError(error: unknown): never {
@@ -65,77 +65,80 @@ export async function inviteMember(
     full_name?: string;
   };
   try {
-    intent = await transaction(
-      pool,
-      context,
-      async (tx) =>
-        (
-          await tx.query('SELECT app.begin_school_invitation($1,$2,$3,$4,$5,$6) AS result', [
-            input.school_id,
-            input.email,
-            input.full_name,
-            input.role,
-            resend,
-            input.record_id ?? null,
-          ])
-        ).rows[0].result,
-    );
+    intent = await transaction(pool, context, async (tx) => {
+      await lockSchoolLifecycle(tx, input.school_id);
+      return (
+        await tx.query('SELECT app.begin_school_invitation($1,$2,$3,$4,$5,$6) AS result', [
+          input.school_id,
+          input.email,
+          input.full_name,
+          input.role,
+          resend,
+          input.record_id ?? null,
+        ])
+      ).rows[0].result;
+    });
   } catch (error) {
     return invitationError(error);
   }
   if (intent.action === 'none') return { id: intent.id, status: intent.status, email_sent: false };
   try {
-    let identity = intent.user_id;
-    if (intent.action === 'send') {
-      const response = await auth.auth.admin.inviteUserByEmail(input.email, {
-        data: { full_name: intent.full_name || input.full_name },
-        redirectTo,
-      });
-      if (response.error || !response.data.user) {
-        throw new ApiError(
-          422,
-          'INVITATION_EMAIL_FAILED',
-          'The setup email could not be sent. Check the Auth email provider and retry this invitation.',
-        );
+    return await transaction(pool, context, async (tx) => {
+      await lockSchoolLifecycle(tx, input.school_id);
+      const allowed = await tx.query('SELECT app.can_invite_member($1,$2,$3) AS allowed', [
+        input.school_id,
+        input.role,
+        input.email,
+      ]);
+      if (!allowed.rows[0]?.allowed)
+        throw new ApiError(403, 'ONBOARDING_NOT_ALLOWED', 'This school cannot issue invitations.');
+      let identity = intent.user_id;
+      if (intent.action === 'send') {
+        const response = await auth.auth.admin.inviteUserByEmail(input.email, {
+          data: { full_name: intent.full_name || input.full_name },
+          redirectTo,
+        });
+        if (response.error || !response.data.user) {
+          throw new ApiError(
+            422,
+            'INVITATION_EMAIL_FAILED',
+            'The setup email could not be sent. Check the Auth email provider and retry this invitation.',
+          );
+        }
+        identity = response.data.user.id;
       }
-      identity = response.data.user.id;
-    }
-    if (intent.action === 'link') {
-      // An existing account must receive an email too. A provider-issued sign-in
-      // link proves email ownership; accepting the school invitation is separate.
-      const response = await auth.auth.signInWithOtp({
-        email: input.email,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: new URL('/auth/verify', redirectTo).toString(),
-        },
-      });
-      if (response.error)
+      if (intent.action === 'link') {
+        // An existing account must receive an email too. A provider-issued sign-in
+        // link proves email ownership; accepting the school invitation is separate.
+        const response = await auth.auth.signInWithOtp({
+          email: input.email,
+          options: {
+            shouldCreateUser: false,
+            emailRedirectTo: new URL('/auth/verify', redirectTo).toString(),
+          },
+        });
+        if (response.error)
+          throw new ApiError(
+            422,
+            'INVITATION_EMAIL_FAILED',
+            'The invitation sign-in email could not be sent. Check Auth email delivery and retry.',
+          );
+      }
+      if (!identity)
         throw new ApiError(
-          422,
-          'INVITATION_EMAIL_FAILED',
-          'The invitation sign-in email could not be sent. Check Auth email delivery and retry.',
+          409,
+          'IDENTITY_MISMATCH',
+          'The invited account was not found. Retry the invitation.',
         );
-    }
-    if (!identity)
-      throw new ApiError(
-        409,
-        'IDENTITY_MISMATCH',
-        'The invited account was not found. Retry the invitation.',
-      );
-    return await transaction(
-      pool,
-      context,
-      async (tx) =>
-        (
-          await tx.query('SELECT app.finish_school_invitation($1,$2,$3,$4) AS result', [
-            intent.id,
-            intent.attempt_id,
-            identity,
-            true,
-          ])
-        ).rows[0].result,
-    );
+      return (
+        await tx.query('SELECT app.finish_school_invitation($1,$2,$3,$4) AS result', [
+          intent.id,
+          intent.attempt_id,
+          identity,
+          true,
+        ])
+      ).rows[0].result;
+    });
   } catch (error) {
     await transaction(pool, context, (tx) =>
       tx.query('SELECT app.fail_school_invitation($1,$2)', [intent.id, intent.attempt_id]),

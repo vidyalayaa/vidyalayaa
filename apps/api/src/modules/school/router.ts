@@ -10,6 +10,7 @@ import { subjectMaterialsRouter } from './materials.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
 import { resultsRouter } from './results.js';
+import { academicIntelligenceRouter } from './academic-intelligence.js';
 import { studentDirectoryRouter } from './student-directory.js';
 import { calendarRouter } from './calendar.js';
 import { timetableRouter } from './timetable.js';
@@ -43,7 +44,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { inviteMember, invitationError } from '../identity/invitations.js';
 import { asyncRoute, ApiError, notFound } from '../../lib/errors.js';
 import { paged, cursorPage } from '../../lib/pagination.js';
-import { transaction, audit, type Tx } from '../../lib/db.js';
+import { transaction, audit, lockSchoolStorageWrite, type Tx } from '../../lib/db.js';
 import { permission, loadEntitlements, type Actor } from '../../middleware/auth.js';
 import {
   definitions,
@@ -205,6 +206,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/materials', subjectMaterialsRouter(pool));
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.use('/results', resultsRouter(pool, requireWrite));
+  router.use('/academic-intelligence', academicIntelligenceRouter(pool, config, requireWrite));
   router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
   router.use('/timetable', timetableRouter(pool, { requireWrite, withIdempotency }));
@@ -1760,7 +1762,9 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           })
           .strict()
           .parse(req.body);
-      await transaction(pool, a.context, async (tx) => {
+      const path = `${a.context.schoolId}/materials/${b.class_id}/${crypto.randomUUID()}-${b.filename}`;
+      const signed = await transaction(pool, a.context, async (tx) => {
+        await lockSchoolStorageWrite(tx, a.context.schoolId);
         await requireWrite(tx, a, 'assignments');
         await assertClass(tx, a, b.class_id, b.subject_id);
         if (
@@ -1773,9 +1777,8 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           ).rowCount
         )
           throw notFound();
+        return storage.storage.from('school-documents').createSignedUploadUrl(path);
       });
-      const path = `${a.context.schoolId}/materials/${b.class_id}/${crypto.randomUUID()}-${b.filename}`;
-      const signed = await storage.storage.from('school-documents').createSignedUploadUrl(path);
       if (signed.error)
         throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Upload storage is unavailable.');
       res.json({ path, url: signed.data.signedUrl, token: signed.data.token });

@@ -82,6 +82,8 @@ test('shows daily attendance summaries, absence corrections and normalized publi
   ).rows[0];
   expect(day.attendance_status).toBe('ABSENT');
   await page.goto(authAppURL + '/parent/r/marks?child_id=' + f.student);
+  await expect(page.getByRole('button', { name: 'AI Performance Analysis' })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse marks by date and subject' }).click();
   await page.getByLabel('From date', { exact: true }).fill('2026-10-01');
   await page.getByLabel('To date', { exact: true }).fill('2026-10-07');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();

@@ -73,6 +73,9 @@ export default function TeacherPortalSection() {
               Subject tests & marks
             </a>
           </Button>
+          <Button variant="outline" asChild>
+            <a href="/academic-intelligence">Academic Performance &amp; AI Analysis</a>
+          </Button>
           {classes.some((c) => c.is_class_teacher) && (
             <Button variant="outline" asChild>
               <a href="/official-results">Official exam results</a>

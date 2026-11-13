@@ -213,9 +213,23 @@ export default function Layout() {
             icon: GraduationCap,
             permission: 'classrooms.read',
           },
+          {
+            to: '/academic-intelligence',
+            text: 'Academic performance',
+            icon: GraduationCap,
+            permission: 'marks.read',
+          },
         ]
       : isSchoolLeadership(role)
-        ? items
+        ? [
+            ...items,
+            {
+              to: '/academic-intelligence',
+              text: 'Academic intelligence',
+              icon: GraduationCap,
+              permission: 'marks.read',
+            },
+          ]
             .filter(
               (i) =>
                 !['/r/teacher_class_assignments', '/r/parents', '/r/student_parents'].includes(

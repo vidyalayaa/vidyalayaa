@@ -71,7 +71,7 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
           '/src/features/calendar/EventForm.tsx',
           '/src/features/dashboard/Dashboard.tsx',
           '/src/features/parents/ParentWorkspace.tsx',
-          '/src/features/parents/ParentAttendance.tsx',
+          '/src/features/attendance/AttendanceCalendar.tsx',
           '/src/features/parents/ParentResults.tsx',
           '/src/features/parents/ParentInsightsControls.tsx',
           '/src/features/parents/ResultCharts.tsx',

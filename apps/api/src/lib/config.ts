@@ -23,6 +23,11 @@ export const configSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
   FIRMWARE_RELEASE_PUBLIC_KEY: z.string().max(10000).optional(),
   BILLING_WEBHOOK_SECRET: z.string().min(32).optional(),
+  ACADEMIC_AI_CLOUDFLARE_ACCOUNT_ID: z
+    .string()
+    .regex(/^[a-f0-9]{32}$/i)
+    .optional(),
+  ACADEMIC_AI_CLOUDFLARE_TOKEN: z.string().min(1).optional(),
 });
 export type Config = z.infer<typeof configSchema>;
 export function loadConfig() {

@@ -2,6 +2,7 @@ import pg from 'pg';
 import { rootCertificates } from 'node:tls';
 import { X509Certificate } from 'node:crypto';
 import type { Config } from './config.js';
+import { ApiError } from './errors.js';
 export type Tx = Pick<pg.PoolClient, 'query'>;
 export interface TenantContext {
   schoolId: string;
@@ -155,6 +156,24 @@ export async function transaction<T>(
 }
 export async function platformTx<T>(pool: pg.Pool, userId: string, fn: (tx: Tx) => Promise<T>) {
   return transaction(pool, { schoolId: '', userId }, fn);
+}
+export async function lockSchoolLifecycle(tx: Tx, schoolId: string, exclusive = false) {
+  await tx.query(
+    `SELECT ${exclusive ? 'pg_advisory_xact_lock' : 'pg_advisory_xact_lock_shared'}(hashtextextended($1::text||':school-lifecycle',0))`,
+    [schoolId],
+  );
+}
+export async function lockSchoolStorageWrite(tx: Tx, schoolId: string, finalExport = false) {
+  await lockSchoolLifecycle(tx, schoolId);
+  const available = await tx.query(
+    `SELECT s.id FROM schools s WHERE s.id=$1 AND s.status<>'TERMINATED'
+     AND NOT EXISTS(SELECT FROM school_offboarding o WHERE o.school_id=s.id
+       AND o.permanent AND o.status IN ('CLOSED','PURGE_REQUESTED','PURGING')
+       AND (NOT $2::boolean OR o.irreversible_at IS NOT NULL))`,
+    [schoolId, finalExport],
+  );
+  if (!available.rowCount)
+    throw new ApiError(409, 'SCHOOL_OFFBOARDED', 'This school can no longer receive these files.');
 }
 export async function audit(
   tx: Tx,

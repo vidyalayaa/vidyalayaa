@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Page } from '@vidyalayaa/contracts';
+import type { AcademicCohort, Page } from '@vidyalayaa/contracts';
 import { api, useAuth } from '../../lib/auth';
 import { display, label, toDateTimeLocal, fromDateTimeLocal } from '../../lib/utils';
 import { Dialog } from '../../components/ui/dialog';
@@ -513,6 +513,7 @@ export function SupportData({
   const qc = useQueryClient(),
     a = useAuth(),
     scope = grant.scope as string[],
+    features = scope.includes('marks') ? [...scope, 'academic-intelligence'] : scope,
     [feature, setFeature] = useState(scope[0]),
     [page, setPage] = useState(1),
     [now, setNow] = useState(Date.now());
@@ -527,7 +528,19 @@ export function SupportData({
     q = useQuery({
       queryKey: ['support-data', grant.id, feature, page],
       queryFn: () => api<Page>(`/platform/support-grants/${grant.id}/${feature}?page=${page}`),
-      enabled: !expired && !!a.session,
+      enabled: !expired && !!a.session && feature !== 'academic-intelligence',
+      staleTime: 0,
+      gcTime: 0,
+      retry: false,
+      refetchInterval: 15000,
+    }),
+    academic = useQuery({
+      queryKey: ['support-data', grant.id, 'academic-intelligence'],
+      queryFn: ({ signal }) =>
+        api<AcademicCohort>(`/platform/support-grants/${grant.id}/academic-intelligence`, {
+          signal,
+        }),
+      enabled: !expired && !!a.session && feature === 'academic-intelligence',
       staleTime: 0,
       gcTime: 0,
       retry: false,
@@ -549,7 +562,7 @@ export function SupportData({
       ) : (
         <>
           <div className="tabs">
-            {scope.map((s) => (
+            {features.map((s) => (
               <button
                 key={s}
                 className={s === feature ? 'tab-active' : ''}
@@ -558,11 +571,56 @@ export function SupportData({
                   setPage(1);
                 }}
               >
-                {label(s)}
+                {s === 'academic-intelligence' ? 'Academic analytics' : label(s)}
               </button>
             ))}
           </div>
-          {q.isLoading ? (
+          {feature === 'academic-intelligence' ? (
+            academic.isLoading ? (
+              <Loading />
+            ) : academic.error ? (
+              <ErrorState error={academic.error} />
+            ) : academic.data?.appeared ? (
+              <div className="max-h-80 overflow-auto">
+                <dl className="mb-4 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt>Average</dt>
+                    <dd>{academic.data.average}%</dd>
+                  </div>
+                  <div>
+                    <dt>Students appeared</dt>
+                    <dd>{academic.data.appeared}</dd>
+                  </div>
+                  <div>
+                    <dt>Passed</dt>
+                    <dd>{academic.data.passed ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Failed</dt>
+                    <dd>{academic.data.failed ?? '—'}</dd>
+                  </div>
+                </dl>
+                <h3 className="font-semibold">Class averages</h3>
+                <ul className="my-2 space-y-1 text-sm">
+                  {academic.data.classes.map((item) => (
+                    <li key={item.id}>
+                      {item.name} · {item.percentage}%
+                    </li>
+                  ))}
+                </ul>
+                <h3 className="font-semibold">Subject averages</h3>
+                <ul className="my-2 space-y-1 text-sm">
+                  {academic.data.subjects.map((item) => (
+                    <li key={item.id}>
+                      {item.name} · {item.percentage}%
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <Empty title="No published results" />
+            )
+          ) : q.isLoading ? (
             <Loading />
           ) : q.error ? (
             <ErrorState error={q.error} />
@@ -584,29 +642,31 @@ export function SupportData({
           ) : (
             <Empty />
           )}
-          <div className="pagination">
-            <span>
-              Page {page} · {q.data?.total || 0} records
-            </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!q.data || page * q.data.page_size >= q.data.total}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+          {feature !== 'academic-intelligence' && (
+            <div className="pagination">
+              <span>
+                Page {page} · {q.data?.total || 0} records
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!q.data || page * q.data.page_size >= q.data.total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </Dialog>

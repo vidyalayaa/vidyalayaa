@@ -526,6 +526,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refetchIntervalInBackground: false,
   });
   const userId = session?.user.id;
+  const resetSchoolContext = useCallback(
+    (value: string) => {
+      clearDrafts();
+      selectedSchool = value;
+      sessionStorage.setItem('vidyalayaa.school', value);
+      queryClient.clear();
+      updateSchool(value);
+    },
+    [queryClient],
+  );
+  useEffect(() => {
+    if (
+      school &&
+      selectedSchool === school &&
+      me.error instanceof HttpError &&
+      me.error.code === 'SCHOOL_CONTEXT_UNAVAILABLE'
+    )
+      resetSchoolContext('');
+  }, [me.error, school, resetSchoolContext]);
   const extendIdleSession = useCallback(async () => {
     if (!userId) return;
     const { idle_expires_at } = await api<{ idle_expires_at: string | null }>(
@@ -554,9 +573,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (
         error instanceof HttpError &&
-        ['SESSION_ENDED', 'UNAUTHENTICATED', 'CONTEXT_CHANGED'].includes(error.code)
-      )
+        [
+          'SESSION_ENDED',
+          'UNAUTHENTICATED',
+          'CONTEXT_CHANGED',
+          'SCHOOL_CONTEXT_UNAVAILABLE',
+        ].includes(error.code)
+      ) {
+        if (error.code === 'SCHOOL_CONTEXT_UNAVAILABLE' && selectedSchool === school)
+          await queryClient.invalidateQueries({ queryKey: ['me', userId, school], exact: true });
         return;
+      }
       const { data: latest } = await supabase.auth.getSession();
       if (
         selectedSchool === school &&
@@ -593,13 +620,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', refresh);
     };
   }, [session?.user.id, me.data?.school?.school_id, me.data?.school?.role]);
-  const setSchool = (value: string) => {
-    clearDrafts();
-    selectedSchool = value;
-    sessionStorage.setItem('vidyalayaa.school', value);
-    queryClient.clear();
-    updateSchool(value);
-  };
   const logout = async () => {
     clearDrafts();
     reauthenticationSchool = undefined;
@@ -633,7 +653,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         school: me.data?.school?.school_id || school,
         requestSchool: school,
-        setSchool,
+        setSchool: resetSchoolContext,
         logout,
       }}
     >

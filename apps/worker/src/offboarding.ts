@@ -1,7 +1,7 @@
 import type pg from 'pg';
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { transaction } from '../../api/src/lib/db.js';
+import { lockSchoolLifecycle, transaction } from '../../api/src/lib/db.js';
 
 export async function purgeApprovedSchool(
   pool: pg.Pool,
@@ -66,10 +66,14 @@ export async function purgeApprovedSchool(
         ctx,
         async (tx) => {
           await tx.query('SELECT app.school_erasure_relations()');
+          // Closure drains authenticated writers. Previously issued material
+          // upload URLs have a two-hour lifetime and cannot be revoked per URL.
           const school = await tx.query(
             `SELECT id FROM schools WHERE id=$1 AND status='SUSPENDED'
-           AND NOT EXISTS(SELECT FROM devices WHERE school_id=$1 AND status<>'REVOKED')`,
-            [schoolId],
+           AND NOT EXISTS(SELECT FROM devices WHERE school_id=$1 AND status<>'REVOKED')
+           AND EXISTS(SELECT FROM school_offboarding WHERE id=$2
+             AND closed_at<=clock_timestamp()-interval '2 hours')`,
+            [schoolId, job.id],
           );
           if (!school.rowCount) throw new Error('SCHOOL_NOT_CLOSED');
         },
@@ -98,11 +102,12 @@ export async function purgeApprovedSchool(
       }
       return files;
     };
-    const files = await collect(schoolId);
+    let files = await collect(schoolId);
     if (job.permanent) {
       // Commit the irreversible marker before any external delete. A hold can
       // still stop this transition while discovery and export checks run.
       await transaction(pool, ctx, async (tx) => {
+        await lockSchoolLifecycle(tx, schoolId, true);
         const started = await tx.query(
           `UPDATE school_offboarding SET irreversible_at=coalesce(irreversible_at,clock_timestamp())
            WHERE id=$1 AND school_id=$2 AND purge_lease=$3 AND status='PURGING' AND NOT legal_hold
@@ -111,6 +116,8 @@ export async function purgeApprovedSchool(
         );
         if (!started.rowCount) throw new Error('PURGE_PAUSED');
       });
+      // An export writer may have finished between the first listing and the lock.
+      files = await collect(schoolId);
     }
     for (let i = 0; i < files.length; i += 100)
       await transaction(pool, ctx, async (tx) => {

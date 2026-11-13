@@ -47,6 +47,9 @@ test('student academics and published results stay private, combine class detail
   }
   await page.goto(authAppURL + '/student/r/marks?student_id=' + s.otherStudent);
   await expect(page.getByRole('heading', { name: 'My results', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'AI Performance Analysis' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'My AI Study Plan' })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse marks by examination and subject' }).click();
   const table = page.getByRole('table', { name: 'My published marks', exact: true });
   await expect(table).toContainText('Zero score assessment');
   await expect(table).toContainText('0 / 100');

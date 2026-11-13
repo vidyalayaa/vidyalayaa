@@ -71,6 +71,9 @@ export default function SchoolResults() {
         description="Review student marks and compare performance across your school."
         actions={
           <>
+            <Button variant="outline" asChild>
+              <Link to={schoolPath('/academic-intelligence', role)}>Academic intelligence</Link>
+            </Button>
             {canConfigurePolicy && (
               <Button variant="outline" onClick={() => setPolicy(true)}>
                 Grading policy

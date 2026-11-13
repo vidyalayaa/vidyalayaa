@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import PDFDocument from 'pdfkit';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Actor } from '../../api/src/middleware/auth.js';
-import { transaction } from '../../api/src/lib/db.js';
+import { lockSchoolStorageWrite, transaction } from '../../api/src/lib/db.js';
 import {
   studentScope,
   classScope,
@@ -182,23 +182,22 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
           report.parameters.to,
         );
     const path = `${schoolId}/reports/${report.id}/${lease}.${csv ? 'csv' : 'pdf'}`;
-    const own = await transaction(pool, ctx, (tx) =>
-      tx.query(
-        "UPDATE report_documents SET locked_until=now()+interval '5 minutes' WHERE id=$1 AND lease_token=$2 RETURNING id",
+    await transaction(pool, ctx, async (tx) => {
+      await lockSchoolStorageWrite(tx, schoolId);
+      const own = await tx.query(
+        "UPDATE report_documents SET locked_until=now()+interval '5 minutes' WHERE id=$1 AND lease_token=$2 AND status='PROCESSING' RETURNING id",
         [report.id, lease],
-      ),
-    );
-    if (!own.rowCount) throw new Error('REPORT_LEASE_LOST');
-    const uploaded = await storage.storage
-      .from('school-documents')
-      .upload(path, buffer, { contentType: csv ? 'text/csv' : 'application/pdf', upsert: false });
-    if (uploaded.error) throw new Error('STORAGE_UNAVAILABLE');
-    await transaction(pool, ctx, (tx) =>
-      tx.query(
+      );
+      if (!own.rowCount) throw new Error('REPORT_LEASE_LOST');
+      const uploaded = await storage.storage
+        .from('school-documents')
+        .upload(path, buffer, { contentType: csv ? 'text/csv' : 'application/pdf', upsert: false });
+      if (uploaded.error) throw new Error('STORAGE_UNAVAILABLE');
+      await tx.query(
         "UPDATE report_documents SET status='COMPLETED',storage_path=$3,locked_until=NULL,authorization_version=$4,authorization_role=$5,authorization_scope=$6 WHERE id=$1 AND lease_token=$2",
         [report.id, lease, path, data.school.access_version, data.role, data.fingerprint],
-      ),
-    );
+      );
+    });
   } catch (error) {
     const current = await transaction(
       pool,
