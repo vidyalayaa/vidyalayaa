@@ -145,19 +145,19 @@ export function schoolAccess(pool: pg.Pool) {
     const terminal = ['SUSPENDED', 'CANCELLED', 'EXPIRED'].includes(a.subscription_status || '');
     const administration =
       a.active!.role === 'school_admin' &&
-      /^\/(subscription|support-requests|offboarding)(\/|$)/.test(req.path);
+      /^\/(subscription|support-requests|offboarding)(\/|$)/i.test(req.path);
     if (administration) {
       next();
       return;
     }
-    if (window && req.method === 'POST' && req.path === '/reports')
+    if (window && req.method === 'POST' && /^\/reports\/?$/i.test(req.path))
       throw new ApiError(
         403,
         'SCHOOL_OFFBOARDED',
         'Use School exports to export the closed school during its approved window.',
       );
     if (window || terminal) {
-      if (a.active!.role !== 'school_admin' || !/^\/(exports|reports)(\/|$)/.test(req.path))
+      if (a.active!.role !== 'school_admin' || !/^\/(exports|reports)(\/|$)/i.test(req.path))
         throw new ApiError(
           403,
           window ? 'SCHOOL_OFFBOARDED' : 'SUBSCRIPTION_RESTRICTED',

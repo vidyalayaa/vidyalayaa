@@ -12,6 +12,20 @@ import {
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url)
   throw new Error('Set MIGRATION_DATABASE_URL to a direct/session migration-owner connection.');
+const seed = process.argv.includes('--seed');
+if (seed) {
+  const connection = URL.parse(url);
+  if (
+    process.env.NODE_ENV === 'production' ||
+    process.env.ALLOW_DEVELOPMENT_SEED !== 'true' ||
+    !connection ||
+    !['localhost', '127.0.0.1', '[::1]'].includes(connection.hostname.toLowerCase()) ||
+    connection.searchParams.has('host')
+  )
+    throw new Error(
+      'Development seed requires ALLOW_DEVELOPMENT_SEED=true and a non-production PostgreSQL URL pointing directly to localhost, 127.0.0.1 or [::1].',
+    );
+}
 const client = new pg.Client(
   databaseConnectionOptions(url, {
     DB_SSL: process.env.DB_SSL === 'false' ? 'false' : 'true',
@@ -23,11 +37,7 @@ try {
   if (process.argv.includes('--verify')) {
     await client.query(await readFile('db/tests/verify.sql', 'utf8'));
     console.info('Schema verification passed.');
-  } else if (process.argv.includes('--seed')) {
-    if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEVELOPMENT_SEED !== 'true')
-      throw new Error(
-        'Development seed requires ALLOW_DEVELOPMENT_SEED=true and a non-production environment.',
-      );
+  } else if (seed) {
     await client.query(await readFile('db/seeds/development.sql', 'utf8'));
     console.info('Explicit development fixtures applied.');
   } else {

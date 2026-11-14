@@ -192,3 +192,17 @@ it('serves assigned private bytes only to the authenticated reader and checks st
   ).toBe(204);
   expect((await get()).status).toBe(404);
 });
+
+it('shares one download rate limit across firmware versions and equivalent paths', async () => {
+  await db.exec('DELETE FROM app.http_rate_buckets');
+  const get = (path: string) =>
+    request(app)
+      .get('/api/v1/device' + path)
+      .set('X-Device-Id', code)
+      .set('Authorization', 'Bearer reader-fixture-secret');
+  for (let patch = 0; patch < 6; patch++)
+    expect((await get(`/ota/image/2.0.${patch}`)).status).toBe(404);
+  const limited = await get('/OTA/image/2.0.6/');
+  expect(limited.status).toBe(429);
+  expect(limited.headers['retry-after']).toBeDefined();
+});

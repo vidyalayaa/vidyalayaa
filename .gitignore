@@ -25,6 +25,7 @@ output/*.zip
 
 .tools/
 backups/
+SECURITY_AUDIT_*.md
 *.dump
 *.vbackup
 

@@ -222,6 +222,10 @@ it('requires a fresh authenticator, a separate verified backup admin, and confir
     (await change({ ...options, approval_details: '', confirm_enforcement: true })).body.error.code,
   ).toBe('MFA_RECOVERY_REQUIRED');
   expect((await change({ ...options, confirm_enforcement: true })).status).toBe(200);
+  for (const path of ['/exports', '/Exports/'])
+    expect((await call('post', path, admin.bearer('aal2', false)).send({})).body.error.code).toBe(
+      'MFA_STEP_UP_REQUIRED',
+    );
   for (const uid of [f.principal, f.teacher, finance]) {
     const { bearer } = await login(uid);
     expect((await call('get', '/me', bearer('aal1'))).body.security_mfa_required).toBe(true);
@@ -246,6 +250,30 @@ it('requires a fresh authenticator, a separate verified backup admin, and confir
     (await call('get', '/platform/schools', (await login(root)).bearer('aal1'), '')).body.error
       .code,
   ).toBe('MFA_REQUIRED');
+});
+
+it('applies school-management authorization consistently to export and offboarding routes', async () => {
+  const { bearer } = await login(f.teacher);
+  for (const path of ['/exports', '/Exports/', '/offboarding', '/Offboarding/']) {
+    expect((await call('get', path, bearer())).body.error.code).toBe('FORBIDDEN');
+    expect((await call('get', path)).status).toBe(200);
+  }
+});
+
+it('keeps regular report creation closed throughout an approved offboarding export window', async () => {
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO school_offboarding(id,school_id,requested_by,policy_ref,reason,export_until,delete_after,status)
+     VALUES($1,$2,$3,'TEST-OFFBOARDING','Isolated test',now()+interval '1 day',now()+interval '2 days','CLOSED')`,
+    [id, f.schoolA, f.admin],
+  );
+  try {
+    for (const path of ['/reports', '/Reports/'])
+      expect((await call('post', path).send({})).body.error.code).toBe('SCHOOL_OFFBOARDED');
+    expect((await call('get', '/exports')).status).toBe(200);
+  } finally {
+    await db.query('DELETE FROM school_offboarding WHERE id=$1', [id]);
+  }
 });
 
 it('blocks already-issued student and parent sessions only for the school and restores access when reopened', async () => {

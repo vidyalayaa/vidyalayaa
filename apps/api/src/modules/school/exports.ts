@@ -11,11 +11,7 @@ import { signedDownload, verifyDownload } from '../../lib/downloads.js';
 
 export function exportsRouter(pool: pg.Pool, storage: SupabaseClient, key: string) {
   const r = Router();
-  r.use((req, res, next) =>
-    /^\/(exports|offboarding)(\/|$)/.test(req.path)
-      ? permission('school.manage')(req, res, next)
-      : next(),
-  );
+  r.use(['/exports', '/offboarding'], permission('school.manage'));
   r.get(
     '/offboarding',
     asyncRoute(async (_req, res) => {
