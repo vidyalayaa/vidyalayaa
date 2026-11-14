@@ -80,7 +80,7 @@ export async function markManualAttendance(
     );
   const updated = (
     await tx.query(
-      "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,version=version+1 WHERE id=$1 RETURNING *",
+      "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,provisional=false,version=version+1 WHERE id=$1 RETURNING *",
       [day.id, b.status],
     )
   ).rows[0];

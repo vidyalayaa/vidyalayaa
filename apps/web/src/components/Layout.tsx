@@ -41,6 +41,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/auth';
 import { display } from '../lib/utils';
 import { SchoolDeletionApproval } from '../features/operations/SchoolDeletion';
+import {
+  operationsStaffRoles,
+  operationsTopicPermissions,
+  operationsTopics,
+} from '@vidyalayaa/contracts';
+import AskVidyalayaa from '../features/operations/AskVidyalayaa';
 const ParentWorkspace = lazy(() => import('../features/parents/ParentWorkspace'));
 const navigationFeatures: Record<string, string> = {
   '/r/assignments': 'assignments',
@@ -134,6 +140,11 @@ export default function Layout() {
     a.me?.platform_role === 'SUPER_ADMIN' &&
     (!role || location.pathname.startsWith('/platform'));
   const name = platformOnly ? 'Vidyalayaa platform' : a.me?.school?.school_name || 'Your school';
+  const askTopics = operationsTopics.filter(
+    (topic) =>
+      (topic !== 'timetable' || a.me?.features.timetable) &&
+      operationsTopicPermissions[topic].every((permission) => permissions.includes(permission)),
+  );
   const memberships = a.me?.memberships || [];
   const canSwitchSchool = memberships.length > 1;
   const canExportSchool = !platformOnly && (!configured || permissions.includes('school.manage'));
@@ -482,6 +493,18 @@ export default function Layout() {
                 <kbd>↵</kbd>
               </form>
             )}
+            {!platformOnly &&
+              role &&
+              a.me &&
+              askTopics.length > 0 &&
+              operationsStaffRoles.some((staffRole) => staffRole === role) && (
+                <AskVidyalayaa
+                  key={JSON.stringify([a.school, a.me.id, a.me.school?.school_id, role])}
+                  role={role}
+                  permitted={askTopics}
+                  context={{ userId: a.me.id, schoolId: a.requestSchool }}
+                />
+              )}
             <ThemeSelect compact />
             <Link
               to={

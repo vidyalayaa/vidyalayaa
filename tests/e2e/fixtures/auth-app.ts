@@ -7,7 +7,11 @@ import theme from '../../../apps/web/tailwind.config.js';
 
 // Auth regressions use isolated servers and browser contexts, never local credentials
 // or a real Supabase project. Tests intercept the .test provider's network requests.
-export const test = base.extend<{ isolateServices: void }, { authAppURL: string }>({
+export const test = base.extend<
+  { isolateServices: void },
+  { authAppURL: string; turnstileSiteKey: string }
+>({
+  turnstileSiteKey: ['', { option: true, scope: 'worker' }],
   isolateServices: [
     async ({ page }, use) => {
       await page.route('**/api/v1/**', (route) =>
@@ -27,7 +31,7 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
     { auto: true },
   ],
   authAppURL: [
-    async ({ browser }, use, workerInfo) => {
+    async ({ browser, turnstileSiteKey }, use, workerInfo) => {
       const root = fileURLToPath(new URL('../../../apps/web', import.meta.url));
       const contentRoot = root.replaceAll('\\', '/');
       const server = await createServer({
@@ -43,6 +47,7 @@ export const test = base.extend<{ isolateServices: void }, { authAppURL: string 
           'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://mfa-qr.test'),
           'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('test-only-public-key'),
           'import.meta.env.VITE_API_URL': JSON.stringify(''),
+          'import.meta.env.VITE_TURNSTILE_SITE_KEY': JSON.stringify(turnstileSiteKey),
         },
         css: {
           postcss: {

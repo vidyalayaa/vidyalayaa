@@ -3,7 +3,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { portableDatabase, poolAdapters, fixture } from '../helpers/database.js';
 import { drainOutbox } from '../../apps/worker/src/outbox.js';
 import { scheduledJobs } from '../../apps/worker/src/jobs.js';
-import { queue } from '../../apps/api/src/modules/attendance/service.js';
+import { processEvent, queue } from '../../apps/api/src/modules/attendance/service.js';
 import { transaction } from '../../apps/api/src/lib/db.js';
 import { sampleRule } from '../../apps/web/src/features/resources/metadata.js';
 import { sendPushTargets } from '../../apps/worker/src/push-targets.js';
@@ -14,6 +14,9 @@ import { messageFor } from '../../apps/worker/src/outbox.js';
 import { encrypt } from '../../apps/api/src/lib/crypto.js';
 import { applyRetention } from '../../apps/worker/src/retention.js';
 import { monitorWorker, pruneWorkerInstances } from '../../apps/worker/src/health.js';
+import { defaultSchoolTimings } from '@vidyalayaa/contracts';
+import type { Actor } from '../../apps/api/src/middleware/auth.js';
+import { markManualAttendance } from '../../apps/api/src/modules/school/manual-attendance.js';
 let db: PGlite, pools: ReturnType<typeof poolAdapters>, f: Awaited<ReturnType<typeof fixture>>;
 beforeAll(async () => {
   db = await portableDatabase();
@@ -311,30 +314,115 @@ it('TEST-REQ-021 retains the outbox and records independent channel failures wit
   ).toBe('PENDING');
   expect((await db.query('SELECT * FROM notification_attempts')).rows.length).toBeGreaterThan(0);
 });
-it('TEST-REQ-034 defers absence while offline, then finalizes provisionally at the hard limit', async () => {
+it('marks absence at school start and defers notifications while readers are offline', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-17T07:15:00Z'));
-  await scheduledJobs(pools.worker, f.schoolA);
-  expect(
+  await db.query(
+    "UPDATE schools SET settings=jsonb_set(settings,'{timetable}',$2::jsonb) WHERE id=$1",
+    [
+      f.schoolA,
+      {
+        ...defaultSchoolTimings,
+        start_time: '09:00',
+        version: 1,
+        lecture_count: 1,
+        periods: [{ number: 1, label: 'Lecture 1', start_time: '09:00', end_time: '09:40' }],
+      },
+    ],
+  );
+  const run = async (utc: string) => {
+    vi.setSystemTime(new Date(utc));
+    await scheduledJobs(pools.worker, f.schoolA);
+  };
+  const status = async (date: string) =>
     (
-      await db.query<{ attendance_status: string }>(
-        'SELECT attendance_status FROM daily_attendance WHERE school_id=$1 AND student_id=$2',
-        [f.schoolA, f.student],
+      await db.query(
+        'SELECT attendance_status,provisional,version FROM daily_attendance WHERE school_id=$1 AND student_id=$2 AND attendance_date=$3',
+        [f.schoolA, f.student, date],
       )
-    ).rows[0].attendance_status,
-  ).toBe('PENDING');
-  vi.setSystemTime(new Date('2026-10-17T10:01:00Z'));
-  await scheduledJobs(pools.worker, f.schoolA);
-  const day = (
-    await db.query<{ attendance_status: string; provisional: boolean }>(
-      'SELECT attendance_status,provisional FROM daily_attendance WHERE school_id=$1 AND student_id=$2',
-      [f.schoolA, f.student],
-    )
-  ).rows[0];
-  expect(day.attendance_status).toBe('ABSENT');
-  expect(day.provisional).toBe(true);
-  expect(
-    (await db.query("SELECT * FROM notification_outbox WHERE kind='STUDENT_ABSENT'")).rows,
-  ).toHaveLength(1);
-  vi.useRealTimers();
+    ).rows[0];
+  const absenceAlerts = async () =>
+    (
+      await db.query(
+        "SELECT id FROM notification_outbox WHERE school_id=$1 AND kind='STUDENT_ABSENT'",
+        [f.schoolA],
+      )
+    ).rows;
+  try {
+    await run('2026-10-17T03:29:59Z');
+    expect(await status('2026-10-17')).toMatchObject({ attendance_status: 'PENDING' });
+    await run('2026-10-17T03:30:00Z');
+    const absent = await status('2026-10-17');
+    expect(absent).toMatchObject({ attendance_status: 'ABSENT', provisional: true });
+    await run('2026-10-17T07:15:00Z');
+    expect(await status('2026-10-17')).toEqual(absent);
+    expect(await absenceAlerts()).toHaveLength(0);
+    await run('2026-10-17T10:01:00Z');
+    await run('2026-10-17T10:02:00Z');
+    expect(await status('2026-10-17')).toEqual(absent);
+    expect(await absenceAlerts()).toHaveLength(1);
+
+    await run('2026-10-19T03:30:00Z');
+    vi.setSystemTime(new Date('2026-10-19T03:40:00Z'));
+    await processEvent(
+      pools.device,
+      { id: f.deviceA, schoolId: f.schoolA, code: 'DEV_A', status: 'ACTIVE' },
+      {
+        event_id: crypto.randomUUID(),
+        device_id: 'DEV_A',
+        card_uid: 'AABBCCDD',
+        event_timestamp: new Date().toISOString(),
+        time_source: 'RTC_SYNCED',
+        sequence_number: 1,
+        boot_id: crypto.randomUUID(),
+        firmware_version: 'test',
+      },
+      'worker-absence-test',
+    );
+    expect(await status('2026-10-19')).toMatchObject({
+      attendance_status: 'LATE',
+      provisional: false,
+    });
+    await run('2026-10-19T10:01:00Z');
+    expect(await absenceAlerts()).toHaveLength(1);
+
+    await db.query(
+      "INSERT INTO school_holidays(school_id,kind,on_date,label) VALUES($1,'HOLIDAY','2026-10-20','School holiday')",
+      [f.schoolA],
+    );
+    await run('2026-10-20T03:30:00Z');
+    expect(await status('2026-10-20')).toBeUndefined();
+
+    await run('2026-10-21T03:30:00Z');
+    const beforeManual = await status('2026-10-21');
+    expect(beforeManual).toMatchObject({ attendance_status: 'ABSENT' });
+    const context = { schoolId: f.schoolA, userId: f.teacher };
+    await transaction(pools.api, context, (tx) =>
+      markManualAttendance(tx, { context, id: f.teacher, active: { role: 'teacher' } } as Actor, {
+        student_id: f.student,
+        date: '2026-10-21',
+        status: 'HALF_DAY',
+        reason: 'Verified classroom attendance',
+        expected_version: beforeManual.version,
+      }),
+    );
+    await run('2026-10-21T10:01:00Z');
+    expect(await status('2026-10-21')).toMatchObject({
+      attendance_status: 'HALF_DAY',
+      provisional: false,
+    });
+    expect(await absenceAlerts()).toHaveLength(1);
+
+    await run('2026-10-22T03:30:00Z');
+    await db.query("UPDATE devices SET last_seen_at='2026-10-22T06:59:30Z' WHERE school_id=$1", [
+      f.schoolA,
+    ]);
+    await run('2026-10-22T07:00:00Z');
+    expect(await status('2026-10-22')).toMatchObject({
+      attendance_status: 'ABSENT',
+      provisional: false,
+    });
+    expect(await absenceAlerts()).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -1,18 +1,30 @@
 import { useRef, useState } from 'react';
 import { supabase } from '../../lib/auth';
 import { Button } from '../../components/ui/button';
+import AuthChallenge, { authChallengeEnabled } from './AuthChallenge';
+import { authRateLimited, type useAuthEmailCooldown } from './auth-limits';
 
-export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<void> }) {
+export default function EmailSignIn({
+  cooldown,
+  onVerified,
+}: {
+  cooldown: ReturnType<typeof useAuthEmailCooldown>;
+  onVerified: () => Promise<void>;
+}) {
   const busy = useRef(false);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [challenge, setChallenge] = useState(0);
   async function send() {
     const result = await supabase!.auth.signInWithOtp({
       email: email.trim(),
       options: {
         shouldCreateUser: false,
+        captchaToken,
         emailRedirectTo: location.origin + '/auth/verify',
       },
     });
@@ -23,10 +35,17 @@ export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<
       )
     )
       throw result.error;
+    cooldown.start();
     setSent(true);
   }
   return (
-    <details className="my-5 rounded-xl border border-stone-200 p-4">
+    <details
+      className="my-5 rounded-xl border border-stone-200 p-4"
+      onToggle={(event) => {
+        setOpen(event.currentTarget.open);
+        if (!event.currentTarget.open) setCaptchaToken(undefined);
+      }}
+    >
       <summary className="cursor-pointer text-sm font-semibold">
         Sign in with an email link or code
       </summary>
@@ -35,6 +54,7 @@ export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<
         onSubmit={async (event) => {
           event.preventDefault();
           if (!supabase || busy.current) return;
+          if ((authChallengeEnabled && !captchaToken) || (!sent && cooldown.seconds)) return;
           busy.current = true;
           setPending(true);
           setError('');
@@ -46,6 +66,7 @@ export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<
                 token: String(new FormData(event.currentTarget).get('email_code')).trim(),
                 type: 'email',
               });
+              if (authRateLimited(result.error)) throw result.error;
               if (result.error || !result.data.session || !result.data.user)
                 throw new Error(
                   'This code is invalid, expired, or already used. Request a new sign-in email.',
@@ -56,8 +77,13 @@ export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<
               await onVerified();
             }
           } catch (cause) {
-            setError((cause as Error).message);
+            if (authRateLimited(cause)) {
+              if (!sent) cooldown.start();
+              setError('Too many attempts. Wait before trying again.');
+            } else setError((cause as Error).message);
           } finally {
+            setCaptchaToken(undefined);
+            setChallenge((value) => value + 1);
             busy.current = false;
             setPending(false);
           }
@@ -77,6 +103,10 @@ export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<
             disabled={pending}
             onChange={(event) => {
               setEmail(event.target.value);
+              if (sent) {
+                setCaptchaToken(undefined);
+                setChallenge((value) => value + 1);
+              }
               setSent(false);
               setError('');
             }}
@@ -110,9 +140,38 @@ export default function EmailSignIn({ onVerified }: { onVerified: () => Promise<
             {error}
           </p>
         )}
-        <Button variant="outline" disabled={pending || !supabase}>
+        {open && <AuthChallenge key={challenge} onToken={setCaptchaToken} />}
+        <Button
+          variant="outline"
+          disabled={
+            pending ||
+            !supabase ||
+            (authChallengeEnabled && !captchaToken) ||
+            (!sent && cooldown.seconds > 0)
+          }
+        >
           {pending ? 'Please wait…' : sent ? 'Verify sign-in code' : 'Send sign-in email'}
         </Button>
+        {cooldown.seconds > 0 && (
+          <p className="text-xs" role="status">
+            You can request another email in {cooldown.seconds}s.
+          </p>
+        )}
+        {sent && (
+          <button
+            type="button"
+            className="ml-3 text-xs underline disabled:opacity-60"
+            disabled={pending || cooldown.seconds > 0}
+            onClick={() => {
+              setSent(false);
+              setError('');
+              setCaptchaToken(undefined);
+              setChallenge((value) => value + 1);
+            }}
+          >
+            Request a new email
+          </button>
+        )}
         <p className="text-xs text-stone-600">
           School access still requires an invitation and your assigned role.
         </p>

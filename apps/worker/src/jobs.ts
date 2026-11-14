@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { transaction } from '../../api/src/lib/db.js';
 import { localParts } from '../../api/src/modules/attendance/engine.js';
 import { resolveRules, queue } from '../../api/src/modules/attendance/service.js';
-import { ruleSchema } from '@vidyalayaa/contracts';
+import { ruleSchema, type SchoolTimings } from '@vidyalayaa/contracts';
 export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
   return transaction(pool, { schoolId, actorType: 'SYSTEM' }, async (tx) => {
     if (
@@ -13,10 +13,12 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
       ).rows[0].locked
     )
       return;
-    const school = (await tx.query(
-      'SELECT *,app.reader_offline_minutes(settings) AS offline_minutes FROM schools WHERE id=$1',
-      [schoolId],
-    )).rows[0],
+    const school = (
+        await tx.query(
+          'SELECT *,app.reader_offline_minutes(settings) AS offline_minutes FROM schools WHERE id=$1',
+          [schoolId],
+        )
+      ).rows[0],
       local = localParts(new Date(), school.timezone);
     const run = (
       await tx.query(
@@ -28,12 +30,13 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
     const devices = (
       await tx.query("SELECT * FROM devices WHERE school_id=$1 AND status='ACTIVE'", [schoolId])
     ).rows;
-    const delayed = devices.some(
+    const delayedDevice = devices.find(
       (d) =>
         !d.last_seen_at ||
         Date.now() - d.last_seen_at.getTime() > offlineMs ||
         d.pending_event_count > 0,
     );
+    const delayed = !!delayedDevice;
     for (const d of devices)
       if (
         !d.last_seen_at ||
@@ -61,22 +64,57 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
             },
           );
       }
-    if (local.time >= '00:05') {
+    {
+      const timings: Pick<SchoolTimings, 'start_time' | 'days'> | undefined =
+        school.settings.timetable;
+      const weekday = new Date(local.date).getUTCDay() || 7;
+      const currentTime = local.time.slice(0, 5);
+      const minutes = (time: string) => {
+        const [hours, mins] = time.split(':').map(Number);
+        return hours * 60 + mins;
+      };
       const enrolled = (
         await tx.query(
-          "SELECT e.* FROM enrollments e JOIN students s ON s.school_id=e.school_id AND s.id=e.student_id WHERE e.school_id=$1 AND e.status='ACTIVE' AND EXISTS(SELECT 1 FROM academic_sessions ac WHERE ac.school_id=e.school_id AND ac.id=e.academic_session_id AND ac.is_current) AND e.starts_on<=$2 AND (e.ends_on IS NULL OR e.ends_on>=$2) AND s.status='ACTIVE'",
+          `SELECT e.student_id,e.class_id,e.academic_session_id FROM enrollments e
+           JOIN students s ON (s.school_id,s.id)=(e.school_id,e.student_id)
+           JOIN classes c ON (c.school_id,c.id)=(e.school_id,e.class_id)
+           JOIN academic_sessions ac ON (ac.school_id,ac.id)=(e.school_id,e.academic_session_id)
+           WHERE e.school_id=$1 AND e.status='ACTIVE' AND e.starts_on<=$2::date
+             AND (e.ends_on IS NULL OR e.ends_on>=$2::date) AND s.status='ACTIVE'
+             AND ac.is_current AND ac.retired_at IS NULL AND c.retired_at IS NULL
+             AND $2::date BETWEEN ac.starts_on AND ac.ends_on`,
           [schoolId, local.date],
         )
       ).rows;
+      const byClass = new Map<string, Awaited<ReturnType<typeof resolveRules>>>();
+      let hasDelayedAbsence = false;
       for (const en of enrolled) {
-        const resolved = await resolveRules(tx, schoolId, en.class_id, local.date);
-        if (!resolved.rule || resolved.holiday) continue;
-        const rule = ruleSchema.parse(resolved.rule.rules);
+        let resolved = byClass.get(en.class_id);
+        if (!resolved) {
+          resolved = await resolveRules(tx, schoolId, en.class_id, local.date);
+          byClass.set(en.class_id, resolved);
+        }
+        if (resolved.holiday) continue;
+        const rule = resolved.rule ? ruleSchema.parse(resolved.rule.rules) : undefined;
         if (
           !resolved.weekendOverride &&
-          rule.weekly_off.includes(local.weekday as (typeof rule.weekly_off)[number])
+          (rule
+            ? rule.weekly_off.includes(local.weekday as (typeof rule.weekly_off)[number])
+            : !timings?.days.includes(weekday))
         )
           continue;
+        const start =
+          rule && (resolved.rule.class_id || resolved.rule.day_type !== 'REGULAR')
+            ? rule.arrival.on_time_start
+            : (timings?.start_time ?? rule?.arrival.on_time_start);
+        if (!start) continue;
+        const started = currentTime >= start;
+        const finalizing =
+          started &&
+          (!rule ||
+            (minutes(currentTime) >=
+              minutes(rule.absent_cutoff) + rule.absent_finalize_grace_minutes &&
+              (!delayed || currentTime >= '15:30')));
         await tx.query(
           "INSERT INTO daily_attendance(school_id,student_id,attendance_date,class_id,academic_session_id,rule_version_id,source) VALUES($1,$2,$3,$4,$5,$6,'SYSTEM') ON CONFLICT(school_id,student_id,attendance_date) DO NOTHING",
           [
@@ -85,47 +123,54 @@ export async function scheduledJobs(pool: pg.Pool, schoolId: string) {
             local.date,
             en.class_id,
             en.academic_session_id,
-            resolved.rule.id,
+            resolved.rule?.id ?? null,
           ],
         );
-        const [hh, mm] = rule.absent_cutoff.split(':').map(Number),
-          now = Number(local.time.slice(0, 2)) * 60 + Number(local.time.slice(3, 5));
-        if (
-          now >= hh * 60 + mm + rule.absent_finalize_grace_minutes &&
-          (!delayed || local.time >= '15:30')
-        ) {
-          const changed = await tx.query(
-            "UPDATE daily_attendance SET attendance_status='ABSENT',version=version+1,provisional=$3 WHERE school_id=$1 AND student_id=$2 AND attendance_date=$4 AND attendance_status='PENDING' AND first_arrival_at IS NULL AND NOT manual_override RETURNING id",
-            [schoolId, en.student_id, delayed, local.date],
-          );
-          if (changed.rowCount && delayed) {
-            const affected = devices.find(
-              (d) =>
-                !d.last_seen_at ||
-                Date.now() - d.last_seen_at.getTime() > offlineMs ||
-                d.pending_event_count > 0,
-            );
-            if (affected)
+        if (!started) continue;
+        const provisional = !!rule && (!finalizing || delayed);
+        const changed = await tx.query(
+          `UPDATE daily_attendance SET attendance_status='ABSENT',version=version+1,provisional=$4
+           WHERE school_id=$1 AND student_id=$2 AND attendance_date=$3 AND class_id=$5
+             AND first_arrival_at IS NULL AND NOT manual_override
+             AND (attendance_status='PENDING' OR (attendance_status='ABSENT' AND provisional AND NOT $4))
+           RETURNING id`,
+          [schoolId, en.student_id, local.date, provisional, en.class_id],
+        );
+        if (!finalizing || !rule) continue;
+        // An offline reader can leave an absence provisional through the end of the day.
+        // Lock the record before queueing its deduplicated alert on the hard-limit pass.
+        const absent =
+          changed.rowCount ||
+          (delayed &&
+            (
               await tx.query(
-                "SELECT app.queue_device_security_alert('ABSENCE_PROVISIONAL',NULL,$1)",
-                [affected.id],
-              );
-          }
-          if (changed.rowCount && rule.notify.absent)
-            await queue(
-              tx,
-              schoolId,
-              en.student_id,
-              'STUDENT_ABSENT',
-              `STUDENT_ABSENT:${schoolId}:${en.student_id}:${local.date}`,
-              {
-                attendance_date: local.date,
-                event_time: new Date().toISOString(),
-                provisional: delayed,
-              },
-            );
-        }
+                `SELECT id FROM daily_attendance
+                 WHERE school_id=$1 AND student_id=$2 AND attendance_date=$3 AND class_id=$4
+                   AND attendance_status='ABSENT' AND provisional
+                   AND first_arrival_at IS NULL AND NOT manual_override FOR UPDATE`,
+                [schoolId, en.student_id, local.date, en.class_id],
+              )
+            ).rowCount);
+        if (!absent) continue;
+        hasDelayedAbsence ||= delayed;
+        if (rule.notify.absent)
+          await queue(
+            tx,
+            schoolId,
+            en.student_id,
+            'STUDENT_ABSENT',
+            `STUDENT_ABSENT:${schoolId}:${en.student_id}:${local.date}`,
+            {
+              attendance_date: local.date,
+              event_time: new Date().toISOString(),
+              provisional: delayed,
+            },
+          );
       }
+      if (hasDelayedAbsence && delayedDevice)
+        await tx.query("SELECT app.queue_device_security_alert('ABSENCE_PROVISIONAL',NULL,$1)", [
+          delayedDevice.id,
+        ]);
     }
     await tx.query(
       `INSERT INTO school_usage_snapshots(school_id,on_date,active_students,devices,notifications_sent)

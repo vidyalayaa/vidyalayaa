@@ -1,4 +1,5 @@
 import { captureRenderFailure } from './lib/monitoring';
+import './lib/offline-worker';
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import {

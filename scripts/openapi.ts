@@ -35,6 +35,7 @@ import {
   roles,
   bulkMarksSchema,
   resultPolicySchema,
+  operationsQuestionSchema,
   singleMarkSchema,
   firstAdminSchema,
   deviceTuningSchema,
@@ -70,6 +71,8 @@ function json(schema: z.core.$ZodType): Record<string, unknown> {
   const d = (schema as z.core.$ZodTypes)._zod.def;
   const checks = (d.checks ?? []).map((check) => (check as z.core.$ZodChecks)._zod.def);
   switch (d.type) {
+    case 'union':
+      return { oneOf: d.options.map(json) };
     case 'pipe':
       return json(d.in._zod.def.type === 'transform' ? d.out : d.in);
     case 'optional':
@@ -209,6 +212,7 @@ const schemas = {
   Invitation: inviteSchema,
   BulkMarks: bulkMarksSchema,
   ResultPolicy: resultPolicySchema,
+  OperationsQuestion: operationsQuestionSchema,
   AcademicResultSelection: z
     .object({ student_id: z.guid().optional(), exam_id: z.guid().optional() })
     .strict(),
@@ -1511,6 +1515,12 @@ operation(
   },
 );
 operation('/results/policy', 'get', 'School Admin and Principal grading policy');
+operation(
+  '/operations-assistant',
+  'post',
+  'Answer a supported school operations question or generate a permission-scoped daily brief',
+  'OperationsQuestion',
+);
 const academicParameters = (names: string[]) => [
   resultSchoolHeader,
   ...names.map((name) => resultIdParameter(name, 'query', false)),

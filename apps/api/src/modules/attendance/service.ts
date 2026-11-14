@@ -313,8 +313,15 @@ export async function processEvent(
     {
       const keys = Object.keys(s) as (keyof typeof s)[];
       await tx.query(
-        `UPDATE daily_attendance SET ${keys.map((k, i) => `${k}=$${i + 2}`).join(',')},rule_version_id=$${keys.length + 2},source=CASE WHEN manual_override THEN source ELSE 'NFC' END,version=version+1 WHERE id=$1`,
-        [day.id, ...keys.map((k) => s[k]), resolved.rule.id],
+        `UPDATE daily_attendance SET ${keys.map((k, i) => `${k}=$${i + 2}`).join(',')},rule_version_id=$${keys.length + 2},
+         provisional=$${keys.length + 3},
+         source=CASE WHEN manual_override THEN source ELSE 'NFC' END,version=version+1 WHERE id=$1`,
+        [
+          day.id,
+          ...keys.map((k) => s[k]),
+          resolved.rule.id,
+          day.provisional && s.attendance_status === 'ABSENT',
+        ],
       );
     }
     // Raw facts stay immutable. Processing outcomes may change under deterministic replay.
@@ -347,6 +354,13 @@ export async function processEvent(
       !day.manual_override &&
       day.attendance_status === 'ABSENT' &&
       s.first_arrival_at &&
+      (!day.provisional ||
+        (
+          await tx.query('SELECT 1 FROM notification_outbox WHERE school_id=$1 AND dedupe_key=$2', [
+            d.schoolId,
+            `STUDENT_ABSENT:${d.schoolId}:${card.student_id}:${local.date}`,
+          ])
+        ).rows.length > 0) &&
       ['ON_TIME', 'LATE'].includes(s.arrival_classification || '')
     ) {
       queued =

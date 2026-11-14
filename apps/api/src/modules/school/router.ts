@@ -10,6 +10,7 @@ import { subjectMaterialsRouter } from './materials.js';
 import { Router } from 'express';
 import { academicsRouter } from './academics.js';
 import { resultsRouter } from './results.js';
+import { operationsAssistantRouter } from './operations-assistant.js';
 import { academicIntelligenceRouter } from './academic-intelligence.js';
 import { studentDirectoryRouter } from './student-directory.js';
 import { calendarRouter } from './calendar.js';
@@ -206,6 +207,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
   router.use('/materials', subjectMaterialsRouter(pool));
   router.use('/academics', academicsRouter(pool, { requireWrite, withIdempotency }));
   router.use('/results', resultsRouter(pool, requireWrite));
+  router.use('/operations-assistant', operationsAssistantRouter(pool, config));
   router.use('/academic-intelligence', academicIntelligenceRouter(pool, config, requireWrite));
   router.use('/student-directory', studentDirectoryRouter(pool, { requireWrite, withIdempotency }));
   router.use('/calendar', calendarRouter(pool, { requireWrite, withIdempotency }));
@@ -1175,7 +1177,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           ).rows[0];
           if (b.approve) {
             await tx.query(
-              "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,version=version+1 WHERE id=$1",
+              "UPDATE daily_attendance SET attendance_status=$2,source='MANUAL',manual_override=true,provisional=false,version=version+1 WHERE id=$1",
               [day.id, c.requested_status],
             );
             if (day.attendance_status !== c.requested_status)

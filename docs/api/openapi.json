@@ -117,6 +117,16 @@
                 "default": ""
               },
               "email": {
+                "oneOf": [
+                  {
+                    "const": ""
+                  },
+                  {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  }
+                ],
                 "default": ""
               },
               "phone": {
@@ -140,6 +150,16 @@
                 "default": ""
               },
               "principal_email": {
+                "oneOf": [
+                  {
+                    "const": ""
+                  },
+                  {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  }
+                ],
                 "default": ""
               },
               "principal_phone": {
@@ -264,6 +284,16 @@
                 "default": ""
               },
               "management_email": {
+                "oneOf": [
+                  {
+                    "const": ""
+                  },
+                  {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  }
+                ],
                 "default": ""
               },
               "management_phone": {
@@ -372,6 +402,16 @@
             "default": ""
           },
           "email": {
+            "oneOf": [
+              {
+                "const": ""
+              },
+              {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              }
+            ],
             "default": ""
           },
           "phone": {
@@ -395,6 +435,16 @@
             "default": ""
           },
           "principal_email": {
+            "oneOf": [
+              {
+                "const": ""
+              },
+              {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              }
+            ],
             "default": ""
           },
           "principal_phone": {
@@ -519,6 +569,16 @@
             "default": ""
           },
           "management_email": {
+            "oneOf": [
+              {
+                "const": ""
+              },
+              {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              }
+            ],
             "default": ""
           },
           "management_phone": {
@@ -574,6 +634,16 @@
             "format": "date-time"
           },
           "email": {
+            "oneOf": [
+              {
+                "const": ""
+              },
+              {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              }
+            ],
             "default": ""
           },
           "phone": {
@@ -3525,6 +3595,50 @@
           "grades"
         ],
         "additionalProperties": false
+      },
+      "OperationsQuestion": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "brief"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "question"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 240
+              },
+              "topic": {
+                "type": "string",
+                "enum": [
+                  "attendance",
+                  "fees",
+                  "corrections",
+                  "devices",
+                  "timetable"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "question"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "AcademicResultSelection": {
         "type": "object",
@@ -19099,6 +19213,63 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ResultPolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response; see docs/API.md for projection and per-event acknowledgement semantics."
+          },
+          "401": {
+            "description": "Missing/invalid credential or expired session"
+          },
+          "403": {
+            "description": "Permission, MFA, scope or entitlement denied"
+          },
+          "404": {
+            "description": "Resource absent or outside the authorized scope"
+          },
+          "409": {
+            "description": "Constraint, idempotency or version conflict"
+          },
+          "422": {
+            "description": "Validation failed"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Dependency unavailable; do not discard unacknowledged device events"
+          }
+        }
+      }
+    },
+    "/operations-assistant": {
+      "post": {
+        "summary": "Answer a supported school operations question or generate a permission-scoped daily brief",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-School-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationsQuestion"
               }
             }
           }

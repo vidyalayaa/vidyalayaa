@@ -160,6 +160,7 @@ export function createApp(config: Config, deps: Dependencies) {
         '/api/v1/academic-intelligence/guidance',
         '/api/v1/academic-intelligence/assistant',
         '/api/v1/academic-intelligence/cohort/insights',
+        '/api/v1/operations-assistant',
       ],
       sharedRateLimit(
         deps.api,
