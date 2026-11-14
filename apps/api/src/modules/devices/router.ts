@@ -25,7 +25,7 @@ function throttle(pool: pg.Pool, limit: number) {
     const retry = Number(
       (
         await pool.query('SELECT app.take_http_token($1,$2,60) AS retry', [
-          hash('device:' + res.locals.device.id + ':' + req.path),
+          hash('device:' + res.locals.device.id + ':' + req.route.path),
           limit,
         ])
       ).rows[0].retry,

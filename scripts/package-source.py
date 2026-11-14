@@ -11,7 +11,7 @@ for directory,dirs,names in os.walk(ROOT):
  for name in names:
   path=Path(directory)/name;rel=path.relative_to(ROOT)
   if path.name.startswith('.env') and path.name!='.env.example':continue
-  if path.name.startswith('Vidyalayaa_Architecture') or path.name in {'provisioning.h','.firebaserc','sdkconfig','sdkconfig.old'} or path.suffix in {'.pem','.key','.zip','.dump','.vbackup','.log'}:continue
+  if path.name.startswith('Vidyalayaa_Architecture') or path.match('SECURITY_AUDIT_*.md') or path.name in {'provisioning.h','.firebaserc','sdkconfig','sdkconfig.old'} or path.suffix in {'.pem','.key','.zip','.dump','.vbackup','.log'}:continue
   if rel.parts[0]=='output' and not (rel.parts[1:2]==('pdf',) or path.name.startswith('preview-') or path.name=='verification.json' or path.name.startswith('native-') and path.suffix=='.json'):continue
   files.append(path)
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:

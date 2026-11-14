@@ -16,6 +16,7 @@ output
 
 Vidyalayaa_Architecture*
 .tools
+**/SECURITY_AUDIT_*.md
 
 firmware-production/secrets
 firmware-production/build

@@ -18,13 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     env:
-      MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
       DB_SSL: 'true'
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       VITE_API_URL: ${{ vars.VITE_API_URL }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -34,12 +35,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts" --paginate --jq ".artifacts[] | select(.name == \"staging-pass-$GITHUB_SHA\" and .expired == false) | .id")
-          test -n "$artifact_id" || { echo "Run and pass this exact commit in staging first."; exit 1; }
+          workflow="repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml"
+          runs=$(gh api --paginate --method GET "$workflow/runs" \
+            -f event=workflow_dispatch -f status=success -f head_sha="$GITHUB_SHA" \
+            --jq '.workflow_runs[] | [.id, .run_attempt] | @tsv')
+          while IFS=$'\t' read -r run_id attempt; do
+            [[ -n "$run_id" ]] || continue
+            artifact_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+              --jq ".artifacts[] | select(.name == \"staging-pass-$GITHUB_SHA-$attempt\" and .expired == false) | .id")
+            if [[ -n "$artifact_id" ]]; then exit 0; fi
+          done <<< "$runs"
+          echo "Run and pass this exact commit in staging first."
+          exit 1
       - run: npm ci
       - run: npm run build
       - run: npm test
       - name: Apply additive migrations before API rollout
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
         run: npm run db:migrate && npm run db:verify
       - name: Trigger Render API and worker
         env:
@@ -84,9 +97,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: inputs.environment == 'staging'
         with:
-          name: staging-pass-${{ github.sha }}
+          name: staging-pass-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/staging-pass.txt
           retention-days: 14
+          if-no-files-found: error
       - name: Remove temporary credential
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-service-account.json"

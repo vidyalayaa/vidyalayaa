@@ -123,7 +123,9 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
       }>('SELECT app.check_workspace_login_session($1,$2,$3,$4,to_timestamp($5)) AS session', [
         me.id,
         sessionId,
-        workspaceAdmitted && req.method === 'POST' && req.path === '/account/sessions/activity',
+        workspaceAdmitted &&
+          req.method === 'POST' &&
+          /^\/account\/sessions\/activity\/?$/i.test(req.path),
         workspaceAdmitted,
         totpVerifiedAt ?? null,
       ])
@@ -136,7 +138,7 @@ export function userAuth(pool: pg.Pool, auth: SupabaseClient): RequestHandler {
           ? 'Your session ended after inactivity. Sign in again.'
           : 'This login session has ended. Sign in again.',
       );
-    if (schoolLoginDenied && (selected || req.path === '/me'))
+    if (schoolLoginDenied && (selected || /^\/me\/?$/i.test(req.path)))
       throw new ApiError(
         403,
         'SCHOOL_LOGIN_DISABLED',
@@ -187,7 +189,7 @@ export const requireSchool: RequestHandler = (req, res, next) => {
     actor.securityPolicy?.step_up_sensitive &&
     !actor.recentVerification &&
     !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-    /^\/(memberships|invitations|devices|support-grants|reports|exports|school\/(security|retention)|profiles\/staff\/from-membership)(\/|$)/.test(
+    /^\/(memberships|invitations|devices|support-grants|reports|exports|school\/(security|retention)|profiles\/staff\/from-membership)(\/|$)/i.test(
       req.path,
     )
   )

@@ -79,6 +79,7 @@ async function send(
       throw new DeliveryError('PROVIDER_UNCONFIGURED');
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      redirect: 'error',
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
@@ -107,6 +108,7 @@ async function send(
       throw new DeliveryError('SMS_HTTPS_REQUIRED', true);
     const response = await fetch(process.env.SMS_ADAPTER_URL, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         Authorization: `Bearer ${process.env.SMS_ADAPTER_TOKEN}`,
         'Content-Type': 'application/json',
