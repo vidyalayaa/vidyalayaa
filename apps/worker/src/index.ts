@@ -41,9 +41,11 @@ async function run() {
   const health = await monitorWorker(pool);
   while (!stopping) {
     let ok = true;
+    const jobMinute = Math.floor(Date.now() / 60000);
+    const runScheduledJobs = jobMinute > lastJobs;
     try {
       await sendLoginAlerts(pool);
-      if (Date.now() - lastJobs >= 60000) {
+      if (runScheduledJobs) {
         await pool.query('SELECT app.prune_account_security_events()');
         await pruneWorkerInstances(pool);
       }
@@ -72,7 +74,7 @@ async function run() {
             if (!closed) await generateReports(pool, school, storage);
             await generateSchoolExport(pool, school, storage);
             await purgeApprovedSchool(pool, school, storage);
-            if (!closed && Date.now() - lastJobs >= 60000) {
+            if (!closed && runScheduledJobs) {
               await scheduledJobs(pool, school);
               await reconcileEvents(pool, school);
               await applyRetention(pool, school, storage);
@@ -90,7 +92,7 @@ async function run() {
           }
         },
       );
-      if (Date.now() - lastJobs >= 60000) lastJobs = Date.now();
+      if (runScheduledJobs) lastJobs = jobMinute;
     } catch (error) {
       captureFailure(error, 'WORKER_CYCLE_FAILED');
       ok = false;

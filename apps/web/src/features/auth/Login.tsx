@@ -1,5 +1,7 @@
 import PasswordSetupForm from './PasswordSetupForm';
 import EmailSignIn from './EmailSignIn';
+import AuthChallenge, { authChallengeEnabled } from './AuthChallenge';
+import { authRateLimited, useAuthEmailCooldown } from './auth-limits';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -33,6 +35,9 @@ export default function Login() {
     [factor, setFactor] = useState(''),
     [checkingMfa, setCheckingMfa] = useState(params.get('mfa') === '1');
   const submitting = useRef(false);
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [challenge, setChallenge] = useState(0);
+  const emailCooldown = useAuthEmailCooldown();
   const auth = useAuth();
   const mfaRequested = params.get('mfa') === '1';
   const returnTo = safeReturnTo(params.get('returnTo'));
@@ -70,13 +75,11 @@ export default function Login() {
             FOR THE PEOPLE WHO MAKE A SCHOOL
           </span>
           <h1>
-            Less scattered.{' '}
-            <br />
+            Less scattered. <br />
             More connected.
           </h1>
           <p>
-            A thoughtful home for your school's everyday.{' '}
-            <br />
+            A thoughtful home for your school's everyday. <br />
             Students, staff, and families. Together.
           </p>
           <div className="login-benefits">
@@ -135,13 +138,16 @@ export default function Login() {
           )}
           {!factor && !recovery && !checkingMfa && (
             <>
+              <div className="mt-6">
+                <AuthChallenge key={challenge} onToken={setCaptchaToken} />
+              </div>
               <Button
                 type="button"
                 variant="outline"
                 className="mt-6 w-full"
-                disabled={pending || !configured}
+                disabled={pending || !configured || (authChallengeEnabled && !captchaToken)}
                 onClick={async () => {
-                  if (submitting.current) return;
+                  if (submitting.current || (authChallengeEnabled && !captchaToken)) return;
                   submitting.current = true;
                   setPending(true);
                   setError('');
@@ -150,6 +156,8 @@ export default function Login() {
                     await startGoogleSignIn(returnTo);
                   } catch (cause) {
                     setError((cause as Error).message);
+                    setCaptchaToken(undefined);
+                    setChallenge((value) => value + 1);
                     setPending(false);
                     submitting.current = false;
                   }
@@ -188,6 +196,8 @@ export default function Login() {
               setError('');
               setMessage('');
               if (!supabase || submitting.current || checkingMfa) return;
+              if (authChallengeEnabled && !captchaToken) return;
+              if (recovery && emailCooldown.seconds) return;
               submitting.current = true;
               setPending(true);
               const f = new FormData(e.currentTarget);
@@ -200,12 +210,14 @@ export default function Login() {
                   if (r.error) throw r.error;
                   navigate(returnTo, { replace: true });
                 } else if (recovery) {
-                  await requestPasswordLink(String(f.get('email')));
+                  await requestPasswordLink(String(f.get('email')), captchaToken);
+                  emailCooldown.start();
                   setMessage('If this account exists, a recovery link has been sent.');
                 } else {
                   const r = await supabase.auth.signInWithPassword({
                     email: String(f.get('email')),
                     password: String(f.get('password')),
+                    options: { captchaToken },
                   });
                   if (r.error) throw r.error;
                   const id = await getSignInFactor();
@@ -213,8 +225,13 @@ export default function Login() {
                   else navigate(returnTo, { replace: true });
                 }
               } catch (e) {
-                setError((e as Error).message);
+                if (authRateLimited(e)) {
+                  if (recovery) emailCooldown.start();
+                  setError('Too many attempts. Wait before trying again.');
+                } else setError((e as Error).message);
               } finally {
+                setCaptchaToken(undefined);
+                setChallenge((value) => value + 1);
                 setPending(false);
                 submitting.current = false;
               }
@@ -260,7 +277,12 @@ export default function Login() {
                       <button
                         type="button"
                         className="text-xs underline"
-                        onClick={() => setRecovery(true)}
+                        onClick={() => {
+                          setCaptchaToken(undefined);
+                          setError('');
+                          setMessage('');
+                          setRecovery(true);
+                        }}
                       >
                         Forgot password?
                       </button>
@@ -278,6 +300,14 @@ export default function Login() {
                 )}
               </>
             )}
+            {(factor || recovery) && !checkingMfa && (
+              <div className="mt-5">
+                <AuthChallenge
+                  key={`${factor || 'recovery'}:${challenge}`}
+                  onToken={setCaptchaToken}
+                />
+              </div>
+            )}
             {error && (
               <p className="field-error mt-4" role="alert">
                 {error}
@@ -291,20 +321,29 @@ export default function Login() {
             <Button
               className="mt-6 w-full"
               variant="lime"
-              disabled={pending || checkingMfa || !configured}
+              disabled={
+                pending ||
+                checkingMfa ||
+                !configured ||
+                (authChallengeEnabled && !captchaToken) ||
+                (recovery && emailCooldown.seconds > 0)
+              }
             >
               {pending
                 ? 'Please wait…'
                 : factor
                   ? 'Verify & continue'
                   : recovery
-                    ? 'Send recovery link'
+                    ? emailCooldown.seconds
+                      ? `Send again in ${emailCooldown.seconds}s`
+                      : 'Send recovery link'
                     : 'Sign in'}
               <ArrowRight size={16} />
             </Button>
           </form>
           {!factor && !recovery && !checkingMfa && (
             <EmailSignIn
+              cooldown={emailCooldown}
               onVerified={async () => {
                 const id = await getSignInFactor();
                 if (id) setFactor(id);
@@ -320,6 +359,7 @@ export default function Login() {
               onClick={async () => {
                 await auth.logout();
                 navigate('/login', { replace: true });
+                setCaptchaToken(undefined);
                 setFactor('');
               }}
             >
@@ -327,7 +367,15 @@ export default function Login() {
             </button>
           )}
           {recovery && (
-            <button className="mt-5 text-sm underline" onClick={() => setRecovery(false)}>
+            <button
+              className="mt-5 text-sm underline"
+              onClick={() => {
+                setCaptchaToken(undefined);
+                setError('');
+                setMessage('');
+                setRecovery(false);
+              }}
+            >
               Back to sign in
             </button>
           )}

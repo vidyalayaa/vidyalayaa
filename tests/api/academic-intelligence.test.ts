@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
@@ -343,6 +343,84 @@ it('rejects direct API requests outside the caller’s role and active school', 
   const platformResult = await http(path, 'platform');
   expect(platformResult.status).toBe(200);
   expect(platformResult.body).toMatchObject({ appeared: 3, standings: [] });
+});
+
+it('scopes operations questions and the daily brief to permitted topics and the active school', async () => {
+  const path = '/operations-assistant';
+  const ask = (role: string, question: string, school = f.schoolA) =>
+    http(path, role, school, { kind: 'question', question });
+  await db.query(
+    "INSERT INTO devices(school_id,device_code,name,status) VALUES($1,$2,'Other school reader','ACTIVE')",
+    [f.schoolB, 'FOREIGN_' + f.schoolB.slice(0, 8)],
+  );
+  const devices = await ask('admin', 'Which RFID devices are offline?');
+  expect(devices.status).toBe(200);
+  expect(devices.body.notes[0].details).toEqual([
+    expect.stringMatching(/^DEV_A/),
+    expect.stringMatching(/^DEV_B/),
+  ]);
+  expect((await ask('principal', 'Which attendance corrections need review?')).status).toBe(200);
+  expect((await ask('admin', 'Which fee payments are overdue this month?')).status).toBe(200);
+  expect((await ask('teacher', 'Which RFID devices are offline?')).status).toBe(403);
+  expect((await ask('teacher', 'Which fee payments are overdue this month?')).status).toBe(403);
+  expect((await ask('parent', 'Which fee payments are overdue this month?')).status).toBe(403);
+  expect((await ask('admin', 'Which RFID devices are offline?', f.schoolB)).status).toBe(404);
+  expect((await ask('admin', 'Delete overdue fees')).status).toBe(422);
+  const denied = await ask('teacher', 'Which RFID devices are offline?');
+  const unsupported = await ask('admin', 'Who is on the school bus right now?');
+  const message = 'You don’t have access to that information through Ask Vidyalayaa.';
+  expect(denied.body.error.message).toBe(message);
+  expect(unsupported).toMatchObject({
+    status: 422,
+    body: { error: { code: 'UNSUPPORTED_OPERATIONS_QUESTION', message } },
+  });
+  const brief = await http(path, 'teacher', f.schoolA, { kind: 'brief' });
+  expect(brief.status, JSON.stringify(brief.body)).toBe(200);
+  expect(brief.body.notes.map((note: { topic: string }) => note.topic)).toEqual([
+    'attendance',
+    'timetable',
+  ]);
+  expect(brief.body.summary).toBeUndefined();
+});
+
+it('checks current lectures using school time and visible classes', async () => {
+  await db.query(
+    `INSERT INTO timetable_entries(school_id,class_id,subject_id,teacher_id,weekday,starts_at,ends_at)
+     VALUES($1,$2,$4,$5,1,'08:00','08:40'),($1,$3,$4,$6,1,'08:40','09:20')`,
+    [f.schoolA, f.classId, otherClass, f.subject, f.teacherId, subjectTeacherProfile],
+  );
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    // Asia/Kolkata, Monday, 08:15.
+    vi.setSystemTime(new Date('2026-11-16T02:45:00Z'));
+    const ask = (role: string, question: string) =>
+      http('/operations-assistant', role, f.schoolA, { kind: 'question', question });
+    const admin = await ask('admin', 'which class has no lecture currently');
+    expect(admin.status, JSON.stringify(admin.body)).toBe(200);
+    expect(admin.body.notes).toEqual([
+      {
+        topic: 'timetable',
+        text: '1 class has no lecture scheduled at 08:15 school time.',
+        details: ['Class 8 · B'],
+      },
+    ]);
+    const teacher = await ask('teacher', 'Which classes have no lesson right now?');
+    expect(teacher).toMatchObject({
+      status: 200,
+      body: { notes: [{ topic: 'timetable', details: [] }] },
+    });
+    // The first lecture has ended and the next starts at exactly 08:40.
+    vi.setSystemTime(new Date('2026-11-16T03:10:00Z'));
+    expect((await ask('principal', 'Which classes are free now?')).body.notes[0].details).toEqual([
+      'Class 8 · A',
+    ]);
+    vi.setSystemTime(new Date('2026-11-16T12:00:00Z'));
+    expect((await ask('admin', 'Which classes are free now?')).body.notes[0].text).toContain(
+      'outside the school’s scheduled lecture periods',
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it.skipIf(

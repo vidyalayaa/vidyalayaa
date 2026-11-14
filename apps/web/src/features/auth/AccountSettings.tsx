@@ -16,6 +16,8 @@ import {
 import { PageHeading, Panel, Loading, ErrorState } from '../../components/common';
 import { Button } from '../../components/ui/button';
 import { AppearanceSettings } from '../../components/ThemeSelect';
+import AuthChallenge, { authChallengeEnabled } from './AuthChallenge';
+import { authRateLimited, useAuthEmailCooldown } from './auth-limits';
 
 export default function AccountSettings() {
   const auth = useAuth();
@@ -27,6 +29,9 @@ export default function AccountSettings() {
   const [notice, setNotice] = useState('');
   const [mfa, setMfa] = useState(false);
   const [nonceSent, setNonceSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [challenge, setChallenge] = useState(0);
+  const emailCooldown = useAuthEmailCooldown();
   const state = useQuery({
     queryKey: ['account-credentials', id],
     queryFn: () => api<AccountCredentials>('/account/credentials'),
@@ -53,14 +58,29 @@ export default function AccountSettings() {
     }
   }
   async function sendPasswordSetup() {
+    if (emailCooldown.seconds || (authChallengeEnabled && !captchaToken)) return;
     await action(async () => {
       const user = await assertAccountIdentity(id);
       if (!user.email || !user.email_confirmed_at)
         throw new Error('Verify your current email address first.');
-      await requestPasswordLink(user.email);
-      return 'A secure password setup link has been requested for your verified email. Open it to choose your password.';
+      try {
+        await requestPasswordLink(user.email, captchaToken);
+        emailCooldown.start();
+        return 'A secure password setup link has been requested for your verified email. Open it to choose your password.';
+      } catch (cause) {
+        if (authRateLimited(cause)) {
+          emailCooldown.start();
+          throw new Error('Too many attempts. Wait before requesting another email.');
+        }
+        throw cause;
+      } finally {
+        setCaptchaToken(undefined);
+        setChallenge((value) => value + 1);
+      }
     });
   }
+  const passwordEmailDisabled =
+    pending || emailCooldown.seconds > 0 || (authChallengeEnabled && !captchaToken);
   return (
     <>
       <PageHeading
@@ -319,14 +339,17 @@ export default function AccountSettings() {
                       Send verification code
                     </Button>
                   </div>
+                  <AuthChallenge key={challenge} onToken={setCaptchaToken} />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={pending}
+                    disabled={passwordEmailDisabled}
                     onClick={sendPasswordSetup}
                   >
-                    Forgot your current password? Send a reset link
+                    {emailCooldown.seconds
+                      ? `Send again in ${emailCooldown.seconds}s`
+                      : 'Forgot your current password? Send a reset link'}
                   </Button>
                 </form>
               ) : (
@@ -338,12 +361,15 @@ export default function AccountSettings() {
                     We’ll send a secure link to your verified email. Open it to create a password
                     without creating a new account or disconnecting Google.
                   </p>
+                  <AuthChallenge key={challenge} onToken={setCaptchaToken} />
                   <Button
                     variant="lime"
-                    disabled={pending || !state.data.email_confirmed}
+                    disabled={passwordEmailDisabled || !state.data.email_confirmed}
                     onClick={sendPasswordSetup}
                   >
-                    Send password setup link
+                    {emailCooldown.seconds
+                      ? `Send again in ${emailCooldown.seconds}s`
+                      : 'Send password setup link'}
                   </Button>
                 </div>
               )}

@@ -39,12 +39,14 @@ export const supabase = configured
     })
   : null;
 export class AccountMfaRequired extends Error {}
-export async function requestPasswordLink(email: string) {
+export async function requestPasswordLink(email: string, captchaToken?: string) {
   if (!supabase) throw new Error('Connect your workspace before signing in.');
-  const result = await supabase.auth.resetPasswordForEmail(email, {
+  const result = await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo: location.origin + '/auth/callback',
+    captchaToken,
   });
-  if (result.error) throw result.error;
+  if (result.error && !['user_not_found', 'email_not_confirmed'].includes(result.error.code || ''))
+    throw result.error;
 }
 export async function assertAccountIdentity(id: string) {
   if (!supabase) throw new Error('Sign in to continue.');

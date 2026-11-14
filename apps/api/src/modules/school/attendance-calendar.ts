@@ -14,7 +14,7 @@ import { ApiError, asyncRoute, notFound } from '../../lib/errors.js';
 import { paged } from '../../lib/pagination.js';
 import { permission, type Actor } from '../../middleware/auth.js';
 import { localParts } from '../attendance/engine.js';
-import { assertClass, assertStudent, studentScope } from './resources.js';
+import { assertClass, assertStudent, classScope, studentScope } from './resources.js';
 
 const scopeSchema = z.object({
   academic_session_id: uuid.optional(),
@@ -65,12 +65,13 @@ const selection = (alias: 'e' | 'd') =>
    AND ($8::text IS NULL OR c.grade=$8)
    AND ($5::uuid IS NULL OR ${alias}.student_id=$5)`;
 
-const recordsFrom = (a: Actor) => `
+const recordsFrom = (a: Actor, byClass = false) => `
  FROM daily_attendance d
  JOIN students t ON t.school_id=d.school_id AND t.id=d.student_id
  LEFT JOIN classes c ON c.school_id=d.school_id AND c.id=d.class_id
  WHERE d.school_id=$1 AND d.attendance_date BETWEEN $3::date AND least($4::date,$9::date)
-   AND ${selection('d')} AND ${studentScope(a, 't.id', '$2')}`;
+   AND ${selection('d')} AND ${studentScope(a, 't.id', '$2')}
+   ${byClass ? `AND ${classScope(a, 'd.class_id', '$2')}` : ''}`;
 
 function values(a: Actor, scope: Scope, filters: Filters, from: string, to: string, today: string) {
   return [
@@ -94,10 +95,11 @@ export async function readAttendanceCalendar(
   from: string,
   to: string,
   today: string,
+  byClass = false,
 ) {
   // Resolve one enrollment per student and day, then classify the schedule once
   // per class and date. The stored record takes precedence when a student transferred.
-  const result = await tx.query<AttendanceCalendarDay>(
+  const result = await tx.query<AttendanceCalendarDay & { class_id?: string }>(
     `
  WITH dates AS (
    SELECT $3::date+n AS day FROM generate_series(0,least($4::date,$9::date)-$3::date) n
@@ -112,10 +114,11 @@ export async function readAttendanceCalendar(
      AND greatest(e.starts_on,a.starts_on)<=least($4::date,$9::date)
      AND least(e.ends_on,a.ends_on)>=$3::date
      AND ${selection('e')} AND ${studentScope(a, 't.id', '$2')}
+     ${byClass ? `AND ${classScope(a, 'e.class_id', '$2')}` : ''}
    ORDER BY e.student_id,ds.day,e.starts_on DESC,e.id
  ), recorded AS (
    SELECT d.student_id,d.attendance_date AS day,d.class_id,d.attendance_status
-   ${recordsFrom(a)}
+   ${recordsFrom(a, byClass)}
  ), class_days AS (
    SELECT coalesce(r.day,e.day) AS day,coalesce(r.class_id,e.class_id) AS class_id,
     count(*)::int AS roster,
@@ -167,7 +170,7 @@ export async function readAttendanceCalendar(
      ORDER BY r.class_id NULLS LAST,r.effective_from DESC LIMIT 1
    ) rv ON true
  )
- SELECT day::text AS date,
+ SELECT day::text AS date,${byClass ? ' class_id,' : ''}
    coalesce(sum(roster) FILTER (WHERE schedule='WORKING'),0)::int AS working,
    coalesce(sum(roster) FILTER (WHERE schedule='HOLIDAY'),0)::int AS holidays,
    coalesce(sum(roster) FILTER (WHERE schedule='WEEKLY_OFF'),0)::int AS weekly_off,
@@ -177,7 +180,7 @@ export async function readAttendanceCalendar(
    coalesce(array_agg(DISTINCT holiday_name ORDER BY holiday_name)
      FILTER (WHERE schedule='HOLIDAY' AND holiday_name<>''),ARRAY[]::text[]) AS holiday_names,
    bool_or(uses_default AND schedule='WORKING') AS uses_default_schedule
- FROM scheduled GROUP BY day ORDER BY day`,
+ FROM scheduled GROUP BY day${byClass ? ',class_id' : ''} ORDER BY day${byClass ? ',class_id' : ''}`,
     values(a, scope, filters, from, to, today),
   );
   return result.rows;

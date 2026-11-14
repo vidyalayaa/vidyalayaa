@@ -128,7 +128,14 @@ After acceptance, create the relevant teacher/parent/student profile using the n
 
 Set the three required public web values: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY and VITE_API_URL. Use the staging versions for staging. Vite bakes them into static files at build time; changing Render variables cannot change an already built Firebase app. Fabric Grotesk is used when locally available; the fallback is Arial/system sans-serif. If distributing a licensed web font, add the approved WOFF2 asset and its @font-face URL before building.
 
-Copy .firebaserc.example to .firebaserc or pass --project explicitly. Review firebase.json CSP connect-src against the exact API/Auth origins. The default permits Supabase and Render provider domains; add a custom API domain explicitly when using one. Keep script-src self, no framing, nosniff, HSTS and the SPA rewrite. Static assets are immutable; index.html is not cached indefinitely.
+Copy .firebaserc.example to .firebaserc or pass --project explicitly. Review the Firebase CSP against the exact API and Auth origins and add any custom API domain. Turnstile's Cloudflare origin is allowed for scripts and frames. Keep the frame-ancestors restriction, nosniff, HSTS and the SPA rewrite. Static assets are immutable and index.html has a separate cache policy.
+
+#### Auth bot protection
+
+1. Create a Managed Turnstile widget for each environment and allow its frontend hostname in Cloudflare. Set its public site key in the GitHub environment variable `VITE_TURNSTILE_SITE_KEY` before building the web app.
+2. Deploy the frontend before enabling CAPTCHA for that environment. In the matching Supabase project's Auth settings, enable CAPTCHA under Bot and Abuse Protection, select Turnstile and enter the matching secret in Supabase.
+3. Review Authentication → Rate Limits on the hosted project. Supabase enforces the email send cooldown and IP-based rate limits for Auth requests, including code verification. Start with a 60-second email resend interval and review project email quotas for your SMTP provider and school login traffic. The browser countdown helps prevent repeat clicks.
+4. In staging, verify password sign-in, recovery, email link and code sign-in, password setup email from account settings, and Google OAuth. Confirm that Supabase rejects password, recovery and email sign-in requests with missing or invalid CAPTCHA tokens. Google handles credentials on its own sign-in page. Supabase rate limits email code verification.
 
 ```powershell
 npm run build

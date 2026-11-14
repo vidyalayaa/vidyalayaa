@@ -353,6 +353,13 @@ export function academicAi(config: Config) {
     }
   }
   return {
+    operationsBrief: (facts: { topic: string; text: string }[], key: string) =>
+      generate(
+        facts,
+        'These are school operations facts. Return {summary:string} with up to two short sentences prioritizing staff follow-up. Use only supplied facts. Avoid inventing causes, names, dates, deadlines, or actions already taken.',
+        z.object({ summary: text }),
+        key,
+      ),
     advice: (facts: ReturnType<typeof academicFacts>, key: string) =>
       generate(
         facts,
