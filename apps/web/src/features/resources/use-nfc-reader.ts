@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NfcSerialReader, serialAccess } from './nfc-serial';
+import { NfcSerialReader, ReaderTimeoutError, serialAccess } from './nfc-serial';
 
 export function useNfcReader() {
   const reader = useRef<NfcSerialReader | null>(null);
@@ -42,7 +42,14 @@ export function useNfcReader() {
       }
       reader.current = device;
       // Some ESP32 USB bridges reset the board when the port opens.
-      await device.request('PROBE', 1800).catch(() => device.request('PROBE', 2200));
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await device.request('PROBE', 3000);
+          break;
+        } catch (error) {
+          if (!(error instanceof ReaderTimeoutError) || attempt === 2) throw error;
+        }
+      }
       if (mounted.current && reader.current === device) setStatus('connected');
     } catch (error) {
       await reader.current?.close();

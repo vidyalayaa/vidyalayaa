@@ -9,6 +9,8 @@ export function serialAccess() {
   return (navigator as Navigator & { serial?: { requestPort(): Promise<UsbSerialPort> } }).serial;
 }
 
+export class ReaderTimeoutError extends Error {}
+
 export class NfcSerialReader {
   private receive?: (line: string) => void;
   private stopRequest?: () => void;
@@ -65,10 +67,10 @@ export class NfcSerialReader {
       const timer = setTimeout(
         () =>
           finish(
-            new Error(
+            new ReaderTimeoutError(
               command === 'SCAN'
                 ? 'No card was read. Arm the reader and tap again.'
-                : 'The device did not respond as a Vidyalayaa enrollment reader.',
+                : 'The ESP32 did not reply. Check the selected COM port and reset the board before reconnecting.',
             ),
           ),
         timeout,
@@ -91,7 +93,7 @@ export class NfcSerialReader {
           finish(null, value);
         if (kind === 'ERROR') {
           const descriptions: Record<string, string> = {
-            READER: 'The device could not initialize its NFC module.',
+            READER: 'The ESP32 replied, but its PN532 NFC module is missing or could not start. Check the wiring and reset the ESP32.',
             MODE: 'The device is in gate mode. Switch it to USB enrollment mode and reconnect.',
             CARD_TYPE: 'This card type is unsupported. Use a compatible NFC student card.',
           };
@@ -105,7 +107,7 @@ export class NfcSerialReader {
       };
       const stop = this.stopRequest;
       void writer
-        .write(new TextEncoder().encode(`${command} ${requestId}\n`))
+        .write(new TextEncoder().encode(`${command === 'PROBE' ? '\n' : ''}${command} ${requestId}\n`))
         .catch(() => {
           if (this.stopRequest === stop) stop();
         })
