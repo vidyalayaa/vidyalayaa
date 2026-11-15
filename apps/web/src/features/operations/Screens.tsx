@@ -23,6 +23,9 @@ import {
   memberCategories,
   memberCategoryRoles,
   membershipStatuses,
+  attendanceStatuses,
+  reportKinds,
+  reportFeeStatuses,
   type MemberCategory,
   type MemberCounts,
   type Page,
@@ -568,12 +571,58 @@ export function Corrections() {
     </>
   );
 }
+const reportTypes = {
+  ATTENDANCE: {
+    title: 'Attendance',
+    description: 'Daily attendance and movement records.',
+    permission: 'attendance.read',
+  },
+  ACADEMIC: {
+    title: 'Academic results',
+    description: 'Student marks by exam and subject.',
+    permission: 'marks.read',
+  },
+  FEES: {
+    title: 'Fee collection',
+    description: 'Charges, payments, and balances by fee status.',
+    permission: 'fees.read',
+  },
+};
+
 export function Reports() {
   const a = useAuth(),
     query = useRows('/reports'),
     [open, setOpen] = useState(false),
-    [kind, setKind] = useState('ATTENDANCE'),
+    [selectedKind, setKind] = useState<(typeof reportKinds)[number]>('ATTENDANCE'),
     [error, setError] = useState('');
+  const allowedKinds = reportKinds.filter((type) =>
+    a.me?.school?.permissions.includes(reportTypes[type].permission),
+  );
+  const kind = allowedKinds.includes(selectedKind) ? selectedKind : allowedKinds[0];
+  const family = ['parent', 'student'].includes(a.me?.school?.role || '');
+  const filters: ActionField[] =
+    kind === 'ATTENDANCE'
+      ? [
+          {
+            key: 'attendance_status',
+            options: [...attendanceStatuses],
+            optional: true,
+            emptyOption: 'All attendance statuses',
+          },
+        ]
+      : kind === 'FEES'
+        ? [
+            {
+              key: 'fee_status',
+              options: [...reportFeeStatuses],
+              optional: true,
+              emptyOption: 'All fee statuses',
+            },
+          ]
+        : [
+            { key: 'exam_id', lookup: '/resources/exams', optional: true },
+            { key: 'subject_id', lookup: '/resources/subjects', optional: true },
+          ];
   async function download(id: unknown) {
     try {
       const r = await api<{ url: string }>(`/reports/${id}/download`);
@@ -589,10 +638,10 @@ export function Reports() {
   return (
     <>
       <PageHeading
-        title="Turn records into perspective."
-        description="Secure, downloadable reports for the decisions ahead."
+        title="School reports"
+        description="Filter attendance, academic results, and fees before generating a private report."
         actions={
-          <Button variant="lime" disabled={!configured} onClick={() => setOpen(true)}>
+          <Button variant="lime" disabled={!configured || !kind} onClick={() => setOpen(true)}>
             <Plus size={16} />
             Create report
           </Button>
@@ -604,35 +653,26 @@ export function Reports() {
         </div>
       )}
       <div className="report-types">
-        {[
-          ['ATTENDANCE', 'Attendance', 'Daily presence and movement.'],
-          ['ACADEMIC', 'Academic results', 'A clearer view of student progress.'],
-          ['FEES', 'Fee collection', 'Charges, payments, and balances.'],
-        ]
-          .filter(
-            (x) =>
-              x[0] !== 'FEES' || a.me?.school?.permissions.includes('fees.read') || !configured,
-          )
-          .map(([kind, title, desc]) => (
-            <article key={kind}>
-              <span>
-                <FileText size={23} />
-              </span>
-              <h2>{title}</h2>
-              <p>{desc}</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!configured}
-                onClick={() => {
-                  setKind(kind);
-                  setOpen(true);
-                }}
-              >
-                Create report <ArrowUpRight size={14} />
-              </Button>
-            </article>
-          ))}
+        {(configured ? allowedKinds : reportKinds).map((kind) => (
+          <article key={kind}>
+            <span>
+              <FileText size={23} />
+            </span>
+            <h2>{reportTypes[kind].title}</h2>
+            <p>{reportTypes[kind].description}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!configured}
+              onClick={() => {
+                setKind(kind);
+                setOpen(true);
+              }}
+            >
+              Create report <ArrowUpRight size={14} />
+            </Button>
+          </article>
+        ))}
       </div>
       <Panel
         title="Your reports"
@@ -648,6 +688,13 @@ export function Reports() {
                     {display(r.created_at, a.me?.school?.timezone)}{' '}
                     <Badge>{String(r.status)}</Badge>
                   </p>
+                  {Boolean(r.date_from && r.date_to) && (
+                    <p>
+                      {String(r.date_from)} to {String(r.date_to)}
+                      {Boolean(r.attendance_status || r.fee_status) &&
+                        ` · ${label(String(r.attendance_status || r.fee_status).toLowerCase())}`}
+                    </p>
+                  )}
                   {Boolean(r.error_code) && <p className="field-error">{String(r.error_code)}</p>}
                 </div>
                 <Button
@@ -678,21 +725,18 @@ export function Reports() {
         fields={[
           {
             key: 'kind',
-            default: kind,
-            options: [
-              'ATTENDANCE',
-              'ACADEMIC',
-              ...(a.me?.school?.permissions.includes('fees.read') ? ['FEES'] : []),
-            ],
+            value: kind,
+            options: allowedKinds,
+            onValueChange: (value) => setKind(value as (typeof reportKinds)[number]),
           },
           {
             key: 'student_id',
             lookup: '/resources/students',
-            optional: !['parent', 'student'].includes(a.me?.school?.role || ''),
+            optional: !family,
           },
-          ...(!['parent', 'student'].includes(a.me?.school?.role || '')
-            ? [{ key: 'class_id', optional: true, lookup: '/resources/classes' }]
-            : []),
+          ...(!family ? [{ key: 'class_id', optional: true, lookup: '/resources/classes' }] : []),
+          { key: 'academic_session_id', optional: true, lookup: '/reports/academic-sessions' },
+          ...filters,
           {
             key: 'format',
             options: a.me?.features.advanced_reporting ? ['PDF', 'CSV'] : ['PDF'],

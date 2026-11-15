@@ -24,6 +24,10 @@ it('exports more than 10,000 authorized rows through the streamed CSV path, with
     "INSERT INTO fee_records(school_id,student_id,academic_session_id,status,fee_type,amount_due,due_on) VALUES($1,$2,$3,'UNPAID','Foreign private fee',500,'2026-01-01')",
     [f.schoolB, f.foreignStudent, foreignSession],
   );
+  await db.query(
+    "INSERT INTO fee_records(school_id,student_id,academic_session_id,status,fee_type,amount_due,amount_paid,due_on) VALUES($1,$2,$3,'PAID','Already paid fee',100,100,'2026-01-01')",
+    [f.schoolA, f.student, f.session],
+  );
   expect(
     Number(
       (
@@ -36,7 +40,17 @@ it('exports more than 10,000 authorized rows through the streamed CSV path, with
   const id = (
     await db.query<{ id: string }>(
       "INSERT INTO report_documents(school_id,kind,parameters,requested_by) VALUES($1,'FEES',$2,$3) RETURNING id",
-      [f.schoolA, { format: 'CSV', from: '2026-01-01', to: '2026-12-31' }, f.admin],
+      [
+        f.schoolA,
+        {
+          format: 'CSV',
+          from: '2026-01-01',
+          to: '2026-12-31',
+          fee_status: 'UNPAID',
+          academic_session_id: f.session,
+        },
+        f.admin,
+      ],
     )
   ).rows[0].id;
   let body = '',
@@ -64,5 +78,6 @@ it('exports more than 10,000 authorized rows through the streamed CSV path, with
   expect(path).toMatch(/\.csv$/);
   expect(body.split('\r\n')).toHaveLength(10003);
   expect(body).not.toContain('Foreign private fee');
+  expect(body).not.toContain('Already paid fee');
   expect(body).toContain('"\' =2+2"');
 }, 60000);

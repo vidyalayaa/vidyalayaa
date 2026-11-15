@@ -121,9 +121,15 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
             class_id: uuid.optional(),
             unassigned: z.literal('1').optional(),
             search: z.string().max(120).default(''),
+            include_nfc_card: z.literal('1').optional(),
           })
           .refine((v) => !!v.class_id !== !!v.unassigned, 'Select a class or the unassigned group.')
           .parse(req.query);
+      if (
+        q.include_nfc_card &&
+        (!a.active!.permissions.includes('cards.manage') || !a.features.nfc_attendance)
+      )
+        throw new ApiError(403, 'FORBIDDEN', 'NFC card management access is required.');
       res.json(
         await transaction(
           pool,
@@ -141,7 +147,13 @@ export function studentDirectoryRouter(pool: pg.Pool, writes: WriteControls) {
               throw notFound();
             return paged(
               tx,
-              `SELECT s.*,selected.id AS enrollment_id,selected.roll_number,selected.starts_on,selected.ends_on
+              `SELECT s.*,selected.id AS enrollment_id,selected.roll_number,selected.starts_on,selected.ends_on${
+                q.include_nfc_card
+                  ? `,
+       EXISTS (SELECT 1 FROM nfc_cards card
+        WHERE card.school_id=s.school_id AND card.student_id=s.id AND card.status='ACTIVE') AS has_active_card`
+                  : ''
+              }
        FROM students s JOIN schools sc ON sc.id=s.school_id
        LEFT JOIN LATERAL(SELECT e.* FROM enrollments e JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id WHERE e.school_id=s.school_id AND e.student_id=s.id AND ${placement} AND ($3::uuid IS NULL OR c.id=$3) ORDER BY e.starts_on DESC,e.id LIMIT 1) selected ON true
        WHERE s.school_id=$1 AND ${matches} AND ${q.class_id ? 'selected.id IS NOT NULL' : 'selected.id IS NULL'} ORDER BY s.first_name,s.last_name,s.student_code,s.id`,

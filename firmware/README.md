@@ -1,19 +1,58 @@
-# ESP32 + PN532 + DS3231 firmware example
+# Vidyalayaa ESP32 DevKit firmware
 
-This is an explicitly labelled Arduino/PlatformIO **prototype example**, not a field-certified production image. It implements UUID tap events, persisted monotonic sequences, UTC RTC timestamps, durable-before-green feedback, CRC queue recovery, TLS certificate verification, per-event DELETE acknowledgement, retained retries, heartbeat, sync-ack, capped backoff and jitter. No school/student ID is supplied by firmware.
+Version `1.1.0-devkit` targets the original **ESP32 DevKit / ESP32-WROOM-32 with 4 MB flash**. One image supports gate attendance and USB enrollment. An unconfigured board starts in USB mode. A configured board starts in gate mode unless you connect **GPIO32 to GND before resetting it**. In USB mode the device pauses attendance capture and Wi-Fi uploads. To resume gate operation, remove the jumper and reset.
 
-Connect I2C SDA/SCL to board pins 21/22; PN532 IRQ 4/reset 5; LED green 26/red 27; buzzer 25. Confirm electrical requirements and pin conflicts for the actual board. Copy `include/provisioning.example.h` to ignored `include/provisioning.h`; inject the unit's unique credential and the real root CA. Build: `pio run -d firmware`; initialize the empty queue filesystem only on a new, unused device with `pio run -d firmware -t uploadfs` (this erases that partition; never run it on a device holding pending taps); flash: `pio run -d firmware -t upload`; monitor: `pio device monitor -d firmware`.
+## Upload and check a bare ESP32
 
-The queue partition is separate from both OTA application partitions. It refuses new events on storage failure/full capacity and never displays green until the queued record is flushed and renamed. Boot scans detect CRC failures and quarantine the damaged record. A sequence reserved before a power cut can produce a gap, which must be reported and investigated; it is never fabricated into a tap.
+From the repository root, run `pio run -d firmware -e esp32dev -t upload --upload-port COM9`, replacing COM9 if Windows assigns a different port. For a new board with a packaged `vidyalayaa-devkit-factory.bin`, run:
 
-The example uses one file per event instead of production segment files. Production acceptance requires a measured 72-hour capacity, 500 random power cuts, queue cursor redundancy/CRC, flash wear evaluation, nonblocking FreeRTOS NFC/sync tasks, task watchdogs, and robust RTC drift/last-sync validation. A blocking upload in this prototype can pause card reading for up to the HTTP timeout. Do not deploy it at a busy school gate until these items pass.
+```powershell
+py -m pip install esptool==4.9.0 pyserial==3.5
+py -m esptool --chip esp32 --port COM9 write_flash 0x0 vidyalayaa-devkit-factory.bin
+```
 
-## Production secure provisioning and OTA
+Use the factory image only when initializing a board. It writes bootloader, partition layout, OTA selection and application regions. Do not use it as a routine update for a reader with credentials or pending taps. For an existing compatible installation, back up and drain pending taps first and use the documented PlatformIO app upload. Never run `erase_flash` or `uploadfs` on a reader holding attendance events. The firmware initializes a blank queue partition and preserves a nonblank partition that fails to mount.
 
-Use ESP-IDF for the production firmware. Enable Secure Boot v2, flash encryption, encrypted NVS, signed A/B OTA, anti-rollback security versions, disabled debug interfaces, and a self-test/rollback deadline. Store Wi-Fi and per-device secret in encrypted NVS rather than compiled constants. Never place a Supabase key or provider credential on a device.
+If the tool stays on **Connecting**, hold **BOOT**, tap **EN/RESET**, and release **BOOT** when it connects. Close Arduino Serial Monitor and the browser’s USB connection before upload. After upload, verify the version and diagnostics over USB:
 
-OTA metadata/status tables and `/device/ota/status` are implemented, but this prototype intentionally does not install remotely offered images. The API returns `ota.available=false`. Implement and validate signed image verification against the actual chip revision and production bootloader, then add a reviewed release offer endpoint. This external hardware/OTA gate is also listed in `docs/READINESS.md`.
+```powershell
+py firmware/provision.py --port COM9 --status
+```
 
-Required rig cases: cut power during append/purge/upload; reboot with 200 queued events; corrupt record/cursor; fill partition; wrong RTC/OSF; blocked/unknown card; revoked credential; 24-hour outage; simultaneous five-reader upload; unsigned/tampered/downgraded/wrong-board OTA. Record evidence before enabling production updates.
+From the release bundle, use `py provision.py --port COM9 --status`. A fresh bare board should report `firmware=1.1.0-devkit`, `mode=enrollment`, `nfc=MISSING`, and `rtc=UNKNOWN`. No NFC module, clock, secret or school claim is required for that boot check.
 
-Local compilation evidence: PlatformIO 6.1.18, espressif32 6.12.0, esp32dev, Arduino-ESP32 2.0.17; build passed. RAM 47,996 bytes; application flash 1,000,573 bytes. This does not validate physical NFC, power-loss behavior or secure OTA. On Windows, use a Python virtual environment in a path without spaces if PlatformIO post-install scripts fail on the Python executable path.
+## Connect the peripherals
+
+| Peripheral | ESP32 pins |
+| --- | --- |
+| PN532 in I²C mode | SDA GPIO21, SCL GPIO22, IRQ GPIO4, reset GPIO5, and common GND |
+| DS3231 with backup cell | SDA GPIO21, SCL GPIO22, and common GND |
+| Optional indicators | Green LED GPIO26, red LED GPIO27, buzzer GPIO25 |
+| USB enrollment mode | GPIO32 to GND before reset |
+
+Use compatible module supply levels and 3.3 V logic on ESP32 signal pins. Confirm your module’s pin names and I²C mode settings before wiring. This firmware supports 4- or 7-byte Type A card UIDs.
+
+## Provision a gate reader
+
+1. As Super Admin, register the unit. As School Admin, claim it into its attendance location with the device code and claim code.
+2. Connect the ESP32 over USB and start it in USB enrollment mode. Have the **ESP32-reachable HTTPS API origin** and the corresponding trusted root CA PEM available. A browser URL or a laptop’s `127.0.0.1` address cannot serve as the reader’s API endpoint.
+3. Run `py firmware/provision.py --port COM9 --api https://<api-host> --ca-file api-root-ca.pem`. Enter the **device code**, Wi-Fi details and **device secret** when prompted. The helper checks the claimed reader and TLS certificate before storing the configuration. The claim code stays in the School Admin workflow.
+4. Remove the GPIO32 jumper and reset. Check `--status` and **NFC devices** for the firmware version, heartbeat, reader and clock. Verify a test tap in **Attendance → Movement history** and **Daily attendance**.
+
+To rotate a device secret or update Wi-Fi, boot into USB mode again and rerun provisioning with the same device code. Credentials are stored in the ESP32’s NVS. The DevKit build does not enable flash encryption or secure boot. Use the separately validated secure hardware profile for a production installation that requires protection against physical flash extraction.
+
+When upgrading from the prototype with credentials compiled into the sketch, enter the same device code and provision over USB after uploading. Retain its queue partition and drain pending taps before replacing a field reader image.
+
+## Enroll student cards over USB
+
+Fit the GPIO32 jumper and reset a provisioned reader, or use an unprovisioned unit over USB. Open **Attendance → NFC cards** in desktop Chrome or Edge on HTTPS or localhost. Under **Issue card to student**, connect the USB reader, choose a student or class, enter the printed serial and select **Arm reader**. Tap when prompted. The website stores the student, serial and chip UID. After the server confirms a class assignment, the next unissued student is selected.
+
+The separate `enrollment` PlatformIO target remains available for a USB-only reader.
+
+## Attendance behavior and verification
+
+- Gate mode checks HTTPS certificates, reports heartbeat, and uploads in a background task so network latency does not block card reads.
+- The queue reserves a persistent sequence and stores a CRC-checked file before the green feedback. Upload retries use the original event UUID. Only the acknowledged prefix is purged.
+- The DS3231 uses UTC. NTP refreshes its last trusted sync. Missing or suspect time is sent with its trust source so the server can reconstruct or quarantine it.
+- The local build and bare-board check are separate from school acceptance. Test PN532 card reads, DS3231 backup time, Wi-Fi loss and recovery, power cuts with queued taps, and the real attendance API before using it at a live school gate.
+- The `firmware-production/` ESP-IDF profile is separate and covers secure-boot, encrypted storage and signed OTA work. The DevKit image uses USB updates.

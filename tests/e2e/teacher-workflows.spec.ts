@@ -18,6 +18,30 @@ async function save(page: Page) {
     .click();
 }
 
+test('Teacher can select an assigned academic session when creating a report', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  await page.goto(authAppURL + '/teacher/reports');
+  await page.getByRole('button', { name: 'Create report', exact: true }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Create a school report' });
+  const session = dialog.locator('#action-academic_session_id');
+  await expect(session.locator(`option[value="${platformApp.records.session}"]`)).toHaveText('Test year');
+  await expect(dialog.getByText('You cannot view these records.', { exact: true })).toHaveCount(0);
+  await fill(page, {
+    'action-kind': 'ACADEMIC',
+    'action-academic_session_id': platformApp.records.session,
+    'action-from': '2026-01-01',
+    'action-to': '2027-12-31',
+  });
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.review-row').filter({ hasText: 'ACADEMIC report' })).toContainText(
+    'PENDING',
+  );
+});
+
 test('Teacher chooses an assigned class and sees its students and authorized parents', async ({
   page,
   authAppURL,

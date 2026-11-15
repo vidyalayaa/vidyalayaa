@@ -675,6 +675,7 @@ for (const kind of ['ATTENDANCE', 'ACADEMIC', 'FEES']) {
       const f = platformApp.records;
       const admin = (path: string, body: unknown) =>
         platformApp.request(path, 'POST', body, f.admin, f.schoolA);
+      let reportFilters: Record<string, string>;
       if (kind === 'ATTENDANCE') {
         const attendance = await admin('/attendance/manual', {
           student_id: f.student,
@@ -683,6 +684,17 @@ for (const kind of ['ATTENDANCE', 'ACADEMIC', 'FEES']) {
           reason: 'Generated Principal report attendance',
         });
         expect(attendance.status, JSON.stringify(attendance.body)).toBe(200);
+        expect(
+          (
+            await admin('/attendance/manual', {
+              student_id: f.student,
+              date: '2026-10-19',
+              status: 'ABSENT',
+              reason: 'Attendance excluded from filtered report',
+            })
+          ).status,
+        ).toBe(200);
+        reportFilters = { 'action-attendance_status': 'PRESENT' };
       } else if (kind === 'ACADEMIC') {
         const exam = await admin('/resources/exams', {
           class_id: f.classId,
@@ -703,6 +715,7 @@ for (const kind of ['ATTENDANCE', 'ACADEMIC', 'FEES']) {
             })
           ).status,
         ).toBe(201);
+        reportFilters = { 'action-exam_id': exam.body.id, 'action-subject_id': f.subject };
       } else {
         expect(
           (
@@ -715,6 +728,7 @@ for (const kind of ['ATTENDANCE', 'ACADEMIC', 'FEES']) {
             })
           ).status,
         ).toBe(201);
+        reportFilters = { 'action-fee_status': 'UNPAID' };
       }
       await page.goto(authAppURL + '/principal/reports');
       await page.getByRole('button', { name: 'Create report', exact: true }).first().click();
@@ -724,6 +738,12 @@ for (const kind of ['ATTENDANCE', 'ACADEMIC', 'FEES']) {
         'action-from': '2026-10-01',
         'action-to': '2026-10-21',
       });
+      const criteria = { 'action-academic_session_id': f.session, ...reportFilters };
+      for (const [id, value] of Object.entries(criteria)) {
+        const field = page.getByRole('dialog').locator(`#${id}`);
+        await expect(field.locator(`option[value="${value}"]`)).toHaveCount(1);
+      }
+      await fill(page, criteria);
       await save(page);
       await generateReports(platformApp.pools.worker, f.schoolA, platformApp.storage);
       await page.reload();
@@ -742,7 +762,10 @@ for (const kind of ['ATTENDANCE', 'ACADEMIC', 'FEES']) {
       for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks).toString();
       expect(body).not.toContain('Foreign learner');
-      if (format === 'CSV') expect(body).toContain('STU001');
+      if (format === 'CSV') {
+        expect(body).toContain('STU001');
+        if (kind === 'ATTENDANCE') expect(body).not.toContain('"ABSENT"');
+      }
       if (format === 'PDF') expect(body.startsWith('%PDF')).toBe(true);
       else
         expect(body).toContain(

@@ -13,6 +13,9 @@ export interface ActionField {
   options?: string[];
   optional?: boolean;
   default?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
+  emptyOption?: string;
   lookup?: string;
   nullable?: boolean;
 }
@@ -201,10 +204,17 @@ export function ActionDialog({
                   id={`action-${field.key}`}
                   name={field.key}
                   className="input"
+                  value={field.value}
                   defaultValue={
-                    typeof draft[field.key] === 'string' ? String(draft[field.key]) : field.default
+                    field.value !== undefined
+                      ? undefined
+                      : typeof draft[field.key] === 'string'
+                        ? String(draft[field.key])
+                        : field.default
                   }
+                  onChange={(event) => field.onValueChange?.(event.currentTarget.value)}
                 >
+                  {field.emptyOption && <option value="">{field.emptyOption}</option>}
                   {(field.options || ['true', 'false']).map((o) => (
                     <option key={o} value={o}>
                       {o === 'en-IN'

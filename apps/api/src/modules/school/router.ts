@@ -40,6 +40,7 @@ import {
   retentionPolicySchema,
   classAttendanceSchema,
   feePaymentSchema,
+  issueNfcCardSchema,
 } from '@vidyalayaa/contracts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inviteMember, invitationError } from '../identity/invitations.js';
@@ -61,7 +62,7 @@ import {
 } from './resources.js';
 import { queue } from '../attendance/service.js';
 import { localParts } from '../attendance/engine.js';
-import { authorizeReport } from './report-access.js';
+import { authorizeReport, validateReportFilters } from './report-access.js';
 import { scheduleAnnouncement } from './announcements.js';
 import { signedDownload, verifyDownload } from '../../lib/downloads.js';
 import { hash, encrypt } from '../../lib/crypto.js';
@@ -541,7 +542,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           const card =
             (
               await tx.query(
-                `SELECT id, card_uid, status, issued_at, blocked_reason FROM nfc_cards
+                `SELECT id, card_uid, card_serial, status, issued_at, blocked_reason FROM nfc_cards
                  WHERE school_id=$1 AND student_id=$2 AND $3::boolean ORDER BY created_at DESC LIMIT 1`,
                 [a.context.schoolId, id, a.active!.permissions.includes('cards.read')],
               )
@@ -648,13 +649,7 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
     permission('cards.manage'),
     asyncRoute(async (req, res) => {
       const a = res.locals.actor,
-        b = z
-          .object({
-            student_id: uuid,
-            card_uid: z.string().regex(/^[0-9A-F]{8,32}$/),
-          })
-          .strict()
-          .parse(req.body);
+        b = issueNfcCardSchema.parse(req.body);
       const result = await transaction(pool, a.context, async (tx) => {
         await requireWrite(tx, a, 'nfc_attendance');
         return withIdempotency(
@@ -668,16 +663,36 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
               a.context.schoolId,
               b.student_id,
             ]);
-            await tx.query(
-              "UPDATE nfc_cards SET status='RETIRED', blocked_reason='Replaced with new card' WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'",
-              [a.context.schoolId, b.student_id],
-            );
+            if (b.replace_existing === false) {
+              const active = await tx.query(
+                "SELECT id FROM nfc_cards WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'",
+                [a.context.schoolId, b.student_id],
+              );
+              if (active.rowCount)
+                throw new ApiError(
+                  409,
+                  'STUDENT_HAS_ACTIVE_CARD',
+                  'This student already has an active card.',
+                );
+            } else {
+              await tx.query(
+                "UPDATE nfc_cards SET status='RETIRED', blocked_reason='Replaced with new card' WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'",
+                [a.context.schoolId, b.student_id],
+              );
+            }
             const card = (
               await tx.query(
-                "INSERT INTO nfc_cards(school_id, student_id, card_uid, status, issued_by) VALUES($1,$2,$3,'ACTIVE',$4) RETURNING *",
-                [a.context.schoolId, b.student_id, b.card_uid, a.id],
+                `INSERT INTO nfc_cards(school_id, student_id, card_uid, status, issued_by, card_serial)
+                 VALUES($1,$2,$3,'ACTIVE',$4,$5) ON CONFLICT DO NOTHING RETURNING *`,
+                [a.context.schoolId, b.student_id, b.card_uid, a.id, b.card_serial ?? null],
               )
             ).rows[0];
+            if (!card)
+              throw new ApiError(
+                409,
+                'CARD_ALREADY_ASSIGNED',
+                'This chip UID or printed serial is already registered.',
+              );
             await audit(tx, a.context.schoolId, a.id, 'card.issued', 'nfc_cards', card.id);
             return card;
           },
@@ -1627,25 +1642,39 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
         b.kind === 'FEES' ? 'fees.read' : b.kind === 'ACADEMIC' ? 'marks.read' : 'attendance.read';
       if (!a.active!.permissions.includes(needed))
         throw new ApiError(403, 'FORBIDDEN', 'You cannot export this report.');
+      if (b.format === 'CSV' && !a.features.advanced_reporting)
+        throw new ApiError(
+          403,
+          'SUBSCRIPTION_FEATURE_UNAVAILABLE',
+          'Your plan does not include CSV reports.',
+        );
       res.status(202).json(
         await transaction(pool, a.context, async (tx) => {
           if (b.student_id) await assertStudent(tx, a, b.student_id);
           if (b.class_id) await assertClass(tx, a, b.class_id);
           if (['parent', 'student'].includes(a.active!.role) && !b.student_id)
             throw new ApiError(422, 'STUDENT_REQUIRED', 'Select a linked student.');
-          return (
-            await tx.query(
-              'INSERT INTO report_documents(school_id,kind,student_id,class_id,parameters,requested_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
-              [
-                a.context.schoolId,
-                b.kind,
-                b.student_id || null,
-                b.class_id || null,
-                { ...b, role: a.active!.role },
-                a.id,
-              ],
-            )
-          ).rows[0];
+          await validateReportFilters(tx, a, b);
+          return withIdempotency(
+            tx,
+            a,
+            req.get('Idempotency-Key'),
+            b,
+            async () =>
+              (
+                await tx.query(
+                  'INSERT INTO report_documents(school_id,kind,student_id,class_id,parameters,requested_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
+                  [
+                    a.context.schoolId,
+                    b.kind,
+                    b.student_id || null,
+                    b.class_id || null,
+                    { ...b, role: a.active!.role },
+                    a.id,
+                  ],
+                )
+              ).rows[0],
+          );
         }),
       );
     }),
@@ -1662,8 +1691,33 @@ export function schoolRouter(pool: pg.Pool, storage: SupabaseClient, config: Con
           (tx) =>
             paged(
               tx,
-              "SELECT id,kind,status,student_id,class_id,created_at,error_code,coalesce(parameters->>'format','PDF') AS format FROM report_documents WHERE school_id=$1 AND requested_by=$2 AND (status IN ('PENDING','PROCESSING','FAILED','EXPIRED') OR (authorization_version=(SELECT access_version FROM schools WHERE id=$1) AND authorization_scope=app.report_scope_fingerprint($2) AND authorization_role=(SELECT r.code FROM school_memberships m JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE'))) ORDER BY created_at DESC,id",
+              "SELECT id,kind,status,student_id,class_id,created_at,error_code,coalesce(parameters->>'format','PDF') AS format,parameters->>'from' AS date_from,parameters->>'to' AS date_to,parameters->>'attendance_status' AS attendance_status,parameters->>'fee_status' AS fee_status FROM report_documents WHERE school_id=$1 AND requested_by=$2 AND (status IN ('PENDING','PROCESSING','FAILED','EXPIRED') OR (authorization_version=(SELECT access_version FROM schools WHERE id=$1) AND authorization_scope=app.report_scope_fingerprint($2) AND authorization_role=(SELECT r.code FROM school_memberships m JOIN roles r ON r.id=m.role_id WHERE m.school_id=$1 AND m.user_id=$2 AND m.status='ACTIVE'))) ORDER BY created_at DESC,id",
               [a.context.schoolId, a.id],
+              req.query,
+            ),
+          true,
+        ),
+      );
+    }),
+  );
+  router.get(
+    '/reports/academic-sessions',
+    permission('reports.export'),
+    asyncRoute(async (req, res) => {
+      const a = res.locals.actor,
+        { search } = pageSchema.parse(req.query);
+      res.json(
+        await transaction(
+          pool,
+          a.context,
+          (tx) =>
+            // The API role's session policy limits teachers to the current session of their assigned classes.
+            paged(
+              tx,
+              `SELECT id,name FROM academic_sessions
+               WHERE school_id=$1 AND retired_at IS NULL AND name ILIKE $2
+               ORDER BY starts_on DESC,id`,
+              [a.context.schoolId, `%${(search || '').replace(/[\\%_]/g, '\\$&')}%`],
               req.query,
             ),
           true,

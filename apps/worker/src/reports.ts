@@ -104,8 +104,12 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
             ? ''
             : member.code === 'teacher'
               ? ` AND ((ex.assessment_kind='SUBJECT_TEST' AND ex.subject_id=t.subject_id AND ${classScope(a, 'ex.class_id', '$2', 't.subject_id')}) OR (ex.assessment_kind='OFFICIAL' AND ${classScope(a, 'ex.class_id', '$2')} AND EXISTS(SELECT 1 FROM classes ct JOIN teachers te ON te.school_id=ct.school_id AND te.id=ct.class_teacher_id WHERE ct.school_id=t.school_id AND ct.id=ex.class_id AND te.user_id=$2 AND te.status='ACTIVE')))`
-              : ` AND ${classScope(a, 'ex.class_id', '$2', 't.subject_id')}${['parent', 'student'].includes(member.code) ? " AND ex.status='PUBLISHED'" : ''}`;
-        const base = `SELECT t.id AS record_id,s.student_code,s.first_name,s.last_name,${columns} FROM ${table} t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id JOIN schools sch ON sch.id=t.school_id ${joins} WHERE t.school_id=$1 AND $2::uuid IS NOT NULL AND ${studentScope(a, 't.student_id', '$2')} AND ($3::uuid IS NULL OR t.student_id=$3) AND ($4::uuid IS NULL OR ${report.kind === 'ACADEMIC' ? 'ex.class_id=$4' : report.kind === 'ATTENDANCE' ? 't.class_id=$4' : 'EXISTS(SELECT FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=t.student_id AND en.class_id=$4 AND en.starts_on<=t.due_on AND (en.ends_on IS NULL OR en.ends_on>=t.due_on))'}) AND ${dateColumn}>=$5::date AND ${dateColumn}<$6::date+1 ${examRestriction}`;
+              : ` AND ${classScope(a, 'ex.class_id', '$2', 't.subject_id')}${['parent', 'student'].includes(member.code) ? " AND ex.status='PUBLISHED' AND ex.retired_at IS NULL" : ''}`;
+        const attendanceRestriction =
+          report.kind === 'ATTENDANCE' && member.code === 'teacher'
+            ? ` AND ${classScope(a, 't.class_id', '$2')}`
+            : '';
+        let base = `SELECT t.id AS record_id,s.student_code,s.first_name,s.last_name,${columns} FROM ${table} t JOIN students s ON s.school_id=t.school_id AND s.id=t.student_id JOIN schools sch ON sch.id=t.school_id ${joins} WHERE t.school_id=$1 AND $2::uuid IS NOT NULL AND ${studentScope(a, 't.student_id', '$2')} AND ($3::uuid IS NULL OR t.student_id=$3) AND ($4::uuid IS NULL OR ${report.kind === 'ACADEMIC' ? 'ex.class_id=$4' : report.kind === 'ATTENDANCE' ? 't.class_id=$4' : 'EXISTS(SELECT FROM enrollments en WHERE en.school_id=t.school_id AND en.student_id=t.student_id AND en.class_id=$4 AND en.starts_on<=t.due_on AND (en.ends_on IS NULL OR en.ends_on>=t.due_on))'}) AND ${dateColumn}>=$5::date AND ${dateColumn}<$6::date+1 ${examRestriction}${attendanceRestriction}`;
         const values = [
           schoolId,
           report.requested_by,
@@ -114,6 +118,26 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
           report.parameters.from,
           report.parameters.to,
         ];
+        const filters = {
+          ATTENDANCE: {
+            academic_session_id: 't.academic_session_id',
+            attendance_status: 't.attendance_status',
+          },
+          ACADEMIC: {
+            academic_session_id:
+              '(SELECT c.academic_session_id FROM classes c WHERE c.school_id=ex.school_id AND c.id=ex.class_id)',
+            exam_id: 't.exam_id',
+            subject_id: 't.subject_id',
+          },
+          FEES: { academic_session_id: 't.academic_session_id', fee_status: 't.status' },
+        }[report.kind as 'ATTENDANCE' | 'ACADEMIC' | 'FEES'];
+        for (const [key, column] of Object.entries(filters)) {
+          if (report.parameters[key]) {
+            values.push(report.parameters[key]);
+            base += ` AND ${column}=$${values.length}`;
+          }
+        }
+        const cursorParam = `$${values.length + 1}`;
         let rows: Record<string, unknown>[] = [];
         if (csv) {
           const file = await open(csvPath!, 'wx', 0o600),
@@ -135,7 +159,7 @@ export async function generateReports(pool: pg.Pool, schoolId: string, storage: 
               if (Date.now() - started > 15 * 60000) throw new Error('REPORT_SNAPSHOT_DEADLINE');
               const page: Record<string, unknown>[] = (
                 await tx.query(
-                  base + ' AND ($7::uuid IS NULL OR t.id>$7) ORDER BY t.id LIMIT 500',
+                  `${base} AND (${cursorParam}::uuid IS NULL OR t.id>${cursorParam}) ORDER BY t.id LIMIT 500`,
                   [...values, cursor],
                 )
               ).rows;

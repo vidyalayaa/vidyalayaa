@@ -13,5 +13,5 @@ test('authenticated school workflow against staging services', async ({ page }) 
   await page.goto('/attendance');
   await expect(page.getByRole('heading', { name: 'Every school day counts.' })).toBeVisible();
   await page.goto('/reports');
-  await expect(page.getByRole('heading', { name: 'Turn records into perspective.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'School reports' })).toBeVisible();
 });

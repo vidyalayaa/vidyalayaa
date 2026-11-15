@@ -4,6 +4,8 @@ import { sampleRule } from '../../apps/web/src/features/resources/metadata';
 import { generateReports } from '../../apps/worker/src/reports';
 import { generateSchoolExport } from '../../apps/worker/src/school-exports';
 
+const singleSchoolTest = test.extend({ implicitSchool: true });
+
 async function fill(page: Page, values: Record<string, unknown>) {
   const dialog = page.getByRole('dialog').last();
   for (const [name, value] of Object.entries(values)) {
@@ -481,8 +483,13 @@ test('School Admin issues, replaces and deactivates student NFC cards', async ({
   platformApp,
 }) => {
   await page.goto(authAppURL + '/admin/r/nfc_cards');
-  await page.getByRole('button', { name: 'Issue Card', exact: true }).click();
-  await page.getByLabel('Student', { exact: true }).selectOption(platformApp.records.student);
+  await expect(page.getByRole('heading', { name: 'Issued cards' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Issue card to student' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Enter UID manually' }).click();
+  await page
+    .getByRole('dialog')
+    .getByLabel('Student', { exact: true })
+    .selectOption(platformApp.records.student);
   await page.getByLabel('NFC Card UID (Hex)').fill('ABCDEF12');
   await save(page, 'Issue Card');
   const list = await platformApp.request(
@@ -498,6 +505,116 @@ test('School Admin issues, replaces and deactivates student NFC cards', async ({
   await page.getByLabel('Reason for deactivation').fill('Generated lost card exercise');
   await save(page, 'Deactivate Card');
   await expect(row).toContainText(/LOST/i);
+});
+
+singleSchoolTest('School Admin issues a class roster by USB tap and printed card serial', async ({
+  page,
+  authAppURL,
+  platformApp,
+}) => {
+  const f = platformApp.records;
+  await platformApp.db.query(
+    `INSERT INTO nfc_cards (school_id, student_id, card_uid, issued_by)
+     SELECT $1,$2,'090A0B0C',$3 WHERE NOT EXISTS (
+       SELECT 1 FROM nfc_cards WHERE school_id=$1 AND student_id=$2 AND status='ACTIVE'
+     )`,
+    [f.schoolA, f.student, f.admin],
+  );
+  const students = [crypto.randomUUID(), crypto.randomUUID()];
+  for (const [index, student] of students.entries()) {
+    await platformApp.db.query(
+      'INSERT INTO students(id,school_id,student_code,first_name) VALUES($1,$2,$3,$4)',
+      [student, f.schoolA, `DESK-${index}`, `Card learner ${index}`],
+    );
+    await platformApp.db.query(
+      "INSERT INTO enrollments(school_id,student_id,class_id,academic_session_id,starts_on) VALUES($1,$2,$3,$4,'2026-01-01')",
+      [f.schoolA, student, f.classId, f.session],
+    );
+  }
+  await page.addInitScript(() => {
+    const encoder = new TextEncoder();
+    let output: ReadableStreamDefaultController<Uint8Array>;
+    let scan = '';
+    addEventListener('test-card-tap', (event) => {
+      if (!scan) return;
+      output.enqueue(encoder.encode(`VIDYALAYAA UID ${scan} ${(event as CustomEvent).detail}\n`));
+      scan = '';
+    });
+    Object.defineProperty(navigator, 'serial', {
+      value: {
+        async requestPort() {
+          return {
+            async open() {},
+            async close() {},
+            readable: new ReadableStream({
+              start(controller) {
+                output = controller;
+              },
+            }),
+            writable: new WritableStream<Uint8Array>({
+              write(bytes) {
+                const [command, id] = new TextDecoder().decode(bytes).trim().split(' ');
+                if (command === 'PROBE') output.enqueue(encoder.encode(`VIDYALAYAA READY ${id}\n`));
+                if (command === 'SCAN') {
+                  scan = id;
+                  output.enqueue(encoder.encode(`VIDYALAYAA ARMED ${id}\n`));
+                }
+              },
+            }),
+          };
+        },
+      },
+    });
+  });
+  await page.goto(authAppURL + '/admin/attendance/issue-cards');
+  await expect(page).toHaveURL(/\/admin\/r\/nfc_cards$/);
+  expect(await page.evaluate(() => sessionStorage.getItem('vidyalayaa.school'))).toBeFalsy();
+  await expect(page.getByRole('heading', { name: 'Issue card to student' })).toBeVisible();
+  const studentField = await page.getByRole('textbox', { name: 'Find student' }).boundingBox();
+  const serialField = await page.getByLabel('Printed card serial number').boundingBox();
+  const width = page.viewportSize()!.width;
+  expect(studentField).not.toBeNull();
+  expect(serialField).not.toBeNull();
+  if (studentField && serialField) {
+    expect(serialField.x + serialField.width).toBeLessThanOrEqual(width);
+    if (width < 1024) {
+      expect(serialField.x).toBeCloseTo(studentField.x);
+      expect(serialField.y).toBeGreaterThan(studentField.y + studentField.height);
+    } else {
+      expect(serialField.x).toBeGreaterThan(studentField.x + studentField.width);
+    }
+  }
+  await page.getByRole('radio', { name: 'A class or section' }).check();
+  await page.getByLabel('Class or section', { exact: true }).selectOption(f.classId);
+  const next = page.getByLabel('Next student');
+  await expect(next).toHaveValue(students[0]);
+  await expect(page.getByText('2 of 3 students awaiting a card')).toBeVisible();
+  await page.getByRole('button', { name: 'Connect USB reader', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect USB reader' })).toBeVisible();
+  const scan = async (serial: string, uid: string) => {
+    await page.getByLabel('Printed card serial number').fill(serial);
+    await page.getByRole('button', { name: 'Arm reader' }).click();
+    await expect(page.getByText('Tap the card on the USB reader now.')).toBeVisible();
+    await page.evaluate((detail) => dispatchEvent(new CustomEvent('test-card-tap', { detail })), uid);
+  };
+  await scan('desk-001', '04A2B3C4D5E680');
+  await expect(page.getByText('Card DESK-001 issued successfully.')).toBeVisible();
+  await expect(next).toHaveValue(students[1]);
+  await scan('DESK-001', 'E1E2E3E4');
+  await expect(page.getByRole('alert').filter({ hasText: 'already registered' })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear scan' }).click();
+  await expect(next).toHaveValue(students[1]);
+  await scan('DESK-002', 'E1E2E3E4');
+  await expect(page.getByText('0 of 3 students awaiting a card')).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'DESK-002' })).toBeVisible();
+  const saved = await platformApp.db.query(
+    "SELECT student_id,card_serial,card_uid FROM nfc_cards WHERE school_id=$1 AND card_serial LIKE 'DESK-%' ORDER BY card_serial",
+    [f.schoolA],
+  );
+  expect(saved.rows).toEqual([
+    { student_id: students[0], card_serial: 'DESK-001', card_uid: '04A2B3C4D5E680' },
+    { student_id: students[1], card_serial: 'DESK-002', card_uid: 'E1E2E3E4' },
+  ]);
 });
 
 test('School Admin sends a support request and approves then revokes support access', async ({

@@ -198,9 +198,9 @@ External delivery is at least once. Resend receives a stable idempotency key. Pu
 
 Platform staff register each physical device to one school. Registration returns its random secret and claim code once; store them in a controlled provisioning system. Only their SHA-256 hashes persist server-side. The School Admin claims it into an active ENTRY, EXIT, BIDIRECTIONAL or CLASSROOM location. Devices have no authority to choose school/student IDs.
 
-The owner explicitly deferred all firmware development until website completion. The existing prototype and unfinished production firmware source are retained for later work. Do not deploy either as an accepted production reader image. No board is connected, no flash size/chip revision has been verified, no unit was flashed and no irreversible fuse changes were made. Firmware builds and physical acceptance are excluded from the present website completion gate.
+The ESP32 DevKit build supports USB enrollment and bench testing of gate attendance. Follow the [firmware guide](../firmware/README.md) to upload it, provision a claimed device over USB and verify the HTTPS connection. Physical reader acceptance and the secure ESP-IDF release remain separate rollout gates.
 
-The website device registration/claim/revocation, immutable ingest, telemetry and reconciliation APIs remain available. New release metadata and assignment controls fail closed without an approved public signing key, physically verified hardware and an accepted release. Leave that configuration blank and assignments disabled during website rollout. Preserve these contracts for the later embedded work. Hardware site survey, 72-hour queue, power-cut and OTA acceptance remain a separate future project phase.
+The website device registration/claim/revocation, immutable ingest, telemetry and reconciliation APIs remain available. New release metadata and assignment controls fail closed without an approved public signing key, physically verified hardware and an accepted release. Leave assignments disabled until the secure release is accepted. Production rollout still requires the site survey, 72-hour queue measurement, power-cut testing and signed OTA verification.
 
 ## 12. Fees, subscriptions and billing
 

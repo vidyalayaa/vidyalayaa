@@ -160,6 +160,21 @@ it('exposes multiple assigned classes and subjects but no academic administratio
     subjects: [{ id: otherSubject, name: 'English', code: 'ENG' }],
   });
   expect((await call('get', '/resources/academic_sessions')).status).toBe(403);
+  const historicalSession = crypto.randomUUID();
+  const otherSchoolSession = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO academic_sessions(id,school_id,name,starts_on,ends_on,is_current)
+     VALUES($1,$2,'Other test year','2025-01-01','2025-12-31',false),
+           ($3,$4,'Foreign test year','2026-01-01','2027-12-31',true)`,
+    [historicalSession, f.schoolA, otherSchoolSession, f.schoolB],
+  );
+  const sessions = await call('get', '/reports/academic-sessions?search=test%20year');
+  expect(sessions.status).toBe(200);
+  expect(sessions.body.data).toEqual([{ id: f.session, name: 'Test year' }]);
+  const report = { kind: 'ACADEMIC', from: '2026-01-01', to: '2027-12-31' };
+  for (const academic_session_id of [historicalSession, otherSchoolSession]) {
+    expect((await call('post', '/reports').send({ ...report, academic_session_id })).status).toBe(404);
+  }
   expect(
     (await call('get', '/resources/students?class_id=' + f.classId)).body.data.map(
       (s: any) => s.id,
@@ -475,6 +490,7 @@ it('exports teacher subject-test results without official marks from another Cla
   const report = await call('post', '/reports').send({
     kind: 'ACADEMIC',
     format: 'CSV',
+    academic_session_id: f.session,
     from: '2026-01-01',
     to: '2027-12-31',
   });

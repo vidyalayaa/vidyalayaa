@@ -300,11 +300,11 @@ export const resourceInfo: Record<
   },
   nfc_cards: {
     title: 'NFC cards',
-    description: 'A secure connection from card to classroom.',
+    description: 'Issue cards to students, look up a printed serial or chip UID, and deactivate cards.',
     permission: 'cards.read',
     write: 'cards.manage',
     feature: 'nfc_attendance',
-    columns: ['student_id', 'card_uid', 'status', 'issued_at'],
+    columns: ['student_id', 'card_serial', 'card_uid', 'status', 'issued_at'],
   },
   device_locations: {
     title: 'Device locations',

@@ -13,7 +13,8 @@ import PhotoImportDialog from '../profiles/PhotoImportDialog';
 import StudentRecordTabs from '../students/StudentRecordTabs';
 import AttendanceRuleBuilder from '../operations/AttendanceRuleBuilder';
 import FeePaymentDialog from './FeePaymentDialog';
-import { IssueCardDialog, BlockCardDialog } from './CardActionDialogs';
+import { BlockCardDialog } from './CardActionDialogs';
+import CardIssuance from './CardIssuance';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -65,7 +66,6 @@ export function ResourceScreen({
     [page, setPage] = useState(1),
     [editing, setEditing] = useState<Record<string, unknown> | null | undefined>(undefined),
     [payingFee, setPayingFee] = useState<Record<string, unknown> | null>(null),
-    [issuingCard, setIssuingCard] = useState(false),
     [blockingCard, setBlockingCard] = useState<{
       id: string;
       card_uid: string;
@@ -146,12 +146,6 @@ export function ResourceScreen({
                 Enter by roll number
               </Button>
             )}
-            {resource === 'nfc_cards' && canWrite && (
-              <Button variant="lime" onClick={() => setIssuingCard(true)}>
-                <Plus size={17} />
-                Issue Card
-              </Button>
-            )}
             {(!configured || canWrite) && resource !== 'nfc_cards' && (
               <Button
                 variant="lime"
@@ -224,6 +218,7 @@ export function ResourceScreen({
           }
         />
       )}
+      {resource === 'nfc_cards' && canWrite && !locked && <CardIssuance />}
       {locked && configured ? (
         <div className="notice">
           <LockKeyhole size={20} />
@@ -231,12 +226,14 @@ export function ResourceScreen({
         </div>
       ) : (
         <Panel
-          title="All records"
+          title={resource === 'nfc_cards' ? 'Issued cards' : 'All records'}
           subtitle={`${query.data?.total ?? 0} ${assessment ? 'marks in this examination' : 'records in your school'}`}
           action={
-            <span className="text-xs text-stone-500">
-              {assessment ? 'Selected class and examination' : 'School records'}
-            </span>
+            resource !== 'nfc_cards' && (
+              <span className="text-xs text-stone-500">
+                {assessment ? 'Selected class and examination' : 'School records'}
+              </span>
+            )
           }
         >
           <div className="table-toolbar">
@@ -373,16 +370,22 @@ export function ResourceScreen({
             />
           ) : (
             <Empty
-              title={`Your ${info.title.toLowerCase()} belong here`}
+              title={
+                resource === 'nfc_cards'
+                  ? 'No NFC cards found'
+                  : `Your ${info.title.toLowerCase()} belong here`
+              }
               description={
                 !configured
                   ? 'Connect your school’s Supabase project and API to start managing real records.'
                   : assessment && !canRecordMarks
                     ? 'There are no recorded marks for this examination.'
-                    : 'Add your first record to get started.'
+                    : resource === 'nfc_cards'
+                      ? 'Cards issued to students appear here.'
+                      : 'Add your first record to get started.'
               }
               action={
-                canWrite && (
+                canWrite && resource !== 'nfc_cards' && (
                   <Button size="sm" variant="outline" onClick={() => setEditing(null)}>
                     <Plus size={15} />
                     Add first record
@@ -454,7 +457,6 @@ export function ResourceScreen({
         </div>
       )}
       {payingFee && <FeePaymentDialog fee={payingFee as any} close={() => setPayingFee(null)} />}
-      {issuingCard && <IssueCardDialog open={issuingCard} close={() => setIssuingCard(false)} />}
       {blockingCard && <BlockCardDialog card={blockingCard} close={() => setBlockingCard(null)} />}
       {view &&
         (resource === 'students' ? (

@@ -222,7 +222,33 @@ it('keeps drafts, unrelated materials, other families reports and notifications 
   await db.query("UPDATE exams SET status='OPEN' WHERE id=$1", [s.exams[f.student]]);
   expect((await call(base(f.student) + '/results')).body.data).toEqual([]);
   expect((await call('/resources/exams/' + s.exams[f.student])).status).toBe(404);
+  const academicReport = {
+    kind: 'ACADEMIC',
+    student_id: f.student,
+    from: '2026-01-01',
+    to: '2026-12-31',
+  };
+  expect(
+    (
+      await call('/reports', 'parent', 'post').send({
+        ...academicReport,
+        exam_id: s.exams[f.student],
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (await call('/reports', 'parent', 'post').send({ ...academicReport, fee_status: 'PAID' }))
+      .status,
+  ).toBe(422);
   await db.query("UPDATE exams SET status='PUBLISHED' WHERE id=$1", [s.exams[f.student]]);
+  expect(
+    (
+      await call('/reports', 'parent', 'post').send({
+        ...academicReport,
+        exam_id: s.exams[f.student],
+      })
+    ).status,
+  ).toBe(202);
   for (const [id, name] of [
     [f.student, 'First child alert'],
     [s.sibling, 'Sibling child alert'],

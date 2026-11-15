@@ -383,6 +383,10 @@ function schoolRoutes() {
       />
       <Route path="r/:resource" element={<ResourcePage />} />
       <Route
+        path="attendance/issue-cards"
+        element={<Navigate to="../r/nfc_cards" replace />}
+      />
+      <Route
         path="attendance/history"
         element={
           <Permission code="attendance.read">

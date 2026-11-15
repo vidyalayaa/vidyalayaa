@@ -918,6 +918,21 @@ summary.school-selector:hover {
   color: var(--muted);
   margin-top: 6px;
 }
+.card-issuance-grid > .panel {
+  margin-bottom: 0;
+}
+.card-issuance-panel-body {
+  min-width: 0;
+  padding: 0 22px 22px;
+}
+@media (max-width: 640px) {
+  .card-issuance-grid .panel-heading {
+    padding-inline: 16px;
+  }
+  .card-issuance-panel-body {
+    padding: 0 16px 16px;
+  }
+}
 .text-link {
   display: flex;
   align-items: center;

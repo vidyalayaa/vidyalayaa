@@ -59,6 +59,7 @@ interface StudentOverview {
   card: {
     id: string;
     card_uid: string;
+    card_serial: string | null;
     status: string;
     issued_at: string;
     blocked_reason: string | null;
@@ -288,7 +289,7 @@ export default function StudentProfileDialog({
                           d.card.status === 'ACTIVE' ? 'bg-green-500' : 'bg-rose-500'
                         }`}
                       />
-                      {d.card.card_uid}
+                      {d.card.card_serial || d.card.card_uid}
                     </span>
                   ) : (
                     <span className="text-xs text-stone-400">Not assigned</span>

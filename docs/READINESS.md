@@ -4,7 +4,7 @@ Updated 20 October 2026. This records delivered source and executed local checks
 
 ## Current scope
 
-The five primary roles are Super Admin, School Admin, Principal, Parent and Student. Documented teacher workflows are retained. Supabase Auth remains the identity authority; Firebase supplies Hosting and FCM. Google/password sign-in and enrolled MFA share the same server-enforced authorization. Manual subscription billing is implemented at the owner's direction. All firmware development and physical-reader acceptance are deferred by the owner.
+The five primary roles are Super Admin, School Admin, Principal, Parent and Student. Documented teacher workflows are retained. Supabase Auth remains the identity authority; Firebase supplies Hosting and FCM. Google/password sign-in and enrolled MFA share the same server-enforced authorization. Manual subscription billing is implemented at the owner's direction. The DevKit firmware is available for bench testing. Physical reader and secure production release acceptance are pending.
 
 ## Delivered website behavior
 
@@ -44,7 +44,7 @@ Migrations 010-022 were applied only to disposable test databases during this wo
 5. Obtain actual school privacy/consent/retention/attendance/grading/security policy approvals, manual screen-reader/tablet review and independent security acceptance. Operational purge retains global identities and required audit/contract records; it is not blanket legal erasure.
 6. A local Docker build encountered a resource/engine failure during image unpacking. Application production builds passed separately. A successfully executed release container and remote CI/Trivy result remain unverified.
 
-A licensed Fabric Grotesk asset was not supplied. The site uses it when locally available, with the documented sans-serif fallback. Provider delivery is at least once, with target dedupe and stable idempotency where supported. Hardware, firmware queue/power-loss/RTC/OTA work is deferred and is not a website completion gate.
+A licensed Fabric Grotesk asset was not supplied. The site uses it when locally available, with the documented sans-serif fallback. Provider delivery is at least once, with target dedupe and stable idempotency where supported. Physical queue, power-loss, RTC and OTA testing is required for production hardware rollout.
 
 
 ## Record-first invitations follow-up

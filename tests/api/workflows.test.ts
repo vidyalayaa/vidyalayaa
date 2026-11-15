@@ -60,6 +60,34 @@ function call(method: 'get' | 'post' | 'patch', path: string, role = 'admin') {
     .set('X-School-Id', f.schoolA);
 }
 describe('identity, RBAC and scope', () => {
+  it('links a printed serial once and protects active assignments on desk retries', async () => {
+    const student = crypto.randomUUID();
+    await db.query(
+      "INSERT INTO students(id,school_id,student_code,first_name) VALUES($1,$2,'NFC-DESK','Desk learner')",
+      [student, f.schoolA],
+    );
+    const card = {
+      student_id: student,
+      card_serial: ' desk-0001 ',
+      card_uid: '049876543210AB',
+      replace_existing: false,
+    };
+    const issue = (body: typeof card, key: string) =>
+      call('post', '/cards/issue').set('Idempotency-Key', key).send(body);
+    const active = await issue({ ...card, student_id: f.student }, 'nfc-desk-existing');
+    expect(active.body.error?.code).toBe('STUDENT_HAS_ACTIVE_CARD');
+    const first = await issue(card, 'nfc-desk-first');
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({ student_id: student, card_serial: 'DESK-0001' });
+    expect((await issue(card, 'nfc-desk-first')).body.id).toBe(first.body.id);
+    const replacement = await issue({ ...card, card_uid: '04010203040506' }, 'nfc-desk-next');
+    expect(replacement.status).toBe(409);
+    const result = await call('get', `/resources/nfc_cards?student_id=${student}&search=desk-0001`);
+    expect(result.body.data).toEqual([
+      expect.objectContaining({ id: first.body.id, status: 'ACTIVE' }),
+    ]);
+  });
+
   it('keeps audit cursor pages stable while new events arrive and validates cursors', async () => {
     for (let i = 0; i < 3; i++)
       await db.query(

@@ -42,6 +42,7 @@ import {
   retentionPolicySchema,
   classAttendanceSchema,
   feePaymentSchema,
+  issueNfcCardSchema,
   feeDate,
   feeStructureSchema,
   feeAssessmentSchema,
@@ -183,6 +184,7 @@ const schemas = {
   ManualAttendance: manualSchema,
   ClassAttendance: classAttendanceSchema,
   FeePayment: feePaymentSchema,
+  IssueNfcCard: issueNfcCardSchema,
   FeeStructure: feeStructureSchema,
   FeeAssessment: feeAssessmentSchema,
   FeeCollection: feeCollectionSchema,
@@ -750,6 +752,12 @@ for (const child of ['entries', 'assignments'])
     },
   );
 operation('/attendance', 'get', 'Paginated daily attendance');
+operation(
+  '/cards/issue',
+  'post',
+  'Assign a chip UID and optional printed serial to a student',
+  'IssueNfcCard',
+);
 for (const [base, family] of [
   ['/attendance/calendar', false],
   ['/parent/children/{childId}/attendance/calendar', true],
@@ -1311,6 +1319,7 @@ operation(
 operation('/push-tokens', 'delete', 'Unregister only own endpoint by SHA-256 token_hash.');
 operation('/reports', 'get', 'Own reports');
 operation('/reports', 'post', 'Queue a private report', 'ReportRequest');
+operation('/reports/academic-sessions', 'get', 'List academic sessions available for reports');
 operation('/reports/{id}/download', 'get', 'Obtain a short-lived authorized download');
 for (const [p, m, n] of [
   ['/device/events/batch', 'post', 'DeviceBatch'],

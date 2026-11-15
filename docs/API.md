@@ -135,6 +135,10 @@ Teachers see assigned classes and student rosters; subject writes and academic r
 
 Parents/students must choose a linked/self student when creating reports. Teachers' exports remain assigned-class/subject scoped. Report generation rechecks membership at processing time; downloads recheck it again. URLs are signed at the application boundary and also require JWT authorization, so copying another user's URL does not grant access. Raw storage report URLs are not exposed.
 
+All report types support an optional `academic_session_id`. Attendance accepts `attendance_status`, academic results accept `exam_id` and `subject_id`, and fees accept `fee_status` (`UNPAID`, `PARTIAL`, `PAID`, or `WAIVED`). Filters are combined with the date range and the caller's existing access scope for both PDF and CSV. Date ranges refer to the attendance date, the exam date (or the record date for an undated exam), and the fee due date, respectively.
+
+`GET /reports/academic-sessions` requires `reports.export` and returns paginated session IDs and names. For teachers it returns the current session only when they have an assigned class in that session.
+
 Bulk mark writes validate every row before UPSERT. Invalid enrollment/score returns 422 BULK_VALIDATION_FAILED with `error.details:[{path:['entries',zeroBasedRow,'score'|'student_id'],message}]`; no row is saved. Zod request errors expose `error.issues` with equivalent paths. A successful retry with the same idempotency key returns the original committed result. Academic PDFs summarize recorded subject scores per exam/student using the exam maxima; they do not invent grades or treat missing subjects as zero.
 
 Retention never starts without an approved school policy. Report expiry removes the private generated file before marking its report row EXPIRED; underlying source records remain. Notification pruning affects only old terminal COMPLETED jobs and their delivery records. Pending/dead jobs and application audit history remain available. Disabling the policy stops subsequent cleanup cycles.

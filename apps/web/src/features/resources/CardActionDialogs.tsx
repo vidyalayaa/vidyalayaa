@@ -5,6 +5,7 @@ import { Dialog } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import RecordSelect from '../../components/RecordSelect';
 import { api, useAuth } from '../../lib/auth';
+import { nfcCardSerialSchema } from '@vidyalayaa/contracts';
 
 export function IssueCardDialog({
   open,
@@ -19,6 +20,7 @@ export function IssueCardDialog({
     qc = useQueryClient(),
     [studentId, setStudentId] = useState(initialStudentId || ''),
     [cardUid, setCardUid] = useState(''),
+    [cardSerial, setCardSerial] = useState(''),
     [error, setError] = useState('');
   const retry = useRef({ body: '', key: crypto.randomUUID() });
 
@@ -27,6 +29,7 @@ export function IssueCardDialog({
       const body = JSON.stringify({
         student_id: studentId,
         card_uid: cardUid.trim().toUpperCase(),
+        card_serial: cardSerial.trim() ? nfcCardSerialSchema.parse(cardSerial) : undefined,
       });
       if (retry.current.body !== body) retry.current = { body, key: crypto.randomUUID() };
       return api('/cards/issue', {
@@ -113,6 +116,19 @@ export function IssueCardDialog({
           </p>
         </div>
 
+        <div>
+          <label htmlFor="card-serial" className="field-label">
+            Printed card serial number (optional)
+          </label>
+          <input
+            id="card-serial"
+            className="input"
+            value={cardSerial}
+            maxLength={64}
+            onChange={(event) => setCardSerial(event.target.value)}
+          />
+        </div>
+
         <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
           <Button type="button" variant="outline" onClick={close}>
             Cancel
@@ -120,7 +136,12 @@ export function IssueCardDialog({
           <Button
             type="submit"
             variant="lime"
-            disabled={mutation.isPending || !studentId || cardUid.length < 8}
+            disabled={
+              mutation.isPending ||
+              !studentId ||
+              cardUid.length < 8 ||
+              (!!cardSerial.trim() && !nfcCardSerialSchema.safeParse(cardSerial).success)
+            }
           >
             {mutation.isPending ? 'Issuing…' : 'Issue Card'}
             <ArrowRight size={14} />
@@ -135,7 +156,7 @@ export function BlockCardDialog({
   card,
   close,
 }: {
-  card: { id: string; card_uid: string; student_id: string } | null;
+  card: { id: string; card_uid: string; card_serial?: string | null; student_id: string } | null;
   close: () => void;
 }) {
   const a = useAuth(),
@@ -171,7 +192,7 @@ export function BlockCardDialog({
       onOpenChange={(v) => {
         if (!v) close();
       }}
-      title={`Deactivate NFC Card: ${card.card_uid}`}
+      title={`Deactivate NFC Card: ${card.card_serial || card.card_uid}`}
     >
       <form
         onSubmit={(e) => {

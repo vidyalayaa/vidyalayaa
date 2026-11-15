@@ -244,6 +244,25 @@ export const pageSchema = z.object({
   exam_id: uuid.optional(),
   assessment_kind: z.enum(['OFFICIAL', 'SUBJECT_TEST']).optional(),
 });
+export const nfcCardSerialSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9][A-Z0-9._/-]{0,63}$/);
+
+export const issueNfcCardSchema = z
+  .object({
+    student_id: uuid,
+    card_uid: z.string().regex(/^[0-9A-F]{8,32}$/),
+    card_serial: nfcCardSerialSchema.optional(),
+    replace_existing: z.boolean().optional(),
+  })
+  .strict()
+  .refine((card) => card.replace_existing !== false || !!card.card_serial, {
+    path: ['card_serial'],
+    message: 'Enter the printed card serial number.',
+  });
+
 export const resourceSchemas = {
   students: z
     .object({
@@ -408,6 +427,7 @@ export const resourceSchemas = {
     .object({
       student_id: uuid,
       card_uid: z.string().regex(/^[0-9A-F]{8,32}$/),
+      card_serial: nfcCardSerialSchema.nullable().optional(),
       status: z.enum(['ACTIVE', 'BLOCKED', 'LOST', 'RETIRED']).default('ACTIVE'),
       blocked_reason: nullableText,
     })
@@ -574,17 +594,40 @@ export const feePaymentSchema = z
     note: z.string().trim().max(500).optional(),
   })
   .strict();
+export const reportKinds = ['ATTENDANCE', 'ACADEMIC', 'FEES'] as const;
+export const reportFeeStatuses = ['UNPAID', 'PARTIAL', 'PAID', 'WAIVED'] as const;
 export const reportSchema = z
   .object({
-    kind: z.enum(['ATTENDANCE', 'ACADEMIC', 'FEES']),
+    kind: z.enum(reportKinds),
     format: z.enum(['PDF', 'CSV']).optional(),
     student_id: uuid.optional(),
     class_id: uuid.optional(),
+    academic_session_id: uuid.optional(),
+    attendance_status: z.enum(attendanceStatuses).optional(),
+    exam_id: uuid.optional(),
+    subject_id: uuid.optional(),
+    fee_status: z.enum(reportFeeStatuses).optional(),
     from: date,
     to: date,
   })
   .strict()
-  .refine((x) => x.to >= x.from, 'End date must follow start date');
+  .refine((x) => x.to >= x.from, { path: ['to'], message: 'End date must follow start date.' })
+  .superRefine((report, ctx) => {
+    const filters = {
+      attendance_status: 'ATTENDANCE',
+      exam_id: 'ACADEMIC',
+      subject_id: 'ACADEMIC',
+      fee_status: 'FEES',
+    } as const;
+    for (const key of Object.keys(filters) as (keyof typeof filters)[]) {
+      if (report[key] && report.kind !== filters[key])
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'This filter does not apply to the report type.',
+        });
+    }
+  });
 export const inviteSchema = z
   .object({
     record_id: uuid,

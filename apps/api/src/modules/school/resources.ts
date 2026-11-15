@@ -135,7 +135,7 @@ export const definitions: Record<Resource, ResourceDefinition> = {
   nfc_cards: {
     read: 'cards.read',
     write: 'cards.manage',
-    search: ['status'],
+    search: ['status', 'card_serial', 'card_uid'],
     feature: 'nfc_attendance',
   },
   device_locations: {
