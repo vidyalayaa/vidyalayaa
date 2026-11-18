@@ -359,6 +359,39 @@ export function managementRouter(pool: pg.Pool) {
     next();
   });
   r.get(
+    '/:id/usb-provisioning',
+    permission('devices.manage'),
+    asyncRoute(async (req, res) => {
+      const id = uuid.parse(req.params.id);
+      const actor = res.locals.actor;
+      const settings = await transaction(
+        pool,
+        actor.context,
+        async (tx) => {
+          const device = (
+            await tx.query(
+              "SELECT device_code FROM devices WHERE id=$1 AND school_id=$2 AND status IN ('PROVISIONED','ACTIVE')",
+              [id, actor.context.schoolId],
+            )
+          ).rows[0];
+          if (!device) throw notFound();
+          const approved = (
+            await tx.query('SELECT api_origin,root_ca FROM app.device_provisioning_settings')
+          ).rows[0];
+          if (!approved)
+            throw new ApiError(
+              409,
+              'PROVISIONING_NOT_CONFIGURED',
+              'Ask your Super Admin to save the API certificate under Device provisioning.',
+            );
+          return { ...approved, device_code: device.device_code };
+        },
+        true,
+      );
+      res.set('Cache-Control', 'no-store').json(settings);
+    }),
+  );
+  r.get(
     '/',
     permission('devices.read'),
     asyncRoute(async (req, res) => {

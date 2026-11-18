@@ -2,6 +2,7 @@ interface UsbSerialPort {
   readonly readable: ReadableStream<Uint8Array> | null;
   readonly writable: WritableStream<Uint8Array> | null;
   open(options: { baudRate: number }): Promise<void>;
+  setSignals?(signals: { dataTerminalReady: boolean; requestToSend: boolean }): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -17,6 +18,70 @@ export class NfcSerialReader {
   private closed = false;
   private readonly reader: ReadableStreamDefaultReader<Uint8Array>;
   private readonly readTask: Promise<void>;
+
+  exchange(command: string, accept: (line: string) => string | undefined, timeout = 5000) {
+    const stream = this.port.writable;
+    if (this.closed || !stream || this.receive) throw new Error('Reconnect the USB reader.');
+    const writer = stream.getWriter();
+    return new Promise<string>((resolve, reject) => {
+      const finish = (error: Error | null, result = '') => {
+        clearTimeout(timer);
+        this.receive = undefined;
+        this.stopRequest = undefined;
+        if (error) reject(error);
+        else resolve(result);
+      };
+      const timer = setTimeout(
+        () => finish(new ReaderTimeoutError('The ESP32 did not reply. Reset it and reconnect.')),
+        timeout,
+      );
+      this.stopRequest = () =>
+        finish(new Error('USB connection lost. Reconnect and check the device before retrying.'));
+      this.receive = (line) => {
+        const result = accept(line);
+        if (result !== undefined) finish(null, result);
+      };
+      const stop = this.stopRequest;
+      void writer
+        .write(new TextEncoder().encode(command + '\n'))
+        .catch(() => {
+          if (this.stopRequest === stop) stop();
+        })
+        .finally(() => writer.releaseLock());
+    });
+  }
+
+  readStatus() {
+    return this.exchange(
+      '\nSTATUS',
+      (line) => {
+        // The first status can be appended to an unfinished ESP32 boot log line.
+        const status = line.match(
+          /VIDYALAYAA STATUS firmware=\S+ mode=(?:enrollment|gate) provisioned=[01](?: .*|$)/,
+        );
+        return status?.[0];
+      },
+      2000,
+    );
+  }
+
+  provision(configuration: {
+    code: string;
+    ssid: string;
+    password: string;
+    secret: string;
+    origin: string;
+    root_ca: string;
+  }) {
+    const command = 'PROVISION ' + JSON.stringify(configuration);
+    if (new TextEncoder().encode(command).length >= 6144)
+      throw new Error('The settings exceed the ESP32 input limit.');
+    return this.exchange(
+      command,
+      (line) => (line.startsWith('VIDYALAYAA PROVISION ') ? line : undefined),
+      12000,
+    );
+  }
 
   constructor(
     private readonly port: UsbSerialPort,
@@ -93,7 +158,8 @@ export class NfcSerialReader {
           finish(null, value);
         if (kind === 'ERROR') {
           const descriptions: Record<string, string> = {
-            READER: 'The ESP32 replied, but its PN532 NFC module is missing or could not start. Check the wiring and reset the ESP32.',
+            READER:
+              'The ESP32 replied, but its PN532 NFC module is missing or could not start. Check the wiring and reset the ESP32.',
             MODE: 'The device is in gate mode. Switch it to USB enrollment mode and reconnect.',
             CARD_TYPE: 'This card type is unsupported. Use a compatible NFC student card.',
           };
@@ -107,7 +173,9 @@ export class NfcSerialReader {
       };
       const stop = this.stopRequest;
       void writer
-        .write(new TextEncoder().encode(`${command === 'PROBE' ? '\n' : ''}${command} ${requestId}\n`))
+        .write(
+          new TextEncoder().encode(`${command === 'PROBE' ? '\n' : ''}${command} ${requestId}\n`),
+        )
         .catch(() => {
           if (this.stopRequest === stop) stop();
         })

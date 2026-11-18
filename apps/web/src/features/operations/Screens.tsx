@@ -1,4 +1,5 @@
 import InviteMemberDialog from '../auth/InviteMemberDialog';
+import DeviceUsbSetup from './DeviceUsbSetup';
 import SupportRequests from './SupportRequests';
 import ClassAttendanceSheet from './ClassAttendanceSheet';
 import AttendanceCalendar from '../attendance/AttendanceCalendar';
@@ -298,6 +299,7 @@ export function Devices() {
     query = useRows('/devices'),
     [claim, setClaim] = useState(false),
     [configuration, setConfiguration] = useState<Record<string, unknown> | null>(null),
+    [usbSetup, setUsbSetup] = useState<Record<string, unknown> | null>(null),
     [edit, setEdit] = useState<Record<string, unknown> | null>(null);
   return (
     <>
@@ -377,6 +379,12 @@ export function Devices() {
                 Reader settings & history
               </Button>
             )}
+            {a.me?.school?.permissions.includes('devices.manage') &&
+              !['REVOKED', 'DISABLED'].includes(String(d.status)) && (
+                <Button className="mt-2 w-full" variant="outline" onClick={() => setUsbSetup(d)}>
+                  Set up over USB
+                </Button>
+              )}
           </article>
         ))}
       </div>
@@ -404,6 +412,13 @@ export function Devices() {
       />
       {configuration && (
         <DeviceConfiguration device={configuration} close={() => setConfiguration(null)} />
+      )}
+      {usbSetup && (
+        <DeviceUsbSetup
+          key={`${a.me?.id}:${a.school}:${usbSetup.id}`}
+          device={usbSetup}
+          close={() => setUsbSetup(null)}
+        />
       )}
       {edit && (
         <ActionDialog

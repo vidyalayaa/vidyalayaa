@@ -34,6 +34,8 @@ Use compatible module supply levels and 3.3 V logic on ESP32 signal pins. Confir
 
 ## Provision a gate reader
 
+The Super Admin first saves the reader API origin and its trusted root CA PEM in **Platform → Device inventory → Device provisioning**. School Admins then use **NFC devices → Set up over USB** for the claimed reader in desktop Chrome or Edge. Start the board in USB setup mode, connect it, enter the Wi-Fi name, password and current Device Secret, then select **Save to ESP32**. The website includes the approved API settings automatically. A PN532 and RTC are optional for this setup. After the ESP32 confirms saving, remove the GPIO32 jumper and reset to start gate mode. Repeat the USB setup to apply an updated certificate or Wi-Fi settings.
+
 1. As Super Admin, register the unit. As School Admin, claim it into its attendance location with the device code and claim code.
 2. Connect the ESP32 over USB and start it in USB enrollment mode. Have the **ESP32-reachable HTTPS API origin** and the corresponding trusted root CA PEM available. A browser URL or a laptop’s `127.0.0.1` address cannot serve as the reader’s API endpoint.
 3. Run `py firmware/provision.py --port COM9 --api https://<api-host> --ca-file api-root-ca.pem`. Enter the **device code**, Wi-Fi details and **device secret** when prompted. The helper checks the claimed reader and TLS certificate before storing the configuration. The claim code stays in the School Admin workflow.

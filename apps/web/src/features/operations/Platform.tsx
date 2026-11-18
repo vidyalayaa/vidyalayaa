@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import FirmwarePanel from './FirmwarePanel';
+import PlatformDeviceProvisioning from './PlatformDeviceProvisioning';
 import { platformSections } from '../../lib/portals';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -76,6 +77,7 @@ export default function Platform() {
     [plan, setPlan] = useState<Record<string, unknown> | null>(null),
     [support, setSupport] = useState<Record<string, unknown> | null>(null),
     [action, setAction] = useState(''),
+    [provisioning, setProvisioning] = useState(false),
     [device, setDevice] = useState<Record<string, unknown> | null>(null),
     [campus, setCampus] = useState<Record<string, unknown> | null>(null),
     [closure, setClosure] = useState<Record<string, unknown> | null>(null),
@@ -103,6 +105,7 @@ export default function Platform() {
   return (
     <>
       {ticket && <SupportTicketResponse ticket={ticket} close={() => setTicket(null)} />}
+      {provisioning && <PlatformDeviceProvisioning close={() => setProvisioning(false)} />}
       {deletionNotice && (
         <p className="notice" role="status">
           {deletionNotice}
@@ -114,6 +117,11 @@ export default function Platform() {
         description="Partner schools, device inventory, plans, and approved support."
         actions={
           <>
+            {tab === 'devices' && (
+              <Button variant="outline" onClick={() => setProvisioning(true)}>
+                Device provisioning
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setAction('device')}>
               Register hardware
             </Button>
@@ -624,14 +632,24 @@ export default function Platform() {
         description="Shown once. Copy these credentials into your secure provisioning process."
       >
         <div className="space-y-4">
-          {['device_code', 'device_secret', 'claim_code'].map((k) => (
-            <div key={k}>
-              <p className="field-label">{k.replaceAll('_', ' ')}</p>
-              <code className="block break-all rounded-lg bg-stone-100 p-3 text-xs">
-                {String(result?.[k] || '')}
-              </code>
-            </div>
-          ))}
+          {['device_code', 'device_secret', 'claim_code']
+            .filter((key) => Boolean(result?.[key]))
+            .map((key) => (
+              <div key={key}>
+                <p className="field-label">{key.replaceAll('_', ' ')}</p>
+                <code className="block break-all rounded-lg bg-stone-100 p-3 text-xs">
+                  {String(result?.[key])}
+                </code>
+              </div>
+            ))}
+          {Boolean(result?.overlap_hours && result.claim_code) && (
+            <p className="text-sm text-muted">Use this claim code in place of the previous one.</p>
+          )}
+          {Boolean(result?.overlap_hours && !result.claim_code) && (
+            <p className="text-sm text-muted">
+              This reader is already claimed. Use the new device secret in Set up over USB.
+            </p>
+          )}
           <Button variant="lime" onClick={() => setResult(null)}>
             I have stored these securely
           </Button>

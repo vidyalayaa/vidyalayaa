@@ -2,6 +2,42 @@ import { defineConfig, type Plugin } from 'vite';
 import { createServer, connect, type Server, type Socket } from 'node:net';
 import react from '@vitejs/plugin-react';
 
+const hostedReaderApi = 'https://vidyalayaa.onrender.com';
+
+// Local development can validate a reader against Render without adding loopback to production CORS.
+function localReaderConfig(): Plugin {
+  return {
+    name: 'local-reader-config',
+    apply: 'serve',
+    config: () => ({
+      define: { 'import.meta.env.VITE_DEV_USB_API_ORIGIN': JSON.stringify(hostedReaderApi) },
+    }),
+    configureServer(vite) {
+      vite.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'GET' || req.url !== '/__dev/reader-config') return next();
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'application/json');
+        try {
+          const response = await fetch(hostedReaderApi + '/api/v1/device/config', {
+            headers: {
+              Authorization: req.headers.authorization || '',
+              'X-Device-Id': String(req.headers['x-device-id'] || ''),
+            },
+            redirect: 'error',
+            signal: AbortSignal.timeout(55000),
+          });
+          const body = await response.text();
+          res.statusCode = response.status;
+          res.end(body);
+        } catch {
+          res.statusCode = 502;
+          res.end(JSON.stringify({ error: { code: 'READER_API_UNAVAILABLE' } }));
+        }
+      });
+    },
+  };
+}
+
 function themeBootstrap(): Plugin {
   let authUrl: string;
   return {
@@ -58,7 +94,7 @@ function loopbackAliases(): Plugin {
   };
 }
 export default defineConfig({
-  plugins: [react(), loopbackAliases(), themeBootstrap()],
+  plugins: [react(), loopbackAliases(), themeBootstrap(), localReaderConfig()],
   // Use fresh dependency URLs for browsers that cached the old optimized React graph.
   cacheDir: 'node_modules/.vite-vidyalayaa',
   resolve: { dedupe: ['react', 'react-dom'] },

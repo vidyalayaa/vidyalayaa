@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { X509Certificate } from 'node:crypto';
 import { platformAuditSnapshot } from './audit.js';
 import { schoolProfileRouter } from '../school-profile/router.js';
 import { platformNotificationsRouter } from './notifications.js';
@@ -32,6 +33,81 @@ export function platformRouter(
   r.use(platformSchoolDeletionRouter(platform));
   r.use('/notifications', platformNotificationsRouter(platform));
   r.use('/schools/:schoolId/profile', schoolProfileRouter(platform, auth));
+  r.get(
+    '/device-provisioning',
+    asyncRoute(async (_req, res) => {
+      const settings = await platformTx(
+        platform,
+        res.locals.actor.id,
+        async (tx) =>
+          (await tx.query('SELECT api_origin,root_ca FROM app.device_provisioning_settings'))
+            .rows[0] ?? null,
+      );
+      res.set('Cache-Control', 'no-store').json(settings);
+    }),
+  );
+  r.put(
+    '/device-provisioning',
+    asyncRoute(async (req, res) => {
+      const { api_origin, root_ca } = z
+        .object({
+          api_origin: z
+            .string()
+            .trim()
+            .max(200)
+            .regex(/^https:\/\/[a-zA-Z0-9.-]+(?::[0-9]+)?\/?$/),
+          root_ca: z.string().trim().max(4095),
+        })
+        .strict()
+        .parse(req.body);
+      let origin: string;
+      let pem: string;
+      try {
+        origin = new URL(api_origin).origin;
+      } catch {
+        throw new ApiError(422, 'INVALID_API_ORIGIN', 'Enter a valid HTTPS API address.');
+      }
+      try {
+        if (
+          !/^-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----$/.test(
+            root_ca,
+          )
+        )
+          throw new Error();
+        const certificate = new X509Certificate(root_ca);
+        if (
+          !certificate.ca ||
+          !certificate.checkIssued(certificate) ||
+          !certificate.verify(certificate.publicKey) ||
+          !(
+            Date.parse(certificate.validFrom) <= Date.now() &&
+            Date.now() < Date.parse(certificate.validTo)
+          )
+        )
+          throw new Error();
+        pem = certificate.toString();
+        if (pem.length > 4096) throw new Error();
+      } catch {
+        throw new ApiError(
+          422,
+          'INVALID_ROOT_CERTIFICATE',
+          'Enter a valid, current root CA certificate in PEM format, up to 4096 bytes.',
+        );
+      }
+      const actor = res.locals.actor;
+      await platformTx(platform, actor.id, async (tx) => {
+        await tx.query(
+          'INSERT INTO app.device_provisioning_settings(singleton,api_origin,root_ca) VALUES(true,$1,$2) ON CONFLICT(singleton) DO UPDATE SET api_origin=excluded.api_origin,root_ca=excluded.root_ca',
+          [origin, pem],
+        );
+        await tx.query(
+          "INSERT INTO audit_logs(actor_type,actor_id,action,entity_type) VALUES('USER',$1,'device.provisioning_updated','device_provisioning_settings')",
+          [actor.id],
+        );
+      });
+      res.status(204).end();
+    }),
+  );
   r.get(
     '/audit',
     asyncRoute(async (req, res) => {
@@ -679,7 +755,7 @@ export function platformRouter(
           .strict()
           .parse(req.body),
         credential = secret();
-      await platformTx(platform, a.id, async (tx) => {
+      const claim = await platformTx(platform, a.id, async (tx) => {
         await tx.query("SELECT set_config('app.change_reason',$1,true)", [b.reason]);
         const d = (await tx.query('SELECT * FROM devices WHERE id=$1 FOR UPDATE', [id])).rows[0];
         if (!d) throw notFound();
@@ -701,9 +777,21 @@ export function platformRouter(
           "INSERT INTO device_credentials(school_id,device_id,secret_hash,status) VALUES($1,$2,$3,'ACTIVE')",
           [d.school_id, id, Buffer.from(hash(credential), 'hex')],
         );
+        if (d.status !== 'PROVISIONED') return null;
+        const claimCode = secret();
+        await tx.query('UPDATE devices SET claim_code_hash=$2 WHERE id=$1', [
+          id,
+          Buffer.from(hash(claimCode), 'hex'),
+        ]);
+        return claimCode;
       });
       res.setHeader('Cache-Control', 'no-store');
-      res.json({ device_secret: credential, overlap_hours: 24, reason: b.reason });
+      res.json({
+        device_secret: credential,
+        ...(claim && { claim_code: claim }),
+        overlap_hours: 24,
+        reason: b.reason,
+      });
     }),
   );
   r.post(

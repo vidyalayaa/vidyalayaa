@@ -1,4 +1,6 @@
 import { expect, type Page } from '@playwright/test';
+import { X509Certificate } from 'node:crypto';
+import { rootCertificates } from 'node:tls';
 import { test } from './fixtures/school-admin-app';
 import { sampleRule } from '../../apps/web/src/features/resources/metadata';
 import { generateReports } from '../../apps/worker/src/reports';
@@ -616,6 +618,152 @@ singleSchoolTest('School Admin issues a class roster by USB tap and printed card
     { student_id: students[1], card_serial: 'DESK-002', card_uid: 'E1E2E3E4' },
   ]);
 });
+
+singleSchoolTest(
+  'School Admin saves and updates ESP32 Wi-Fi over USB without an NFC module',
+  async ({ page, authAppURL, platformApp }) => {
+    const writes: Record<string, string>[] = [];
+    const apiOrigin = 'https://usb-reader-api.test';
+    const [firstRoot, nextRoot] = rootCertificates
+      .map((pem) => new X509Certificate(pem))
+      .filter(
+        (cert) =>
+          cert.ca &&
+          cert.checkIssued(cert) &&
+          cert.verify(cert.publicKey) &&
+          Date.parse(cert.validFrom) <= Date.now() &&
+          Date.now() < Date.parse(cert.validTo),
+      )
+      .map((cert) => cert.toString());
+    const saveRoot = (root_ca: string, api_origin = apiOrigin) =>
+      platformApp.request('/platform/device-provisioning', 'PUT', {
+        api_origin,
+        root_ca,
+      });
+    await platformApp.db.query('DELETE FROM app.device_provisioning_settings');
+    expect((await saveRoot('invalid certificate')).status).toBe(422);
+    const { admin, schoolA } = platformApp.records;
+    expect(
+      (
+        await platformApp.request(
+          '/platform/device-provisioning',
+          'PUT',
+          { api_origin: apiOrigin, root_ca: firstRoot },
+          admin,
+          schoolA,
+        )
+      ).status,
+    ).toBe(403);
+    let allowCredential = false;
+    await page.exposeFunction('recordUsbProvision', (body: Record<string, string>) => {
+      writes.push(body);
+    });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'serial', {
+        value: {
+          async requestPort() {
+            let output: ReadableStreamDefaultController<Uint8Array>;
+            let statusRequests = 0;
+            let controlSignalsReady = false;
+            const encoder = new TextEncoder();
+            return {
+              async open() {},
+              async close() {},
+              async setSignals(signals: { dataTerminalReady: boolean; requestToSend: boolean }) {
+                controlSignalsReady = signals.dataTerminalReady && signals.requestToSend;
+              },
+              readable: new ReadableStream({
+                start(controller) {
+                  output = controller;
+                },
+              }),
+              writable: new WritableStream<Uint8Array>({
+                async write(bytes) {
+                  const line = new TextDecoder().decode(bytes).trim();
+                  if (line === 'STATUS' && controlSignalsReady && ++statusRequests === 2) {
+                    output.enqueue(encoder.encode('E esp_core_dump_flash: No core dump partitio'));
+                    output.enqueue(
+                      encoder.encode(
+                        'VIDYALAYAA STATUS firmware=1.1.0-devkit mode=enrollment provisioned=1 nfc=MISSING rtc=UNKNOWN storage=OK wifi=0 api=0 pending=0\n',
+                      ),
+                    );
+                  }
+                  if (line.startsWith('PROVISION ')) {
+                    await (
+                      window as unknown as { recordUsbProvision(body: unknown): Promise<void> }
+                    ).recordUsbProvision(JSON.parse(line.slice(10)));
+                    output.enqueue(encoder.encode('VIDYALAYAA PROVISION OK RESTART_REQUIRED\n'));
+                  }
+                },
+              }),
+            };
+          },
+        },
+      });
+    });
+    await page.route('https://usb-reader-api.test/api/v1/device/config', (route) =>
+      route.fulfill({
+        status: allowCredential ? 200 : 401,
+        json: allowCredential ? { config_version: 1 } : { error: { code: 'INVALID_CREDENTIAL' } },
+      }),
+    );
+    await page.goto(authAppURL + '/admin/devices');
+    const card = page.locator('.device-card').filter({ hasText: 'DEV_A' });
+    await card.getByRole('button', { name: 'Set up over USB' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Connect ESP32', exact: true }).click();
+    await expect(dialog.getByText('ESP32 connected', { exact: true })).toBeVisible();
+    await dialog.getByLabel('Wi-Fi name (SSID)', { exact: true }).fill('School network');
+    await dialog.getByLabel('Wi-Fi password', { exact: true }).fill('fixture-password-1');
+    await dialog
+      .getByLabel('Device Secret', { exact: true })
+      .fill('fixture-device-secret-'.padEnd(40, 'x'));
+    await expect(dialog.getByLabel('HTTPS API address')).toHaveCount(0);
+    await expect(dialog.getByLabel('Trusted root certificate (PEM)')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Save to ESP32' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('Ask your Super Admin');
+    expect(writes).toHaveLength(0);
+    expect(await saveRoot(firstRoot)).toMatchObject({ status: 204 });
+    await dialog.getByRole('button', { name: 'Save to ESP32' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('HTTP 401');
+    expect(writes).toHaveLength(0);
+    allowCredential = true;
+    await dialog.getByRole('button', { name: 'Save to ESP32' }).click();
+    await expect(dialog.getByText(/Settings saved to the ESP32/)).toBeVisible();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({
+      code: await dialog.getByLabel('Device code').inputValue(),
+      ssid: 'School network',
+      password: 'fixture-password-1',
+      origin: apiOrigin,
+      root_ca: firstRoot,
+    });
+    await expect(dialog.getByLabel('Device Secret', { exact: true })).toHaveValue('');
+    await expect(dialog.getByLabel('Wi-Fi password', { exact: true })).toHaveValue('');
+    const hostedOrigin = 'https://vidyalayaa.onrender.com';
+    expect(await saveRoot(nextRoot, hostedOrigin)).toMatchObject({ status: 204 });
+    await page.route(authAppURL + '/__dev/reader-config', async (route) => {
+      expect(route.request().method()).toBe('GET');
+      expect(route.request().headers().authorization).toBe(
+        'Bearer ' + 'fixture-device-secret-'.padEnd(40, 'x'),
+      );
+      await route.fulfill({ status: 200, json: { config_version: 1 } });
+    });
+    await dialog.getByRole('button', { name: 'Connect ESP32', exact: true }).click();
+    await dialog.getByLabel('Wi-Fi name (SSID)', { exact: true }).fill('New school network');
+    await dialog.getByLabel('Wi-Fi password', { exact: true }).fill('fixture-password-2');
+    await dialog
+      .getByLabel('Device Secret', { exact: true })
+      .fill('fixture-device-secret-'.padEnd(40, 'x'));
+    await dialog.getByRole('button', { name: 'Save to ESP32' }).click();
+    await expect(dialog.getByText(/Settings saved to the ESP32/)).toBeVisible();
+    expect(writes).toHaveLength(2);
+    expect(writes[1].ssid).toBe('New school network');
+    expect(writes[1].password).toBe('fixture-password-2');
+    expect(writes[1].root_ca).toBe(nextRoot);
+    expect(writes[1].origin).toBe(hostedOrigin);
+  },
+);
 
 test('School Admin sends a support request and approves then revokes support access', async ({
   page,

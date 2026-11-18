@@ -1,4 +1,6 @@
 import { expect, type Page } from '@playwright/test';
+import { X509Certificate } from 'node:crypto';
+import { rootCertificates } from 'node:tls';
 import { test } from './fixtures/platform-app';
 
 async function save(page: Page) {
@@ -176,6 +178,23 @@ test('device inventory validates input, shows credentials once, rotates and revo
   platformApp,
 }) => {
   await page.goto(authAppURL + '/platform/devices');
+  const apiOrigin = 'https://usb-reader-api.test';
+  const root = rootCertificates
+    .map((pem) => new X509Certificate(pem))
+    .find((cert) => cert.subject.includes('OU=GlobalSign Root CA - R3'))
+    ?.toString();
+  if (!root) throw new Error('GlobalSign Root CA R3 missing from Node trust store.');
+  await page.getByRole('button', { name: 'Device provisioning', exact: true }).click();
+  const setup = page.getByRole('dialog', { name: 'Device provisioning' });
+  await setup.getByLabel('HTTPS API address').fill(apiOrigin);
+  await setup.getByLabel('Trusted root certificate (PEM)').fill(root);
+  await setup.getByRole('button', { name: 'Save settings' }).click();
+  await expect(setup.getByRole('status')).toHaveText('Device provisioning settings saved.');
+  await setup.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Device provisioning', exact: true }).click();
+  await expect(setup.getByLabel('HTTPS API address')).toHaveValue(apiOrigin);
+  await expect(setup.getByLabel('Trusted root certificate (PEM)')).toHaveValue(root);
+  await setup.getByRole('button', { name: 'Close', exact: true }).last().click();
   await page.getByRole('button', { name: 'Register hardware', exact: true }).click();
   let dialog = page.getByRole('dialog');
   await dialog.locator('#action-school_id').selectOption(platformApp.records.schoolA);
@@ -188,18 +207,51 @@ test('device inventory validates input, shows credentials once, rotates and revo
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Provisioning credentials' });
   const first = await dialog.locator('code').nth(1).innerText();
+  const originalClaimCode = await dialog.locator('code').nth(2).innerText();
   expect(first.length).toBeGreaterThan(20);
   await dialog.getByRole('button', { name: 'I have stored these securely' }).click();
   const row = page.getByRole('row').filter({ hasText: 'Browser Gate Reader' });
-  await row.getByRole('button', { name: 'Rotate credential' }).click();
-  await page
-    .getByRole('dialog')
-    .getByLabel('Reason', { exact: true })
-    .fill('Approved generated credential rotation');
-  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: 'Provisioning credentials' });
+  const rotate = async () => {
+    await row.getByRole('button', { name: 'Rotate credential' }).click();
+    const form = page.getByRole('dialog', { name: 'Rotate device credential', exact: true });
+    await form.getByLabel('Reason', { exact: true }).fill('Approved generated credential rotation');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Provisioning credentials' });
+  };
+  dialog = await rotate();
   const rotated = await dialog.locator('code').nth(1).innerText();
+  const newClaimCode = await dialog.locator('code').nth(2).innerText();
   expect(rotated).not.toBe(first);
+  expect(newClaimCode.length).toBeGreaterThan(20);
+  expect(newClaimCode).not.toBe(originalClaimCode);
+  await dialog.getByRole('button', { name: 'I have stored these securely' }).click();
+
+  const { schoolA, admin } = platformApp.records;
+  const {
+    rows: [location],
+  } = await platformApp.db.query<{ id: string }>(
+    "SELECT id FROM device_locations WHERE school_id=$1 AND name='Gate'",
+    [schoolA],
+  );
+  const claim = (claim_code: string) =>
+    platformApp.request(
+      '/devices/claim',
+      'POST',
+      {
+        device_code: 'UI_READER',
+        name: 'Browser Gate Reader',
+        location_id: location.id,
+        claim_code,
+      },
+      admin,
+      schoolA,
+    );
+  expect((await claim(originalClaimCode)).status).toBe(404);
+  expect((await claim(newClaimCode)).body.status).toBe('ACTIVE');
+
+  dialog = await rotate();
+  await expect(dialog.locator('code')).toHaveCount(2);
+  await expect(dialog).toContainText('This reader is already claimed.');
   await dialog.getByRole('button', { name: 'I have stored these securely' }).click();
   await expect(page.getByRole('main')).not.toContainText(first);
   await row.getByRole('button', { name: 'Revoke', exact: true }).click();
